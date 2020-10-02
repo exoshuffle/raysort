@@ -45,7 +45,7 @@ def load_partition(part_id):
     """
     # Load from disk.
     filepath = _get_part_path(part_id)
+    data = bytearray(os.path.getsize(filepath))
     with open(filepath, "rb") as fin:
-        data = fin.read()
-    ret = bytearray(data)  # TODO: how to avoid copying?
-    return ret
+        fin.readinto(data)
+    return data
