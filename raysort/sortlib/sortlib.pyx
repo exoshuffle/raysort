@@ -53,10 +53,7 @@ cdef RecordArray _to_record_array(data):
 def partition_and_sort(data, boundaries):
     cdef char[:] memview = data
     record_array = _to_record_array(data)
-    print("py first byte", data[0])
-    print("calling cpp", len(data))
     chunks = PartitionAndSort(record_array, boundaries)
-    print("done calling cpp")
     return [_to_numpy(_to_memoryview(ra)) for ra in chunks]
 
 def merge_partitions(parts):
