@@ -40,6 +40,17 @@ def generate_input():
     generate_part(M - 1, params.TOTAL_NUM_RECORDS - offset, offset)
 
 
+def validate_output():
+    for part_id in range(params.NUM_REDUCERS):
+        filepath = _get_part_path(part_id, kind="output")
+        cpu_count = os.cpu_count()
+        subprocess.run(
+            [params.VALSORT_PATH, f"-t{cpu_count}", filepath],
+            check=True,
+        )
+        log.info(f"Validated output {filepath}.")
+
+
 def prepare_input():
     generate_input()
 

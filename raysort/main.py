@@ -1,3 +1,5 @@
+import subprocess
+
 from absl import app
 import numpy as np
 import ray
@@ -34,10 +36,6 @@ def reducer(reducer_id, parts):
     return True
 
 
-def verify_output():
-    pass
-
-
 def main(argv):
     ray.init()
     log = logging_utils.logger()
@@ -60,7 +58,7 @@ def main(argv):
     reducer_results = ray.get(reducer_results)
     assert all(reducer_results), "Some task failed :("
 
-    verify_output()
+    object_store_utils.validate_output()
 
 
 if __name__ == "__main__":

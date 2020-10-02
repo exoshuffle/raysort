@@ -24,9 +24,7 @@ std::vector<RecordArray> PartitionAndSort(
     const std::vector<Header>& boundaries) {
     Record* records = record_array.ptr;
     const size_t num_records = record_array.size;
-    printf("first byte: %d\n", records[0].key[0]);
     std::sort(records, records + num_records, RecordComparator());
-    printf("sorted\n");
 
     std::vector<RecordArray> ret;
     ret.reserve(boundaries.size());

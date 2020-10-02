@@ -61,40 +61,37 @@ int main() {
 
     test();
 
-    const auto& boundaries = GetBoundaries(4);
-    for (const auto& b : boundaries) {
-        printf("boundary %llu\n", b);
-    }
+    const size_t num_reducers = 1;
+    const auto& boundaries = GetBoundaries(num_reducers);
 
-    size_t num_records = 1000;
-    size_t buf_size = RECORD_SIZE * (num_records + 1);
+    const size_t num_records = 10000;
+    const size_t buf_size = RECORD_SIZE * (num_records + 1);
     void* buffer = malloc(buf_size);
 
-    // FILE* fin;
-    // size_t file_size = 0;
-    // fin = fopen("../../../gensort/64/part1", "r");
-    // if (fin == NULL) {
-    //     perror("Failed to open file");
-    // } else {
-    //     file_size = fread(buffer, sizeof(char), buf_size, fin);
-    //     printf("Read %lu bytes.\n", file_size);
-    //     fclose(fin);
-    // }
+    FILE* fin;
+    size_t file_size = 0;
+    fin = fopen("/var/tmp/raysort/input/input-0", "r");
+    if (fin == NULL) {
+        perror("Failed to open file");
+    } else {
+        file_size = fread(buffer, RECORD_SIZE, num_records, fin);
+        printf("Read %lu bytes.\n", file_size);
+        fclose(fin);
+    }
 
-    // const auto& partition_ptrs =
-    //     PartitionAndSort({(Record*)buffer, num_records}, boundaries);
+    const auto& record_arrays =
+        PartitionAndSort({(Record*)buffer, num_records}, boundaries);
+    const auto output = MergePartitions(record_arrays);
 
-    // verify_sort();
-
-    // FILE* fout;
-    // fout = fopen("../gensort/64/part1.sorted", "w");
-    // if (fout == NULL) {
-    //     perror("Failed to open file");
-    // } else {
-    //     size_t writecount = fwrite(buffer, sizeof(char), file_size, fout);
-    //     printf("Wrote %lu bytes.\n", writecount);
-    //     fclose(fout);
-    // }
+    FILE* fout;
+    fout = fopen("/var/tmp/raysort/output/test-output", "w");
+    if (fout == NULL) {
+        perror("Failed to open file");
+    } else {
+        size_t writecount = fwrite(output.ptr, RECORD_SIZE, output.size, fout);
+        printf("Wrote %lu bytes.\n", writecount);
+        fclose(fout);
+    }
 
     return 0;
 }
