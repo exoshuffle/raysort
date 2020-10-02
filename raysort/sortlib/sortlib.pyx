@@ -6,12 +6,10 @@ from libcpp.vector cimport vector
 
 import numpy as np
 
-
 ctypedef long ptr_t
 
-RECORD_SIZE = 100
-
 cdef extern from "src/sortlib.h" namespace "sortlib":
+    const size_t RECORD_SIZE
     ctypedef unsigned long long Header
     ctypedef struct Record:
         pass
@@ -19,13 +17,24 @@ cdef extern from "src/sortlib.h" namespace "sortlib":
         Record* ptr
         size_t size
     cdef vector[Header] GetBoundaries(size_t num_partitions)
-    cdef vector[RecordArray] PartitionAndSort(const RecordArray& recordArray, const vector[Header]& boundaries)
+    cdef vector[RecordArray] PartitionAndSort(const RecordArray& record_array, const vector[Header]& boundaries)
+    cdef RecordArray MergePartitions(const vector[RecordArray]& parts)
+
+
+cdef _get_num_records(data):
+    size = len(data)
+    assert size % RECORD_SIZE == 0, (
+        size,
+        "input data size must be multiples of RECORD_SIZE",
+    )
+    num_records = int(size / RECORD_SIZE)
+    return num_records
 
 def get_boundaries(n):
     return GetBoundaries(n)
 
 def _to_numpy(mv):
-    arr = np.frombuffer(mv, dtype="B")
+    arr = np.frombuffer(mv, dtype=np.uint8)
     return arr
 
 cdef char[:] _to_memoryview(const RecordArray& ra):
@@ -34,13 +43,27 @@ cdef char[:] _to_memoryview(const RecordArray& ra):
     n_bytes = ra.size * RECORD_SIZE
     return <char[:n_bytes]><char*>ra.ptr
 
-def partition_and_sort(data, num_records, boundaries):
+cdef RecordArray _to_record_array(data):
+    cdef RecordArray ret
     cdef char[:] memview = data
-    cdef RecordArray record_array
-    record_array.ptr = <Record*>&memview[0]
-    record_array.size = num_records
+    ret.ptr = <Record*>&memview[0]
+    ret.size = _get_num_records(data)
+    return ret
+
+def partition_and_sort(data, boundaries):
+    cdef char[:] memview = data
+    record_array = _to_record_array(data)
     print("py first byte", data[0])
-    print("calling cpp", len(data), num_records)
+    print("calling cpp", len(data))
     chunks = PartitionAndSort(record_array, boundaries)
     print("done calling cpp")
     return [_to_numpy(_to_memoryview(ra)) for ra in chunks]
+
+def merge_partitions(parts):
+    cdef vector[RecordArray] record_arrays
+    record_arrays.reserve(len(parts))
+    for data in parts:
+        ra = _to_record_array(data)
+        record_arrays.push_back(ra)
+    cdef RecordArray merged = MergePartitions(record_arrays)
+    return _to_numpy(_to_memoryview(merged))

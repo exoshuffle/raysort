@@ -22,8 +22,6 @@ size_t _TotalSize(const std::vector<RecordArray>& parts) {
 std::vector<RecordArray> PartitionAndSort(
     const RecordArray& record_array,
     const std::vector<Header>& boundaries) {
-    printf("CPP: PartitionAndSort(%p, %lu)\n", record_array.ptr,
-           record_array.size);
     Record* records = record_array.ptr;
     const size_t num_records = record_array.size;
     printf("first byte: %d\n", records[0].key[0]);
@@ -82,13 +80,17 @@ struct SortDataComparator {
     }
 };
 
-std::vector<Record> MergePartitions(const std::vector<RecordArray>& parts) {
+RecordArray MergePartitions(const std::vector<RecordArray>& parts) {
     const size_t num_parts = parts.size();
-    std::vector<Record> ret;
     if (num_parts == 0) {
-        return ret;
+        return {nullptr, 0};
     }
-    ret.reserve(_TotalSize(parts));
+    const size_t num_records = _TotalSize(parts);
+    if (num_records == 0) {
+        return {nullptr, 0};
+    }
+    Record* const ret = new Record[num_records];
+    auto cur = ret;
     std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
         heap;
 
@@ -102,14 +104,14 @@ std::vector<Record> MergePartitions(const std::vector<RecordArray>& parts) {
         heap.pop();
         const size_t i = top.partition;
         const size_t j = top.index;
-        // printf("Popping %lu %lu\n", i, j);
-        ret.push_back(parts[i].ptr[j]);  // copying record!
+        // Copy record to output array
+        *cur++ = parts[i].ptr[j];
         if (j + 1 < parts[i].size) {
-            // printf("Pushing %lu %lu, limit %lu\n", i, j + 1, part_sizes[i]);
             heap.push({parts[i].ptr + j + 1, i, j + 1});
         }
     }
-    return ret;
+    assert(cur == ret + num_records);
+    return {ret, num_records};
 }
 
 }  // namespace sortlib

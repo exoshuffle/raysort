@@ -2,15 +2,21 @@ import math
 import os
 import subprocess
 
+import numpy as np
+
 import logging_utils
 import params
 
 log = logging_utils.logger()
 
 
-def _get_part_path(part_id):
-    filename = params.INPUT_FILE_FMT.format(part_id=part_id)
-    filepath = os.path.join(params.LOCAL_INPUT_DIR, filename)
+def _get_part_path(part_id, kind="input"):
+    assert kind in {"input", "output"}
+    dirpath = params.DATA_DIR[kind]
+    filename_fmt = params.FILENAME_FMT[kind]
+    os.makedirs(dirpath, exist_ok=True)
+    filename = filename_fmt.format(part_id=part_id)
+    filepath = os.path.join(dirpath, filename)
     return filepath
 
 
@@ -25,7 +31,6 @@ def generate_part(part_id, size, offset):
 
 
 def generate_input():
-    os.makedirs(params.LOCAL_INPUT_DIR, exist_ok=True)
     M = params.NUM_MAPPERS
     size = math.ceil(params.TOTAL_NUM_RECORDS / M)
     offset = 0
@@ -40,12 +45,11 @@ def prepare_input():
 
 
 def load_partition(part_id):
-    """
-    Load the input data partition from object store.
-    """
-    # Load from disk.
     filepath = _get_part_path(part_id)
-    data = bytearray(os.path.getsize(filepath))
-    with open(filepath, "rb") as fin:
-        fin.readinto(data)
+    data = np.fromfile(filepath, dtype=np.uint8)
     return data
+
+
+def save_partition(part_id, data):
+    filepath = _get_part_path(part_id, kind="output")
+    data.tofile(filepath)

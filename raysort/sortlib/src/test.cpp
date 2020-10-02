@@ -14,18 +14,10 @@ void print_record(const Record& rec) {
     printf("\n");
 }
 
-void assert_sorted(Record* records, const size_t num_records) {
-    for (int i = 0; i < num_records - 1; ++i) {
-        const auto& a = records[i];
-        const auto& b = records[i + 1];
-        assert(std::memcmp(a.key, b.key, KEY_SIZE) <= 0);
-    }
-}
-
-void assert_sorted(std::vector<Record> records) {
-    for (int i = 0; i < records.size() - 1; ++i) {
-        const auto& a = records[i];
-        const auto& b = records[i + 1];
+void assert_sorted(const RecordArray& record_array) {
+    for (int i = 0; i < record_array.size - 1; ++i) {
+        const auto& a = record_array.ptr[i];
+        const auto& b = record_array.ptr[i + 1];
         assert(std::memcmp(a.key, b.key, KEY_SIZE) <= 0);
     }
 }
@@ -53,16 +45,15 @@ void test() {
     // Call and verify PartitionAndSort().
     const auto& parts = PartitionAndSort({records, num_records}, boundaries);
 
-    assert_sorted(records, num_records);
+    assert_sorted({records, num_records});
     assert(parts == std::vector<RecordArray>({{{records, 1},
                                                {records + 1, 0},
                                                {records + 1, 4},
                                                {records + 5, 3}}}));
 
     // Call and verify MergePartitions().
-    std::vector<Record> merged = MergePartitions(parts);
-    assert(merged.size() == num_records);
-    assert_sorted(merged);
+    const auto& merged_array = MergePartitions(parts);
+    assert_sorted(merged_array);
 }
 
 int main() {

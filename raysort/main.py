@@ -8,36 +8,34 @@ import params
 import sortlib.sortlib as sortlib
 
 
-def get_num_records(data):
-    size = len(data)
-    assert size % params.RECORD_SIZE == 0, (
-        size,
-        "input data size must be multiples of RECORD_SIZE",
-    )
-    num_records = int(size / params.RECORD_SIZE)
-    return num_records
-
-
 @ray.remote(num_returns=params.NUM_REDUCERS)
 def mapper(mapper_id, boundaries):
     log = logging_utils.logger()
-    log.info(f"Starting Mapper M#{mapper_id}")
+    log.info(f"Starting Mapper M-{mapper_id:02}")
     part = object_store_utils.load_partition(mapper_id)
-    part_size = get_num_records(part)
-    log.info(f"partition_and_sort {part_size}")
-    chunks = sortlib.partition_and_sort(part, part_size, boundaries)
+    chunks = sortlib.partition_and_sort(part, boundaries)
+    if params.NUM_REDUCERS == 1:
+        return chunks[0]
     return chunks
 
 
 @ray.remote
-def reducer(reducer_id, chunks):
+def reducer(reducer_id, parts):
     log = logging_utils.logger()
-    log.info(f"Starting Reducer R#{reducer_id}")
-    chunks = ray.get(chunks)
-    # merge R chunks
-    # save to S3 or disk
-    print(chunks)
-    return 0
+    log.info(f"Starting Reducer R-{reducer_id:02}")
+    parts = ray.get(parts)
+    # https://github.com/ray-project/ray/blob/master/python/ray/cloudpickle/cloudpickle_fast.py#L448
+    # Pickled numpy arrays are by default not writable, which creates problem for sortlib.
+    # Workaround until CloudPickle has a fix.
+    for part in parts:
+        part.setflags(write=True)
+    merged = sortlib.merge_partitions(parts)
+    object_store_utils.save_partition(reducer_id, merged)
+    return True
+
+
+def verify_output():
+    pass
 
 
 def main(argv):
@@ -49,15 +47,20 @@ def main(argv):
 
     boundaries = sortlib.get_boundaries(params.NUM_REDUCERS)
 
-    chunks = np.empty((params.NUM_MAPPERS, params.NUM_REDUCERS), dtype=object)
+    mapper_results = np.empty((params.NUM_MAPPERS, params.NUM_REDUCERS), dtype=object)
     for m in range(params.NUM_MAPPERS):
-        chunks[m, :] = mapper.remote(m, boundaries)
+        mapper_results[m, :] = mapper.remote(m, boundaries)
 
-    reducer_tasks = []
+    reducer_results = []
     for r in range(params.NUM_REDUCERS):
-        reducer_chunks = chunks[:, r].tolist()
-        ret = reducer.remote(r, reducer_chunks)
-        reducer_tasks.append(ret)
+        parts = mapper_results[:, r].tolist()
+        ret = reducer.remote(r, parts)
+        reducer_results.append(ret)
+
+    reducer_results = ray.get(reducer_results)
+    assert all(reducer_results), "Some task failed :("
+
+    verify_output()
 
 
 if __name__ == "__main__":

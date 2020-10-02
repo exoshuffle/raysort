@@ -74,7 +74,7 @@ std::vector<Header> GetBoundaries(size_t num_partitions);
 //
 // CPU cost: O(Pr * log(M))
 // where Pr == sum(len(p) for p in partitions), M == len(partitions)
-std::vector<Record> MergePartitions(const std::vector<RecordArray>& partitions);
+RecordArray MergePartitions(const std::vector<RecordArray>& partitions);
 
 }  // namespace sortlib
 
