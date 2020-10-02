@@ -34,8 +34,9 @@ def get_boundaries(n):
     return GetBoundaries(n)
 
 def _to_numpy(mv):
-    arr = np.frombuffer(mv, dtype=np.uint8)
-    return arr
+    if mv is None:
+        return np.empty(0, dtype=np.uint8)
+    return np.frombuffer(mv, dtype=np.uint8)
 
 cdef char[:] _to_memoryview(const RecordArray& ra):
     if ra.size == 0:

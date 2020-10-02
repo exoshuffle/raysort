@@ -2,8 +2,8 @@
 RECORD_SIZE = 100
 
 # Cluster config.
-NUM_MAPPERS = 1
-NUM_REDUCERS = 1
+NUM_MAPPERS = 2
+NUM_REDUCERS = 3
 
 # Input config.
 GENSORT_PATH = "../gensort/64/gensort"
