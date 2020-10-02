@@ -13,12 +13,13 @@ import sortlib.sortlib as sortlib
 @ray.remote(num_returns=params.NUM_REDUCERS)
 def mapper(mapper_id, boundaries):
     log = logging_utils.logger()
-    log.info(f"Starting Mapper M-{mapper_id:02}")
+    log.info(f"Starting Mapper M-{mapper_id}")
     part = object_store_utils.load_partition(mapper_id)
     chunks = sortlib.partition_and_sort(part, boundaries)
     # TODO: Workaround: must create a copy, otherwise buffer gets
     # corrupted during CloudPickle serialization.
     chunks = [np.array(chunk) for chunk in chunks]
+    log.info(f"Output sizes: %s", [chunk.shape for chunk in chunks])
     if params.NUM_REDUCERS == 1:
         return chunks[0]
     return chunks
@@ -27,13 +28,16 @@ def mapper(mapper_id, boundaries):
 @ray.remote
 def reducer(reducer_id, parts):
     log = logging_utils.logger()
-    log.info(f"Starting Reducer R-{reducer_id:02}")
+    log.info(f"Starting Reducer R-{reducer_id}")
     parts = ray.get(parts)
+    # Filter out the empty partitions.
+    parts = [part for part in parts if part.size > 0]
     # https://github.com/ray-project/ray/blob/master/python/ray/cloudpickle/cloudpickle_fast.py#L448
     # Pickled numpy arrays are by default not writable, which creates problem for sortlib.
     # Workaround until CloudPickle has a fix.
     for part in parts:
         part.setflags(write=True)
+    log.info(f"Input sizes: %s", [part.shape for part in parts])
     merged = sortlib.merge_partitions(parts)
     object_store_utils.save_partition(reducer_id, merged)
     return True
@@ -42,7 +46,7 @@ def reducer(reducer_id, parts):
 def main(argv):
     ray.init()
     log = logging_utils.logger()
-    log.info("Ray initialized.")
+    log.info("Ray initialized")
 
     object_store_utils.prepare_input()
 

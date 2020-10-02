@@ -27,7 +27,7 @@ def generate_part(part_id, size, offset):
         [params.GENSORT_PATH, f"-b{offset}", f"-t{cpu_count}", f"{size}", filepath],
         check=True,
     )
-    log.info(f"Generated input {filepath} containing {size} records.")
+    log.info(f"Generated input {filepath} containing {size} records")
 
 
 def generate_input():
@@ -41,14 +41,19 @@ def generate_input():
 
 
 def validate_output():
+    cpu_count = os.cpu_count()
     for part_id in range(params.NUM_REDUCERS):
         filepath = _get_part_path(part_id, kind="output")
-        cpu_count = os.cpu_count()
-        subprocess.run(
-            [params.VALSORT_PATH, f"-t{cpu_count}", filepath],
-            check=True,
+        if os.path.getsize(filepath) == 0:
+            log.info(f"Validated output {filepath} (empty)")
+            continue
+        proc = subprocess.run(
+            [params.VALSORT_PATH, f"-t{cpu_count}", filepath], capture_output=True
         )
-        log.info(f"Validated output {filepath}.")
+        if proc.returncode != 0:
+            log.critical("\n" + proc.stderr.decode("ascii"))
+            raise RuntimeError(f"VALIDATION FAILED for partition {part_id}")
+        log.info(f"Validated output {filepath}")
 
 
 def prepare_input():
