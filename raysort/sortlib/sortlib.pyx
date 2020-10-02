@@ -4,6 +4,8 @@
 from cpython.array cimport array
 from libcpp.vector cimport vector
 
+import numpy as np
+
 
 ctypedef long ptr_t
 
@@ -22,7 +24,11 @@ cdef extern from "src/sortlib.h" namespace "sortlib":
 def get_boundaries(n):
     return GetBoundaries(n)
 
-cdef char[:] _wrap(const RecordArray& ra):
+def _to_numpy(mv):
+    arr = np.frombuffer(mv, dtype="B")
+    return arr
+
+cdef char[:] _to_memoryview(const RecordArray& ra):
     if ra.size == 0:
         return None
     n_bytes = ra.size * RECORD_SIZE
@@ -37,4 +43,4 @@ def partition_and_sort(data, num_records, boundaries):
     print("calling cpp", len(data), num_records)
     chunks = PartitionAndSort(record_array, boundaries)
     print("done calling cpp")
-    return [_wrap(ra) for ra in chunks]
+    return [_to_numpy(_to_memoryview(ra)) for ra in chunks]

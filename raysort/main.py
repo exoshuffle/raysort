@@ -18,7 +18,7 @@ def get_num_records(data):
     return num_records
 
 
-# @ray.remote(num_returns=params.NUM_REDUCERS)
+@ray.remote(num_returns=params.NUM_REDUCERS)
 def mapper(mapper_id, boundaries):
     log = logging_utils.logger()
     log.info(f"Starting Mapper M#{mapper_id}")
@@ -26,13 +26,6 @@ def mapper(mapper_id, boundaries):
     part_size = get_num_records(part)
     log.info(f"partition_and_sort {part_size}")
     chunks = sortlib.partition_and_sort(part, part_size, boundaries)
-    print(chunks)
-
-    x = chunks[0]
-    sz = get_num_records(x)
-    print("new sz", sz, x)
-    sortlib.partition_and_sort(x, sz, boundaries)
-
     return chunks
 
 
@@ -48,9 +41,9 @@ def reducer(reducer_id, chunks):
 
 
 def main(argv):
-    # ray.init()
+    ray.init()
     log = logging_utils.logger()
-    # log.info("Ray initialized.")
+    log.info("Ray initialized.")
 
     object_store_utils.prepare_input()
 
@@ -58,15 +51,7 @@ def main(argv):
 
     chunks = np.empty((params.NUM_MAPPERS, params.NUM_REDUCERS), dtype=object)
     for m in range(params.NUM_MAPPERS):
-        # chunks[m, :] = mapper.remote(m, boundaries)
-        ret = mapper(m, boundaries)
-        print(ret)
-        import IPython
-
-        IPython.embed()
-        exit(0)
-
-    print(chunks)
+        chunks[m, :] = mapper.remote(m, boundaries)
 
     reducer_tasks = []
     for r in range(params.NUM_REDUCERS):
