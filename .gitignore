@@ -1,0 +1,9 @@
+*.egg-info
+*.so
+.gdb_history
+.vscode
+__pycache__
+build
+cython_debug
+
+gensort

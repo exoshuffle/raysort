@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <limits>
 #include <queue>
@@ -8,26 +9,53 @@
 
 #include "sortlib.h"
 
-void partition_and_sort(Record* records,
-                        const size_t num_records,
-                        const std::vector<Header>& boundaries,
-                        std::vector<Record*>& out_partition_ptrs) {
-    std::sort(records, records + num_records, RecordComparator());
+namespace sortlib {
 
-    out_partition_ptrs.reserve(boundaries.size());
-    Record* ptr = records;
+size_t _TotalSize(const std::vector<RecordArray>& parts) {
+    size_t ret = 0;
+    for (const auto& part : parts) {
+        ret += part.size;
+    }
+    return ret;
+}
+
+std::vector<RecordArray> PartitionAndSort(
+    const RecordArray& record_array,
+    const std::vector<Header>& boundaries) {
+    printf("CPP: PartitionAndSort(%p, %lu)\n", record_array.ptr,
+           record_array.size);
+    Record* records = record_array.ptr;
+    const size_t num_records = record_array.size;
+    printf("first byte: %d\n", records[0].key[0]);
+    std::sort(records, records + num_records, RecordComparator());
+    printf("sorted\n");
+
+    std::vector<RecordArray> ret;
+    ret.reserve(boundaries.size());
     auto bound = boundaries.begin();
+    Record* prev_ptr = records;
+    Record* ptr = records;
     while (ptr != records + num_records && bound != boundaries.end()) {
         while (ptr->header() < *bound) {
             ++ptr;
         }
-        out_partition_ptrs.emplace_back(ptr);
+        const size_t size = ptr - prev_ptr;
+        if (!ret.empty()) {
+            ret.back().size = size;
+        }
+        ret.emplace_back(RecordArray{ptr, 0});
         ++bound;
+        prev_ptr = ptr;
     }
-    assert(out_partition_ptrs.size() == boundaries.size());
+    if (!ret.empty()) {
+        ret.back().size = records + num_records - prev_ptr;
+    }
+    assert(ret.size() == boundaries.size());
+    assert(_TotalSize(ret) == num_records);
+    return ret;
 }
 
-std::vector<Header> get_boundaries(size_t num_partitions) {
+std::vector<Header> GetBoundaries(size_t num_partitions) {
     std::vector<Header> ret;
     ret.reserve(num_partitions);
     const Header min_limit = std::numeric_limits<Header>::min();
@@ -54,21 +82,19 @@ struct SortDataComparator {
     }
 };
 
-std::vector<Record> merge_partitions(std::vector<Record*> parts,
-                                     std::vector<size_t> part_sizes) {
+std::vector<Record> MergePartitions(const std::vector<RecordArray>& parts) {
     const size_t num_parts = parts.size();
-    assert(parts.size() == part_sizes.size());
     std::vector<Record> ret;
     if (num_parts == 0) {
         return ret;
     }
-    ret.reserve(part_sizes.front() * num_parts);
+    ret.reserve(_TotalSize(parts));
     std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
         heap;
 
     for (size_t i = 0; i < num_parts; ++i) {
-        if (part_sizes[i] > 0) {
-            heap.push({parts[i], i, 0});
+        if (parts[i].size > 0) {
+            heap.push({parts[i].ptr, i, 0});
         }
     }
     while (!heap.empty()) {
@@ -77,11 +103,13 @@ std::vector<Record> merge_partitions(std::vector<Record*> parts,
         const size_t i = top.partition;
         const size_t j = top.index;
         // printf("Popping %lu %lu\n", i, j);
-        ret.push_back(parts[i][j]);  // copying record!
-        if (j < part_sizes[i] - 1) {
+        ret.push_back(parts[i].ptr[j]);  // copying record!
+        if (j + 1 < parts[i].size) {
             // printf("Pushing %lu %lu, limit %lu\n", i, j + 1, part_sizes[i]);
-            heap.push({parts[i] + j + 1, i, j + 1});
+            heap.push({parts[i].ptr + j + 1, i, j + 1});
         }
     }
     return ret;
 }
+
+}  // namespace sortlib

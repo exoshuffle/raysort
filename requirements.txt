@@ -1,4 +1,5 @@
 absl-py
+Cython
+ipython
 numpy
 ray[debug]
-swig

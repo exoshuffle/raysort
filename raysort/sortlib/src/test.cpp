@@ -5,6 +5,8 @@
 
 #include "sortlib.h"
 
+using namespace sortlib;
+
 void print_record(const Record& rec) {
     for (int i = 0; i < KEY_SIZE; ++i) {
         printf("%x ", rec.key[i]);
@@ -14,14 +16,26 @@ void print_record(const Record& rec) {
 
 void assert_sorted(Record* records, const size_t num_records) {
     for (int i = 0; i < num_records - 1; ++i) {
-        assert(RecordComparator()(records[i], records[i + 1]));
+        const auto& a = records[i];
+        const auto& b = records[i + 1];
+        assert(std::memcmp(a.key, b.key, KEY_SIZE) <= 0);
     }
 }
 
 void assert_sorted(std::vector<Record> records) {
     for (int i = 0; i < records.size() - 1; ++i) {
-        assert(RecordComparator()(records[i], records[i + 1]));
+        const auto& a = records[i];
+        const auto& b = records[i + 1];
+        assert(std::memcmp(a.key, b.key, KEY_SIZE) <= 0);
     }
+}
+
+size_t total_size(const std::vector<RecordArray>& parts) {
+    size_t ret = 0;
+    for (const auto& part : parts) {
+        ret += part.size;
+    }
+    return ret;
 }
 
 void test() {
@@ -34,30 +48,19 @@ void test() {
         records[i].key[0] = headers[i];
         assert(records[i].header() == headers[i]);
     }
-    const std::vector<Header> boundaries({1, 3, 5, 7});
-    std::vector<Record*> parts;
+    const std::vector<Header> boundaries({0, 3, 5, 7});
 
-    // Call and verify partition_and_sort().
-    partition_and_sort(records, num_records, boundaries, parts);
+    // Call and verify PartitionAndSort().
+    const auto& parts = PartitionAndSort({records, num_records}, boundaries);
 
     assert_sorted(records, num_records);
-    for (int i = 0; i < num_records - 1; ++i) {
-        assert(records[i].key < records[i + 1].key);
-    }
-    assert(parts == std::vector<Record*>(
-                        {{records, records + 1, records + 1, records + 5}}));
+    assert(parts == std::vector<RecordArray>({{{records, 1},
+                                               {records + 1, 0},
+                                               {records + 1, 4},
+                                               {records + 5, 3}}}));
 
-    // Create partition size vectors
-    std::vector<size_t> part_sizes;
-    part_sizes.reserve(parts.size());
-    for (int i = 0; i < parts.size() - 1; ++i) {
-        part_sizes.emplace_back(parts[i + 1] - parts[i]);
-    }
-    part_sizes.emplace_back(records + num_records - parts.back());
-    assert(part_sizes == std::vector<size_t>({{1, 0, 4, 3}}));
-
-    // Call and verify merge_partitions().
-    std::vector<Record> merged = merge_partitions(parts, part_sizes);
+    // Call and verify MergePartitions().
+    std::vector<Record> merged = MergePartitions(parts);
     assert(merged.size() == num_records);
     assert_sorted(merged);
 }
@@ -67,7 +70,7 @@ int main() {
 
     test();
 
-    const auto& boundaries = get_boundaries(4);
+    const auto& boundaries = GetBoundaries(4);
     for (const auto& b : boundaries) {
         printf("boundary %llu\n", b);
     }
@@ -76,20 +79,19 @@ int main() {
     size_t buf_size = RECORD_SIZE * (num_records + 1);
     void* buffer = malloc(buf_size);
 
-    FILE* fin;
-    size_t file_size = 0;
-    fin = fopen("../../gensort/64/part1", "r");
-    if (fin == NULL) {
-        perror("Failed to open file");
-    } else {
-        file_size = fread(buffer, sizeof(char), buf_size, fin);
-        printf("Read %lu bytes.\n", file_size);
-        fclose(fin);
-    }
+    // FILE* fin;
+    // size_t file_size = 0;
+    // fin = fopen("../../../gensort/64/part1", "r");
+    // if (fin == NULL) {
+    //     perror("Failed to open file");
+    // } else {
+    //     file_size = fread(buffer, sizeof(char), buf_size, fin);
+    //     printf("Read %lu bytes.\n", file_size);
+    //     fclose(fin);
+    // }
 
-    std::vector<Record*> partition_ptrs;
-    partition_and_sort((Record*)buffer, num_records, boundaries,
-                       partition_ptrs);
+    // const auto& partition_ptrs =
+    //     PartitionAndSort({(Record*)buffer, num_records}, boundaries);
 
     // verify_sort();
 
