@@ -1,3 +1,7 @@
+import os
+
+__DIR__ = os.path.dirname(os.path.abspath(__file__))
+
 # Basics.
 RECORD_SIZE = 100
 
@@ -6,8 +10,8 @@ NUM_MAPPERS = 4
 NUM_REDUCERS = 6
 
 # Input config.
-GENSORT_PATH = "../gensort/64/gensort"
-VALSORT_PATH = "../gensort/64/valsort"
+GENSORT_PATH = os.path.join(__DIR__, "../gensort/64/gensort")
+VALSORT_PATH = os.path.join(__DIR__, "../gensort/64/valsort")
 DATA_DIR = {"input": "/var/tmp/raysort/input/", "output": "/var/tmp/raysort/output/"}
 FILENAME_FMT = {"input": "input-{part_id}", "output": "output-{part_id}"}
 
