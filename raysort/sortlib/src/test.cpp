@@ -8,14 +8,14 @@
 using namespace sortlib;
 
 void print_record(const Record& rec) {
-    for (int i = 0; i < KEY_SIZE; ++i) {
-        printf("%x ", rec.key[i]);
+    for (size_t i = 0; i < KEY_SIZE; ++i) {
+        printf("%02x ", rec.key[i]);
     }
     printf("\n");
 }
 
 void assert_sorted(const RecordArray& record_array) {
-    for (int i = 0; i < record_array.size - 1; ++i) {
+    for (size_t i = 0; i < record_array.size - 1; ++i) {
         const auto& a = record_array.ptr[i];
         const auto& b = record_array.ptr[i + 1];
         assert(std::memcmp(a.key, b.key, KEY_SIZE) <= 0);
@@ -33,11 +33,11 @@ size_t total_size(const std::vector<RecordArray>& parts) {
 void test() {
     // Populate some records.
     const size_t num_records = 8;
-    const int headers[num_records] = {8, 5, 1, 7, 6, 5, 7, 5};
+    const uint8_t headers[num_records] = {8, 5, 1, 7, 6, 5, 7, 5};
     Record records[num_records];
     memset(records, 0, sizeof(Record) * num_records);
-    for (int i = 0; i < num_records; ++i) {
-        records[i].key[0] = headers[i];
+    for (size_t i = 0; i < num_records; ++i) {
+        records[i].key[HEADER_SIZE - 1] = headers[i];
         assert(records[i].header() == headers[i]);
     }
     const std::vector<Header> boundaries({0, 3, 5, 7});

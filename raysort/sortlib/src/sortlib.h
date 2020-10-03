@@ -12,18 +12,19 @@ const size_t RECORD_SIZE = 100;
 
 // We consider the first 8 bytes of the key as a 64-bit unsigned integer, and
 // use it to partition the key space. We call it the "header".
-typedef unsigned long long Header;
+typedef uint64_t Header;
 const size_t HEADER_SIZE = sizeof(Header);
 
 struct Record {
-    char key[KEY_SIZE];
-    char data[RECORD_SIZE - KEY_SIZE];
+    uint8_t key[KEY_SIZE];
+    uint8_t data[RECORD_SIZE - KEY_SIZE];
 
-    Header header() const { return (Header)*key; }
+    // Assuming little endian.
+    inline Header header() const { return __builtin_bswap64(*(Header*)key); }
 };
 
 struct RecordComparator {
-    bool operator()(const Record& a, const Record& b) {
+    inline bool operator()(const Record& a, const Record& b) {
         return std::memcmp(a.key, b.key, KEY_SIZE) < 0;
     }
 };
