@@ -17,18 +17,20 @@ flags.DEFINE_bool(
     False,
     f"If set, only decode the first {KEY_SIZE} bytes of every {RECORD_SIZE} bytes.",
 )
-flags.DEFINE_integer("limit", -1, "Only decode this many bytes; if -1, decode all.")
+flags.DEFINE_integer(
+    "count", -1, "Only decode this many bytes; if -1, decode all.", short_name="c"
+)
 flags.mark_flag_as_required("input_file")
 
 
 def main(argv):
     print("Decoding", FLAGS.input_file)
-    if FLAGS.limit >= 0:
-        print(f"Decoding the first {FLAGS.limit} bytes")
+    if FLAGS.count >= 0:
+        print(f"Decoding the first {FLAGS.count} bytes")
     if FLAGS.key_only:
         print("Only decoding keys")
 
-    arr = np.fromfile(FLAGS.input_file, dtype=np.uint8, count=FLAGS.limit)
+    arr = np.fromfile(FLAGS.input_file, dtype=np.uint8, count=FLAGS.count)
 
     output_file = FLAGS.output_file or FLAGS.input_file + ".txt"
     with open(output_file, "w") as fout:
