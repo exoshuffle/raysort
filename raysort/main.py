@@ -1,4 +1,4 @@
-import subprocess
+import time
 
 from absl import app
 import numpy as np
@@ -50,6 +50,8 @@ def main(argv):
 
     object_store_utils.prepare_input()
 
+    start_time = time.time()
+
     boundaries = sortlib.get_boundaries(params.NUM_REDUCERS)
 
     mapper_results = np.empty((params.NUM_MAPPERS, params.NUM_REDUCERS), dtype=object)
@@ -64,6 +66,13 @@ def main(argv):
 
     reducer_results = ray.get(reducer_results)
     assert all(reducer_results), "Some task failed :("
+
+    end_time = time.time()
+    duration = end_time - start_time
+    total_size = params.TOTAL_NUM_RECORDS * params.RECORD_SIZE / 10 ** 9
+    print(
+        f"Sorting {params.TOTAL_NUM_RECORDS:,} records ({total_size} GiB) took {duration:.3f} seconds."
+    )
 
     object_store_utils.validate_output()
 
