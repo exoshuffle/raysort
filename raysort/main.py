@@ -25,11 +25,11 @@ def mapper(mapper_id, boundaries):
     return chunks
 
 
+# By using varargs, Ray will schedule the reducer when its arguments are ready.
 @ray.remote
-def reducer(reducer_id, parts):
+def reducer(reducer_id, *parts):
     log = logging_utils.logger()
     log.info(f"Starting Reducer R-{reducer_id}")
-    parts = ray.get(parts)
     # Filter out the empty partitions.
     parts = [part for part in parts if part.size > 0]
     # https://github.com/ray-project/ray/blob/master/python/ray/cloudpickle/cloudpickle_fast.py#L448
@@ -61,7 +61,7 @@ def main(argv):
     reducer_results = []
     for r in range(params.NUM_REDUCERS):
         parts = mapper_results[:, r].tolist()
-        ret = reducer.remote(r, parts)
+        ret = reducer.remote(r, *parts)
         reducer_results.append(ret)
 
     reducer_results = ray.get(reducer_results)
