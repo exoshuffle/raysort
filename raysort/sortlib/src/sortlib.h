@@ -7,75 +7,69 @@
 
 namespace sortlib {
 
-const size_t KEY_SIZE = 10;
+const size_t HEADER_SIZE = 10;
 const size_t RECORD_SIZE = 100;
 
-// We consider the first 8 bytes of the key as a 64-bit unsigned integer, and
-// use it to partition the key space. We call it the "header".
-typedef uint64_t Header;
-const size_t HEADER_SIZE = sizeof(Header);
+// We consider the first 8 bytes of the header as a 64-bit unsigned integer
+// "key". The key is used to partition records.
+typedef uint64_t Key;
+const size_t KEY_SIZE = sizeof(Key);
 
 struct Record {
-    uint8_t key[KEY_SIZE];
-    uint8_t data[RECORD_SIZE - KEY_SIZE];
+    uint8_t header[HEADER_SIZE];
+    uint8_t body[RECORD_SIZE - HEADER_SIZE];
 
-    // Assuming little endian.
-    inline Header header() const { return __builtin_bswap64(*(Header*)key); }
+    // Assuming current architecture is little endian.
+    inline Key key() const { return __builtin_bswap64(*(Key*)header); }
 };
 
 struct RecordComparator {
     inline bool operator()(const Record& a, const Record& b) {
-        return std::memcmp(a.key, b.key, KEY_SIZE) < 0;
+        return std::memcmp(a.header, b.header, HEADER_SIZE) < 0;
     }
 };
 
-struct RecordArray {
-    Record* ptr;
+template <typename T>
+struct Array {
+    T* ptr;
     size_t size;
 };
 
-inline bool operator==(const RecordArray& a, const RecordArray& b) {
-    return a.ptr == b.ptr && a.size == b.size;
+struct Partition {
+    size_t offset;
+    size_t size;
+};
+
+inline bool operator==(const Partition& a, const Partition& b) {
+    return a.offset == b.offset && a.size == b.size;
 }
 
-// Sort the data in-place, then return a list of pointers to the partition
-// boundaries. The i-th pointer is the first record in the i-th partition.
-// If the i-th partition is empty, then ret[i] == ret[i + 1].
+// Sort the data in-place, then return a list of partitions. A partition
+// is represented by an offset and a size. If the i-th partition is empty,
+// then ret[i].offset == ret[i + 1].offset, and ret[i].size == 0.
 //
 // Invariants:
-// - ret[0] === data
-// - ret[i] < data + num_records * sizeof(Record) for all i
+// - ret[0].offset === 0
+// - ret[i] < num_records for all i
 //
 // CPU cost: O(Pm * log(Pm))
 // Memory cost: 0
 // where Pm == len(records)
-std::vector<RecordArray> PartitionAndSort(
-    const RecordArray& record_array,
-    const std::vector<Header>& boundaries);
-
-// Partition the data by copying them into chunks (unsorted).
-// TODO: not implemented. Asymptotically slower than using PartitionAndSort.
-//
-// CPU cost: O(Pm * R)
-// Memory cost: O(Pm)
-// where Pm == len(records), R == len(boundaries)
-// std::vector<std::vector<Record>> Partition(
-//     Record* records,
-//     const size_t num_records,
-//     const std::vector<Header>& boundaries);
+std::vector<Partition> SortAndPartition(const Array<Record> record_array,
+                                        const std::vector<Key>& boundaries);
 
 // Compute the boundaries by partitioning the key space into partitions.
 // Return the boundary integers.
-// E.g. the headers (first 8 bytes) of all records in the i-th partition
+// E.g. the keys (first 8 bytes) of all records in the i-th partition
 // must be in the half-open interval [ boundaries[i], boundaries[i + 1] ).
 // TODO: this will be more complicated for skewed distribution.
-std::vector<Header> GetBoundaries(size_t num_partitions);
+std::vector<Key> GetBoundaries(size_t num_partitions);
 
 // Merge M sorted partitions into final output.
 //
 // CPU cost: O(Pr * log(M))
 // where Pr == sum(len(p) for p in partitions), M == len(partitions)
-RecordArray MergePartitions(const std::vector<RecordArray>& partitions);
+Array<Record> MergePartitions(const std::vector<Array<Record>>& partitions);
 
 }  // namespace sortlib
 

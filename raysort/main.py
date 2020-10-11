@@ -15,10 +15,7 @@ def mapper(mapper_id, boundaries):
     log = logging_utils.logger()
     log.info(f"Starting Mapper M-{mapper_id}")
     part = object_store_utils.load_partition(mapper_id)
-    chunks = sortlib.partition_and_sort(part, boundaries)
-    # TODO: Workaround: must create a copy, otherwise buffer gets
-    # corrupted during CloudPickle serialization.
-    chunks = [np.array(chunk) for chunk in chunks]
+    chunks = sortlib.sort_and_partition(part, boundaries)
     log.info(f"Output sizes: %s", [chunk.shape for chunk in chunks])
     if params.NUM_REDUCERS == 1:
         return chunks[0]

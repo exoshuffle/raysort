@@ -6,6 +6,7 @@ import numpy as np
 
 import logging_utils
 import params
+import sortlib.sortlib as sortlib
 
 log = logging_utils.logger()
 
@@ -62,7 +63,7 @@ def prepare_input():
 
 def load_partition(part_id):
     filepath = _get_part_path(part_id)
-    data = np.fromfile(filepath, dtype=np.uint8)
+    data = np.fromfile(filepath, dtype=sortlib.RecordT)
     return data
 
 

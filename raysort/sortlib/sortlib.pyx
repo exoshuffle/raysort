@@ -2,66 +2,69 @@
 # distutils: sources = src/sortlib.cpp
 
 from cpython.array cimport array
+from libc.stdint cimport uint8_t, uint64_t
 from libcpp.vector cimport vector
 
 import numpy as np
 
-ctypedef long ptr_t
-
 cdef extern from "src/sortlib.h" namespace "sortlib":
+    const size_t HEADER_SIZE
     const size_t RECORD_SIZE
-    ctypedef unsigned long long Header
+    ctypedef uint64_t Key
     ctypedef struct Record:
-        pass
-    ctypedef struct RecordArray:
-        Record* ptr
+        uint8_t header[HEADER_SIZE]
+        uint8_t body[RECORD_SIZE - HEADER_SIZE]
+    ctypedef struct Partition:
+        size_t offset
         size_t size
-    cdef vector[Header] GetBoundaries(size_t num_partitions)
-    cdef vector[RecordArray] PartitionAndSort(const RecordArray& record_array, const vector[Header]& boundaries)
-    cdef RecordArray MergePartitions(const vector[RecordArray]& parts)
+    cdef cppclass Array[T]:
+        T* ptr
+        size_t size
+    cdef vector[Key] GetBoundaries(size_t num_partitions)
+    cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries)
+    cdef Array[Record] MergePartitions(const vector[Array[Record]]& parts)
 
 
-cdef _get_num_records(data):
-    size = len(data)
-    assert size % RECORD_SIZE == 0, (
-        size,
-        "input data size must be multiples of RECORD_SIZE",
-    )
-    num_records = int(size / RECORD_SIZE)
-    return num_records
+HeaderT = np.dtype((np.uint8, HEADER_SIZE))
+PayloadT = np.dtype((np.uint8, RECORD_SIZE - HEADER_SIZE))
+RecordT = np.dtype([("header", HeaderT), ("body", PayloadT)])
+
 
 def get_boundaries(n):
     return GetBoundaries(n)
 
+
 def _to_numpy(mv):
     if mv is None:
-        return np.empty(0, dtype=np.uint8)
-    return np.frombuffer(mv, dtype=np.uint8)
+        return np.empty(0, dtype=RecordT)
+    return np.frombuffer(mv, dtype=RecordT)
 
-cdef char[:] _to_memoryview(const RecordArray& ra):
-    if ra.size == 0:
+
+cdef Record[:] _to_memoryview(const Array[Record]& arr):
+    if arr.size == 0:
         return None
-    n_bytes = ra.size * RECORD_SIZE
-    return <char[:n_bytes]><char*>ra.ptr
+    return <Record[:arr.size]>arr.ptr
 
-cdef RecordArray _to_record_array(data):
-    cdef RecordArray ret
-    cdef char[:] memview = data
+
+cdef Array[Record] _to_record_array(data):
+    cdef Array[Record] ret
+    cdef Record[:] memview = data
     ret.ptr = <Record*>&memview[0]
-    ret.size = _get_num_records(data)
+    ret.size = data.size
     return ret
 
-def partition_and_sort(data, boundaries):
-    cdef char[:] memview = data
-    record_array = _to_record_array(data)
-    chunks = PartitionAndSort(record_array, boundaries)
-    return [_to_numpy(_to_memoryview(ra)) for ra in chunks]
+
+def sort_and_partition(data, boundaries):
+    arr = _to_record_array(data)
+    chunks = SortAndPartition(arr, boundaries)
+    return [data[c.offset : c.offset + c.size] for c in chunks]
+
 
 def merge_partitions(parts):
-    cdef vector[RecordArray] record_arrays
+    cdef vector[Array[Record]] record_arrays
     record_arrays.reserve(len(parts))
     for data in parts:
         ra = _to_record_array(data)
         record_arrays.push_back(ra)
-    cdef RecordArray merged = MergePartitions(record_arrays)
+    cdef Array[Record] merged = MergePartitions(record_arrays)
     return _to_numpy(_to_memoryview(merged))

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <limits>
@@ -11,7 +12,8 @@
 
 namespace sortlib {
 
-size_t _TotalSize(const std::vector<RecordArray>& parts) {
+template <typename T>
+size_t _TotalSize(const std::vector<T>& parts) {
     size_t ret = 0;
     for (const auto& part : parts) {
         ret += part.size;
@@ -19,46 +21,44 @@ size_t _TotalSize(const std::vector<RecordArray>& parts) {
     return ret;
 }
 
-std::vector<RecordArray> PartitionAndSort(
-    const RecordArray& record_array,
-    const std::vector<Header>& boundaries) {
-    Record* records = record_array.ptr;
+std::vector<Partition> SortAndPartition(const Array<Record> record_array,
+                                        const std::vector<Key>& boundaries) {
+    Record* const records = record_array.ptr;
     const size_t num_records = record_array.size;
     std::sort(records, records + num_records, RecordComparator());
 
-    std::vector<RecordArray> ret;
+    std::vector<Partition> ret;
     ret.reserve(boundaries.size());
     auto bound = boundaries.begin();
-    Record* prev_ptr = records;
-    Record* ptr = records;
-    while (ptr != records + num_records && bound != boundaries.end()) {
-        while (ptr->header() < *bound) {
-            ++ptr;
+    size_t off = 0;
+    size_t prev_off = 0;
+    while (off < num_records && bound != boundaries.end()) {
+        while (records[off].key() < *bound) {
+            ++off;
         }
-        const size_t size = ptr - prev_ptr;
+        const size_t size = off - prev_off;
         if (!ret.empty()) {
             ret.back().size = size;
         }
-        ret.emplace_back(RecordArray{ptr, 0});
+        ret.emplace_back(Partition{off, 0});
         ++bound;
-        prev_ptr = ptr;
+        prev_off = off;
     }
     if (!ret.empty()) {
-        ret.back().size = records + num_records - prev_ptr;
+        ret.back().size = num_records - prev_off;
     }
     assert(ret.size() == boundaries.size());
     assert(_TotalSize(ret) == num_records);
     return ret;
 }
 
-std::vector<Header> GetBoundaries(size_t num_partitions) {
-    std::vector<Header> ret;
+std::vector<Key> GetBoundaries(size_t num_partitions) {
+    std::vector<Key> ret;
     ret.reserve(num_partitions);
-    const Header min_limit = std::numeric_limits<Header>::min();
-    assert(min_limit == 0);
-    const Header max_limit = std::numeric_limits<Header>::max();
-    const Header step = (max_limit - min_limit) / num_partitions + 1;
-    Header boundary = min_limit;
+    const Key min = 0;
+    const Key max = std::numeric_limits<Key>::max();
+    const Key step = ceil(max / num_partitions);
+    Key boundary = min;
     for (size_t i = 0; i < num_partitions; ++i) {
         ret.emplace_back(boundary);
         boundary += step;
@@ -78,7 +78,7 @@ struct SortDataComparator {
     }
 };
 
-RecordArray MergePartitions(const std::vector<RecordArray>& parts) {
+Array<Record> MergePartitions(const std::vector<Array<Record>>& parts) {
     const size_t num_parts = parts.size();
     if (num_parts == 0) {
         return {nullptr, 0};
