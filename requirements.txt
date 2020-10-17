@@ -1,4 +1,5 @@
 absl-py
+boto3
 Cython
 ipython
 numpy

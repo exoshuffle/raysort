@@ -5,7 +5,7 @@ import numpy as np
 import ray
 
 import logging_utils
-import object_store_utils
+import file_utils
 import params
 import sortlib.sortlib as sortlib
 
@@ -14,7 +14,7 @@ import sortlib.sortlib as sortlib
 def mapper(mapper_id, boundaries):
     log = logging_utils.logger()
     log.info(f"Starting Mapper M-{mapper_id}")
-    part = object_store_utils.load_partition(mapper_id)
+    part = file_utils.load_partition(mapper_id)
     chunks = sortlib.sort_and_partition(part, boundaries)
     log.info(f"Output sizes: %s", [chunk.shape for chunk in chunks])
     if params.NUM_REDUCERS == 1:
@@ -36,7 +36,7 @@ def reducer(reducer_id, *parts):
         part.setflags(write=True)
     log.info(f"Input sizes: %s", [part.shape for part in parts])
     merged = sortlib.merge_partitions(parts)
-    object_store_utils.save_partition(reducer_id, merged)
+    file_utils.save_partition(reducer_id, merged)
     return True
 
 
@@ -45,7 +45,7 @@ def main(argv):
     log = logging_utils.logger()
     log.info("Ray initialized")
 
-    object_store_utils.prepare_input()
+    file_utils.generate_input()
 
     start_time = time.time()
 
@@ -71,7 +71,7 @@ def main(argv):
         f"Sorting {params.TOTAL_NUM_RECORDS:,} records ({total_size} GiB) took {duration:.3f} seconds."
     )
 
-    object_store_utils.validate_output()
+    file_utils.validate_output()
 
 
 if __name__ == "__main__":
