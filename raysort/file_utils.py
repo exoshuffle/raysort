@@ -4,10 +4,10 @@ import subprocess
 
 import numpy as np
 
-import logging_utils
-import params
-import s3_utils
-import sortlib.sortlib as sortlib
+from raysort import logging_utils
+from raysort import params
+from raysort import s3_utils
+from raysort.sortlib import sortlib
 
 log = logging_utils.logger()
 

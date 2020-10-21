@@ -1,7 +1,7 @@
 import boto3
 
-import logging_utils
-import params
+from raysort import logging_utils
+from raysort import params
 
 log = logging_utils.logger()
 

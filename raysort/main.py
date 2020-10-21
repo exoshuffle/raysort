@@ -4,10 +4,10 @@ from absl import app
 import numpy as np
 import ray
 
-import logging_utils
-import file_utils
-import params
-import sortlib.sortlib as sortlib
+from raysort import logging_utils
+from raysort import file_utils
+from raysort import params
+from raysort.sortlib import sortlib
 
 
 @ray.remote(num_returns=params.NUM_REDUCERS)
