@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import time
 
-from absl import app
 import aiobotocore
 import boto3
 import pandas as pd
@@ -11,13 +10,16 @@ import ray
 import raysort.params as params
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--nodes", default=6, help="number of nodes")
+parser.add_argument("--nodes", type=int, default=6, help="number of nodes")
 parser.add_argument(
-    "--concurrency", default=1000, help="number of download threads per node"
+    "--concurrency", type=int, default=1000, help="number of download threads per node"
 )
-parser.add_argument("--chunksize", default=1000, help="number of bytes to download")
+parser.add_argument(
+    "--chunksize", type=int, default=1000 * 10, help="number of bytes to download"
+)
 parser.add_argument(
     "--window_step",
+    type=float,
     default=0.1,
     help="window step size in seconds to calculate moving average of request per second",
 )
@@ -102,9 +104,9 @@ async def async_main():
     print(rps)
 
 
-def main(argv):
+def main():
     asyncio.run(async_main())
 
 
 if __name__ == "__main__":
-    app.run(main)
+    main()
