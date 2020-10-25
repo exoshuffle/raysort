@@ -1,4 +1,5 @@
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
@@ -68,8 +69,7 @@ int main() {
     const size_t num_reducers = 1;
     const auto& boundaries = GetBoundaries(num_reducers);
 
-    const size_t num_records = 10000;
-    const size_t buf_size = RECORD_SIZE * (num_records + 1);
+    const size_t num_records = 1000000;
     Record* records = new Record[num_records + 1];
 
     FILE* fin;
@@ -83,9 +83,13 @@ int main() {
         fclose(fin);
     }
 
+    const auto start1 = std::chrono::high_resolution_clock::now();
     const auto& parts = SortAndPartition({records, num_records}, boundaries);
+    const auto stop1 = std::chrono::high_resolution_clock::now();
     const auto& record_arrays = MakeRecordArrays(records, parts);
+    const auto start2 = std::chrono::high_resolution_clock::now();
     const auto output = MergePartitions(record_arrays);
+    const auto stop2 = std::chrono::high_resolution_clock::now();
 
     FILE* fout;
     fout = fopen("/var/tmp/raysort/output/test-output", "w");
@@ -96,6 +100,16 @@ int main() {
         printf("Wrote %lu bytes.\n", writecount);
         fclose(fout);
     }
+    printf("Execution time (ms):\n");
+    printf("SortAndPartition,%ld\n",
+           std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+               .count());
+    printf("MergePartitions,%ld\n",
+           std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2)
+               .count());
+    printf("Total,%ld\n",
+           std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start1)
+               .count());
 
     return 0;
 }
