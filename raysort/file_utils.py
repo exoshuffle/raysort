@@ -1,5 +1,7 @@
+import logging
 import math
 import os
+import ray
 import subprocess
 
 import numpy as np
@@ -8,8 +10,6 @@ from raysort import logging_utils
 from raysort import params
 from raysort import s3_utils
 from raysort.sortlib import sortlib
-
-log = logging_utils.logger()
 
 
 def _get_part_path(part_id, kind="input"):
@@ -29,14 +29,16 @@ def _get_part_key(part_id, kind="input"):
     return key
 
 
+@ray.remote
 def generate_part(part_id, size, offset):
+    logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id)
     subprocess.run(
         [params.GENSORT_PATH, f"-b{offset}", f"-t{cpu_count}", f"{size}", filepath],
         check=True,
     )
-    log.info(f"Generated input {filepath} containing {size} records")
+    logging.info(f"Generated input {filepath} containing {size} records")
     if params.USE_S3:
         key = _get_part_key(part_id)
         s3_utils.put_object(filepath, key)
@@ -46,13 +48,17 @@ def generate_input():
     M = params.NUM_MAPPERS
     size = math.ceil(params.TOTAL_NUM_RECORDS / M)
     offset = 0
+    tasks = []
     for part_id in range(M - 1):
-        generate_part(part_id, size, offset)
+        tasks.append(generate_part.remote(part_id, size, offset))
         offset += size
-    generate_part(M - 1, params.TOTAL_NUM_RECORDS - offset, offset)
+    tasks.append(generate_part.remote(M - 1, params.TOTAL_NUM_RECORDS - offset, offset))
+    ray.get(tasks)
 
 
+@ray.remote
 def validate_part(part_id):
+    logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
     if params.USE_S3:
@@ -61,20 +67,22 @@ def validate_part(part_id):
         with open(filepath, "wb") as fout:
             fout.write(data)
     if os.path.getsize(filepath) == 0:
-        log.info(f"Validated output {filepath} (empty)")
+        logging.info(f"Validated output {filepath} (empty)")
         return
     proc = subprocess.run(
         [params.VALSORT_PATH, f"-t{cpu_count}", filepath], capture_output=True
     )
     if proc.returncode != 0:
-        log.critical("\n" + proc.stderr.decode("ascii"))
+        logging.critical("\n" + proc.stderr.decode("ascii"))
         raise RuntimeError(f"VALIDATION FAILED for partition {part_id}")
-    log.info(f"Validated output {filepath}")
+    logging.info(f"Validated output {filepath}")
 
 
 def validate_output():
+    tasks = []
     for part_id in range(params.NUM_REDUCERS):
-        validate_part(part_id)
+        tasks.append(validate_part.remote(part_id))
+    ray.get(tasks)
 
 
 def load_partition(part_id):

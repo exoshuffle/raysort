@@ -1,6 +1,7 @@
+import argparse
+import logging
 import time
 
-from absl import app
 import numpy as np
 import ray
 
@@ -10,13 +11,33 @@ from raysort import params
 from raysort.sortlib import sortlib
 
 
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--all", action="store_true", help="run the generate_input step"
+    )
+    parser.add_argument(
+        "--generate_input", action="store_true", help="run the generate_input step"
+    )
+    parser.add_argument("--sort", action="store_true", help="run the sort step")
+    parser.add_argument(
+        "--validate_output", action="store_true", help="run the validate_output step"
+    )
+    args = parser.parse_args()
+    if args.all:
+        args.generate_input = True
+        args.sort = True
+        args.validate_output = True
+    return args
+
+
 @ray.remote(num_returns=params.NUM_REDUCERS)
 def mapper(mapper_id, boundaries):
-    log = logging_utils.logger()
-    log.info(f"Starting Mapper M-{mapper_id}")
+    logging_utils.init()
+    logging.info(f"Starting Mapper M-{mapper_id}")
     part = file_utils.load_partition(mapper_id)
     chunks = sortlib.sort_and_partition(part, boundaries)
-    log.info(f"Output sizes: %s", [chunk.shape for chunk in chunks])
+    logging.info(f"Output sizes: %s", [chunk.shape for chunk in chunks])
     if params.NUM_REDUCERS == 1:
         return chunks[0]
     return chunks
@@ -25,8 +46,8 @@ def mapper(mapper_id, boundaries):
 # By using varargs, Ray will schedule the reducer when its arguments are ready.
 @ray.remote
 def reducer(reducer_id, *parts):
-    log = logging_utils.logger()
-    log.info(f"Starting Reducer R-{reducer_id}")
+    logging_utils.init()
+    logging.info(f"Starting Reducer R-{reducer_id}")
     # Filter out the empty partitions.
     parts = [part for part in parts if part.size > 0]
     # https://github.com/ray-project/ray/blob/master/python/ray/cloudpickle/cloudpickle_fast.py#L448
@@ -34,23 +55,14 @@ def reducer(reducer_id, *parts):
     # Workaround until CloudPickle has a fix.
     for part in parts:
         part.setflags(write=True)
-    log.info(f"Input sizes: %s", [part.shape for part in parts])
+    logging.info(f"Input sizes: %s", [part.shape for part in parts])
     merged = sortlib.merge_partitions(parts)
     file_utils.save_partition(reducer_id, merged)
     return True
 
 
-def main(argv):
-    ray.init()
-    log = logging_utils.logger()
-    log.info("Ray initialized")
-
-    file_utils.generate_input()
-
-    start_time = time.time()
-
+def sort_main():
     boundaries = sortlib.get_boundaries(params.NUM_REDUCERS)
-
     mapper_results = np.empty((params.NUM_MAPPERS, params.NUM_REDUCERS), dtype=object)
     for m in range(params.NUM_MAPPERS):
         mapper_results[m, :] = mapper.remote(m, boundaries)
@@ -62,17 +74,31 @@ def main(argv):
         reducer_results.append(ret)
 
     reducer_results = ray.get(reducer_results)
-    assert all(reducer_results), "Some task failed :("
+    assert all(reducer_results), reducer_results
 
-    end_time = time.time()
-    duration = end_time - start_time
-    total_size = params.TOTAL_NUM_RECORDS * params.RECORD_SIZE / 10 ** 9
-    print(
-        f"Sorting {params.TOTAL_NUM_RECORDS:,} records ({total_size} GiB) took {duration:.3f} seconds."
-    )
 
-    file_utils.validate_output()
+def main():
+    args = get_args()
+    ray.init()
+    logging_utils.init()
+    logging.info("Ray initialized")
+
+    if args.generate_input:
+        file_utils.generate_input()
+
+    if args.sort:
+        start_time = time.time()
+        sort_main()
+        end_time = time.time()
+        duration = end_time - start_time
+        total_size = params.TOTAL_NUM_RECORDS * params.RECORD_SIZE / 10 ** 9
+        logging.info(
+            f"Sorting {params.TOTAL_NUM_RECORDS:,} records ({total_size} GiB) took {duration:.3f} seconds."
+        )
+
+    if args.validate_output:
+        file_utils.validate_output()
 
 
 if __name__ == "__main__":
-    app.run(main)
+    main()

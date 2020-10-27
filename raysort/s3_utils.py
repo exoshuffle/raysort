@@ -1,9 +1,7 @@
 import boto3
+import logging
 
-from raysort import logging_utils
 from raysort import params
-
-log = logging_utils.logger()
 
 
 def _get_bucket(region, bucket):
@@ -23,10 +21,10 @@ def put_object(data, object_key, region=params.S3_REGION, bucket=params.S3_BUCKE
         try:
             data = open(data, "rb")
         except IOError:
-            log.error(f"Expected filename or binary data: {data}")
+            logging.error(f"Expected filename or binary data: {data}")
 
     bucket = _get_bucket(region, bucket)
     obj = bucket.Object(object_key)
     obj.put(Body=data)
     obj.wait_until_exists()
-    log.info(f"Put data in S3 at {object_key}")
+    logging.info(f"Put data in S3 at {object_key}")
