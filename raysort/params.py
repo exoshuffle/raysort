@@ -2,16 +2,9 @@ import os
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
-# Basics
-RECORD_SIZE = 100
-
-# Each record is 100 bytes. Official requirement is 10^12 records (100 TiB).
-# TOTAL_NUM_RECORDS = 1000 * 10  # 1 MiB
-TOTAL_NUM_RECORDS = 1000 * 1000 * 10  # 1 GiB
-
 # Cluster config
-NUM_MAPPERS = 6
-NUM_REDUCERS = 4
+NUM_MAPPERS = 8
+NUM_REDUCERS = 8
 
 # Executable locations
 GENSORT_PATH = os.path.join(__DIR__, "../gensort/64/gensort")

@@ -9,7 +9,7 @@ import numpy as np
 from raysort import logging_utils
 from raysort import params
 from raysort import s3_utils
-from raysort.sortlib import sortlib
+from raysort import sortlib
 
 
 def _get_part_path(part_id, kind="input"):
@@ -38,21 +38,21 @@ def generate_part(part_id, size, offset):
         [params.GENSORT_PATH, f"-b{offset}", f"-t{cpu_count}", f"{size}", filepath],
         check=True,
     )
-    logging.info(f"Generated input {filepath} containing {size} records")
+    logging.info(f"Generated input {filepath} containing {size:,} records")
     if params.USE_S3:
         key = _get_part_key(part_id)
         s3_utils.put_object(filepath, key)
 
 
-def generate_input():
+def generate_input(args):
     M = params.NUM_MAPPERS
-    size = math.ceil(params.TOTAL_NUM_RECORDS / M)
+    size = math.ceil(args.num_records / M)
     offset = 0
     tasks = []
     for part_id in range(M - 1):
         tasks.append(generate_part.remote(part_id, size, offset))
         offset += size
-    tasks.append(generate_part.remote(M - 1, params.TOTAL_NUM_RECORDS - offset, offset))
+    tasks.append(generate_part.remote(M - 1, args.num_records - offset, offset))
     ray.get(tasks)
 
 

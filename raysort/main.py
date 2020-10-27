@@ -8,14 +8,27 @@ import ray
 from raysort import logging_utils
 from raysort import file_utils
 from raysort import params
-from raysort.sortlib import sortlib
+from raysort import sortlib
 
 
 def get_args():
     parser = argparse.ArgumentParser()
+    # Benchmark config
     parser.add_argument(
-        "--all", action="store_true", help="run the generate_input step"
+        "--num_records",
+        "-n",
+        default=1000 * 1000 * 10,  # 1 GiB
+        type=int,
+        help="Each record is 100B. Official requirement is 10^12 records (100 TiB).",
     )
+    # Cluster config
+    parser.add_argument(
+        "--cluster",
+        action="store_true",
+        help="try connecting to an existing Ray cluster",
+    )
+    # Tasks
+    parser.add_argument("--all", action="store_true", help="run the entire benchmark")
     parser.add_argument(
         "--generate_input", action="store_true", help="run the generate_input step"
     )
@@ -79,21 +92,24 @@ def sort_main():
 
 def main():
     args = get_args()
-    ray.init()
+    if args.cluster:
+        ray.init(address="auto", _redis_password="5241590000000000")
+    else:
+        ray.init()
     logging_utils.init()
     logging.info("Ray initialized")
 
     if args.generate_input:
-        file_utils.generate_input()
+        file_utils.generate_input(args)
 
     if args.sort:
         start_time = time.time()
         sort_main()
         end_time = time.time()
         duration = end_time - start_time
-        total_size = params.TOTAL_NUM_RECORDS * params.RECORD_SIZE / 10 ** 9
+        total_size = args.num_records * 100 / 10 ** 9
         logging.info(
-            f"Sorting {params.TOTAL_NUM_RECORDS:,} records ({total_size} GiB) took {duration:.3f} seconds."
+            f"Sorting {args.num_records:,} records ({total_size} GiB) took {duration:.3f} seconds."
         )
 
     if args.validate_output:

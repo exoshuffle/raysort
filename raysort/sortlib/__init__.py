@@ -1,1 +1,1 @@
-from sortlib import *
+from .sortlib import *
