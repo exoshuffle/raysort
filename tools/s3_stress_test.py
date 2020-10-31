@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import datetime
 import time
 
 import aiobotocore
@@ -7,12 +8,18 @@ import boto3
 import pandas as pd
 import ray
 
-import raysort.params as params
-
 parser = argparse.ArgumentParser()
-parser.add_argument("--nodes", type=int, default=6, help="number of nodes")
 parser.add_argument(
-    "--concurrency", type=int, default=1000, help="number of download threads per node"
+    "--cluster",
+    action="store_true",
+    help="try connecting to an existing Ray cluster",
+)
+parser.add_argument(
+    "--export_timeline", action="store_true", help="export a Ray timeline trace"
+)
+parser.add_argument("--nodes", type=int, default=64, help="number of nodes")
+parser.add_argument(
+    "--concurrency", type=int, default=2000, help="number of download threads per node"
 )
 parser.add_argument(
     "--chunksize", type=int, default=1000 * 10, help="number of bytes to download"
@@ -31,11 +38,13 @@ parser.add_argument(
 args = parser.parse_args()
 
 
-@ray.remote
+# We want each actor to run on its own node. m5.large has 2 CPUs;
+# Hence we say we need 2 CPUs.
+@ray.remote(num_cpus=2)
 class RequestActor:
     def __init__(self, id):
         self.id = id
-        self.object_key = "input/input-{part_id:06}".format(part_id=id)
+        self.object_key = "input/input-{part_id:06}".format(part_id=id % 16)
         self.session = aiobotocore.get_session()
 
     async def make_request(self, s3, start=0, end=1000):
@@ -43,7 +52,7 @@ class RequestActor:
         assert isinstance(end, int)
         start_time = time.time()
         resp = await s3.get_object(
-            Bucket=params.S3_BUCKET,
+            Bucket="raysort-dev",
             Key=self.object_key,
             Range=f"bytes={start}-{end}",
         )
@@ -55,12 +64,13 @@ class RequestActor:
     async def make_requests(self):
         print(f"Actor #{self.id} launching requests to {self.object_key}")
         tasks = []
-        async with self.session.create_client("s3", region_name=params.S3_REGION) as s3:
+        async with self.session.create_client("s3", region_name="us-west-1") as s3:
             for i in range(args.concurrency):
                 start = i * args.chunksize
                 end = start + args.chunksize - 1
                 tasks.append(self.make_request(s3, start, end))
             ret = await asyncio.gather(*tasks)
+        print(f"Actor #{self.id} finished")
         return ret
 
 
@@ -93,8 +103,10 @@ def count_requests(df, window_start, window_end):
 
 async def async_main():
     print("Hello")
-    # ray.init(address="3.101.105.105:6379", _redis_password="5241590000000000")
-    ray.init()
+    if args.cluster:
+        ray.init(address="auto", _redis_password="5241590000000000")
+    else:
+        ray.init()
 
     actors = [RequestActor.remote(i) for i in range(args.nodes)]
     tasks = [actor.make_requests.remote() for actor in actors]
@@ -102,6 +114,13 @@ async def async_main():
     data = [x for xs in data for x in xs]
     rps = analyze(data)
     print(rps)
+
+    if args.export_timeline:
+        time.sleep(5)  # wait for traces to come back to head node
+        timestr = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        filename = f"timeline-{timestr}.json"
+        ray.timeline(filename=filename)
+        print(f"Exported timeline to {filename}")
 
 
 def main():
