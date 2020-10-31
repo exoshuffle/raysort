@@ -7,7 +7,7 @@ run: $(TARGET)
 	./$(TARGET)
 
 $(TARGET): $(SRC)
-	$(CXX) -ggdb $(SRC) -o $(TARGET)
+	$(CXX) -O3 $(SRC) -o $(TARGET)
 
 .PHONY: clean
 clean:
