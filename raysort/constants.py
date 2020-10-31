@@ -10,8 +10,8 @@ FILENAME_FMT = {"input": "input-{part_id:06}", "output": "output-{part_id:06}"}
 
 # AWS S3 config
 USE_S3 = True
-S3_REGION = "us-west-1"
-S3_BUCKET = "raysort-dev"
+S3_REGION = "us-west-2"
+S3_BUCKET = "raysort-debug"
 OBJECT_KEY_FMT = {
     "input": "input/input-{part_id:06}",
     "output": "output/output-{part_id:06}",

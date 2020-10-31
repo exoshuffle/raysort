@@ -17,7 +17,7 @@ parser.add_argument(
 parser.add_argument(
     "--export_timeline", action="store_true", help="export a Ray timeline trace"
 )
-parser.add_argument("--nodes", type=int, default=64, help="number of nodes")
+parser.add_argument("--nodes", type=int, default=16, help="number of nodes")
 parser.add_argument(
     "--concurrency", type=int, default=2000, help="number of download threads per node"
 )
@@ -52,7 +52,7 @@ class RequestActor:
         assert isinstance(end, int)
         start_time = time.time()
         resp = await s3.get_object(
-            Bucket="raysort-dev",
+            Bucket="raysort-debug",
             Key=self.object_key,
             Range=f"bytes={start}-{end}",
         )
@@ -64,7 +64,7 @@ class RequestActor:
     async def make_requests(self):
         print(f"Actor #{self.id} launching requests to {self.object_key}")
         tasks = []
-        async with self.session.create_client("s3", region_name="us-west-1") as s3:
+        async with self.session.create_client("s3", region_name="us-west-2") as s3:
             for i in range(args.concurrency):
                 start = i * args.chunksize
                 end = start + args.chunksize - 1
@@ -102,7 +102,6 @@ def count_requests(df, window_start, window_end):
 
 
 async def async_main():
-    print("Hello")
     if args.cluster:
         ray.init(address="auto", _redis_password="5241590000000000")
     else:
