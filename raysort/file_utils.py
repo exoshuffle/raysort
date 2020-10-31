@@ -6,16 +6,16 @@ import subprocess
 
 import numpy as np
 
+from raysort import constants
 from raysort import logging_utils
-from raysort import params
 from raysort import s3_utils
 from raysort import sortlib
 
 
 def _get_part_path(part_id, kind="input"):
     assert kind in {"input", "output"}
-    dirpath = params.DATA_DIR[kind]
-    filename_fmt = params.FILENAME_FMT[kind]
+    dirpath = constants.DATA_DIR[kind]
+    filename_fmt = constants.FILENAME_FMT[kind]
     os.makedirs(dirpath, exist_ok=True)
     filename = filename_fmt.format(part_id=part_id)
     filepath = os.path.join(dirpath, filename)
@@ -24,28 +24,28 @@ def _get_part_path(part_id, kind="input"):
 
 def _get_part_key(part_id, kind="input"):
     assert kind in {"input", "output"}
-    key_fmt = params.OBJECT_KEY_FMT[kind]
+    key_fmt = constants.OBJECT_KEY_FMT[kind]
     key = key_fmt.format(part_id=part_id)
     return key
 
 
-@ray.remote
+@ray.remote(num_cpus=constants.NODE_CPUS)
 def generate_part(part_id, size, offset):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id)
     subprocess.run(
-        [params.GENSORT_PATH, f"-b{offset}", f"-t{cpu_count}", f"{size}", filepath],
+        [constants.GENSORT_PATH, f"-b{offset}", f"-t{cpu_count}", f"{size}", filepath],
         check=True,
     )
     logging.info(f"Generated input {filepath} containing {size:,} records")
-    if params.USE_S3:
+    if constants.USE_S3:
         key = _get_part_key(part_id)
         s3_utils.put_object(filepath, key)
 
 
 def generate_input(args):
-    M = params.NUM_MAPPERS
+    M = args.num_mappers
     size = math.ceil(args.num_records / M)
     offset = 0
     tasks = []
@@ -56,12 +56,12 @@ def generate_input(args):
     ray.get(tasks)
 
 
-@ray.remote
+@ray.remote(num_cpus=constants.NODE_CPUS)
 def validate_part(part_id):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
-    if params.USE_S3:
+    if constants.USE_S3:
         key = _get_part_key(part_id, kind="output")
         data = s3_utils.get_object(key)
         with open(filepath, "wb") as fout:
@@ -70,7 +70,7 @@ def validate_part(part_id):
         logging.info(f"Validated output {filepath} (empty)")
         return
     proc = subprocess.run(
-        [params.VALSORT_PATH, f"-t{cpu_count}", filepath], capture_output=True
+        [constants.VALSORT_PATH, f"-t{cpu_count}", filepath], capture_output=True
     )
     if proc.returncode != 0:
         logging.critical("\n" + proc.stderr.decode("ascii"))
@@ -78,15 +78,15 @@ def validate_part(part_id):
     logging.info(f"Validated output {filepath}")
 
 
-def validate_output():
+def validate_output(args):
     tasks = []
-    for part_id in range(params.NUM_REDUCERS):
+    for part_id in range(args.num_reducers):
         tasks.append(validate_part.remote(part_id))
     ray.get(tasks)
 
 
 def load_partition(part_id):
-    if params.USE_S3:
+    if constants.USE_S3:
         return _load_partition_s3(part_id)
     else:
         return _load_partition_local(part_id)
@@ -107,7 +107,7 @@ def _load_partition_s3(part_id):
 
 
 def save_partition(part_id, data):
-    if params.USE_S3:
+    if constants.USE_S3:
         return _save_partition_s3(part_id, data)
     else:
         return _save_partition_local(part_id, data)

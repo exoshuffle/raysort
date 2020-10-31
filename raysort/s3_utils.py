@@ -1,14 +1,14 @@
 import boto3
 import logging
 
-from raysort import params
+from raysort import constants
 
 
 def _get_bucket(region, bucket):
     return boto3.resource("s3", region_name=region).Bucket(bucket)
 
 
-def get_object(object_key, region=params.S3_REGION, bucket=params.S3_BUCKET):
+def get_object(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
     bucket = _get_bucket(region, bucket)
     obj = bucket.Object(object_key)
     body = obj.get()["Body"]
@@ -16,7 +16,9 @@ def get_object(object_key, region=params.S3_REGION, bucket=params.S3_BUCKET):
     return data
 
 
-def put_object(data, object_key, region=params.S3_REGION, bucket=params.S3_BUCKET):
+def put_object(
+    data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET
+):
     if isinstance(data, str):
         try:
             data = open(data, "rb")

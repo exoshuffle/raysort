@@ -2,10 +2,6 @@ import os
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
-# Cluster config
-NUM_MAPPERS = 8
-NUM_REDUCERS = 8
-
 # Executable locations
 GENSORT_PATH = os.path.join(__DIR__, "../gensort/64/gensort")
 VALSORT_PATH = os.path.join(__DIR__, "../gensort/64/valsort")
@@ -20,3 +16,8 @@ OBJECT_KEY_FMT = {
     "input": "input/input-{part_id:06}",
     "output": "output/output-{part_id:06}",
 }
+
+# Ray magic
+# Set num_cpus to this to make sure the task will exclusively get a node.
+# By default we use m5.large which has 2 CPUs.
+NODE_CPUS = 2
