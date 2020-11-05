@@ -31,7 +31,6 @@ cdef extern from "src/sortlib.h" namespace "sortlib":
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
 PayloadT = np.dtype((np.uint8, RECORD_SIZE - HEADER_SIZE))
 RecordT = np.dtype([("header", HeaderT), ("body", PayloadT)])
-FlatRecordT = np.dtype((np.uint8, RECORD_SIZE))
 
 
 def get_boundaries(n):
@@ -60,11 +59,13 @@ cdef Array[Record] _to_record_array(data):
 
 cdef ConstArray[Record] _to_const_record_array(data):
     cdef ConstArray[Record] ret
-    # FIXME: The next two lines of code is a temporary workaround due to a
+    # FIXME: The next 3 lines of code is a temporary workaround due to a
     # known Cython bug [https://github.com/cython/cython/issues/2251]
     # preventing the creation of const memory views of cdef classes.
     # The semantically correct version should be:
     #     cdef const Record[:] memview = data
+    #     ret.ptr = <const Record*>&memview[0]
+    FlatRecordT = np.dtype((np.uint8, RECORD_SIZE))
     cdef const uint8_t[:,:] memview = data.view(FlatRecordT)
     ret.ptr = <const Record*>&memview[0,0]
     ret.size = data.size
