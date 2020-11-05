@@ -9,7 +9,6 @@ DATA_DIR = {"input": "/var/tmp/raysort/input/", "output": "/var/tmp/raysort/outp
 FILENAME_FMT = {"input": "input-{part_id:06}", "output": "output-{part_id:06}"}
 
 # AWS S3 config
-USE_S3 = True
 S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
 OBJECT_KEY_FMT = {

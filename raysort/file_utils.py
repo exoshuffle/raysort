@@ -30,7 +30,7 @@ def _get_part_key(part_id, kind="input"):
 
 
 @ray.remote(num_cpus=constants.NODE_CPUS)
-def generate_part(part_id, size, offset):
+def generate_part(part_id, size, offset, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id)
@@ -39,7 +39,7 @@ def generate_part(part_id, size, offset):
         check=True,
     )
     logging.info(f"Generated input {filepath} containing {size:,} records")
-    if constants.USE_S3:
+    if use_s3:
         key = _get_part_key(part_id)
         s3_utils.put_object(filepath, key)
 
@@ -50,18 +50,22 @@ def generate_input(args):
     offset = 0
     tasks = []
     for part_id in range(M - 1):
-        tasks.append(generate_part.remote(part_id, size, offset))
+        tasks.append(generate_part.remote(part_id, size, offset, use_s3=not args.no_s3))
         offset += size
-    tasks.append(generate_part.remote(M - 1, args.num_records - offset, offset))
+    tasks.append(
+        generate_part.remote(
+            M - 1, args.num_records - offset, offset, use_s3=not args.no_s3
+        )
+    )
     ray.get(tasks)
 
 
 @ray.remote(num_cpus=constants.NODE_CPUS)
-def validate_part(part_id):
+def validate_part(part_id, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
-    if constants.USE_S3:
+    if use_s3:
         key = _get_part_key(part_id, kind="output")
         data = s3_utils.get_object(key)
         with open(filepath, "wb") as fout:
@@ -81,12 +85,12 @@ def validate_part(part_id):
 def validate_output(args):
     tasks = []
     for part_id in range(args.num_reducers):
-        tasks.append(validate_part.remote(part_id))
+        tasks.append(validate_part.remote(part_id, use_s3=not args.no_s3))
     ray.get(tasks)
 
 
-def load_partition(part_id):
-    if constants.USE_S3:
+def load_partition(part_id, use_s3):
+    if use_s3:
         return _load_partition_s3(part_id)
     else:
         return _load_partition_local(part_id)
@@ -106,8 +110,8 @@ def _load_partition_s3(part_id):
     return ret
 
 
-def save_partition(part_id, data):
-    if constants.USE_S3:
+def save_partition(part_id, data, use_s3):
+    if use_s3:
         return _save_partition_s3(part_id, data)
     else:
         return _save_partition_local(part_id, data)
