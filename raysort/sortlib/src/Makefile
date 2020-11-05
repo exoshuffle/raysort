@@ -1,6 +1,6 @@
 CXX = g++
 
-SRC = *.h *.cpp
+SRC = *.h *.hpp *.cpp
 TARGET = test
 
 run: $(TARGET)
