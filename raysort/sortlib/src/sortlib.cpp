@@ -1,14 +1,19 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <queue>
 #include <vector>
 
 #include "sortlib.h"
+#ifdef SORTLIB_USE_TIMSORT
+#include "timsort.hpp"
+#endif
 
 namespace sortlib {
 
@@ -21,11 +26,67 @@ size_t _TotalSize(const std::vector<T>& parts) {
     return ret;
 }
 
-std::vector<Partition> SortAndPartition(const Array<Record> record_array,
+#ifdef SORTLIB_USE_ALT_MEMORY_LAYOUT
+
+// 16-byte word-aligned data structure for sorting.
+// Significantly more cache-friendly.
+struct SortItem {
+    uint8_t header[HEADER_SIZE];
+    Record* ptr;
+    uint8_t unused[2];
+};
+
+struct SortItemComparator {
+    inline bool operator()(const SortItem& a, const SortItem& b) {
+        return std::memcmp(a.header, b.header, HEADER_SIZE) < 0;
+    }
+};
+
+std::unique_ptr<std::vector<SortItem>> _MakeSortItems(
+    const Array<Record>& record_array) {
+    Record* const records = record_array.ptr;
+    const size_t num_records = record_array.size;
+    auto ret = std::make_unique<std::vector<SortItem>>();
+    ret->reserve(num_records);
+    SortItem item;
+    for (Record* ptr = records; ptr != records + num_records; ++ptr) {
+        memcpy(item.header, ptr->header, HEADER_SIZE);
+        item.ptr = ptr;
+        ret->emplace_back(item);
+    }
+    return ret;
+}
+
+#endif
+
+std::vector<Partition> SortAndPartition(const Array<Record>& record_array,
                                         const std::vector<Key>& boundaries) {
     Record* const records = record_array.ptr;
     const size_t num_records = record_array.size;
-    std::sort(records, records + num_records, RecordComparator());
+
+#ifdef SORTLIB_USE_ALT_MEMORY_LAYOUT
+    auto sort_items = _MakeSortItems(record_array);
+
+    const auto start1 = std::chrono::high_resolution_clock::now();
+
+    std::sort(sort_items->begin(), sort_items->end(),
+              HeaderComparator<SortItem>());
+
+    const auto stop1 = std::chrono::high_resolution_clock::now();
+    printf("Sort,%ld\n",
+           std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+               .count());
+
+    Record* buffer = new Record[num_records];
+    Record* cur = buffer;
+    for (const auto& item : *sort_items) {
+        memcpy(cur++, item.ptr, sizeof(Record));
+    }
+    memcpy(records, buffer, sizeof(Record) * num_records);
+    delete[] buffer;
+#else
+    std::sort(records, records + num_records, HeaderComparator<Record>());
+#endif
 
     std::vector<Partition> ret;
     ret.reserve(boundaries.size());
@@ -74,7 +135,7 @@ struct SortData {
 
 struct SortDataComparator {
     bool operator()(const SortData& a, const SortData& b) {
-        return !RecordComparator()(*a.record, *b.record);
+        return !HeaderComparator<Record>()(*a.record, *b.record);
     }
 };
 

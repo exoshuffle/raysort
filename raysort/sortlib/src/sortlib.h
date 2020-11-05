@@ -23,8 +23,9 @@ struct Record {
     inline Key key() const { return __builtin_bswap64(*(Key*)header); }
 };
 
-struct RecordComparator {
-    inline bool operator()(const Record& a, const Record& b) {
+template <typename T>
+struct HeaderComparator {
+    inline bool operator()(const T& a, const T& b) {
         return std::memcmp(a.header, b.header, HEADER_SIZE) < 0;
     }
 };
@@ -55,7 +56,7 @@ inline bool operator==(const Partition& a, const Partition& b) {
 // CPU cost: O(Pm * log(Pm))
 // Memory cost: 0
 // where Pm == len(records)
-std::vector<Partition> SortAndPartition(const Array<Record> record_array,
+std::vector<Partition> SortAndPartition(const Array<Record>& record_array,
                                         const std::vector<Key>& boundaries);
 
 // Compute the boundaries by partitioning the key space into partitions.
