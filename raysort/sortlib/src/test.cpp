@@ -23,13 +23,13 @@ void AssertSorted(const Array<Record>& array) {
     }
 }
 
-std::vector<Array<Record>> MakeRecordArrays(
+std::vector<ConstArray<Record>> MakeConstRecordArrays(
     Record* const records,
     const std::vector<Partition>& parts) {
-    std::vector<Array<Record>> ret;
+    std::vector<ConstArray<Record>> ret;
     ret.reserve(parts.size());
     for (const auto& part : parts) {
-        ret.emplace_back(Array<Record>{records + part.offset, part.size});
+        ret.emplace_back(ConstArray<Record>{records + part.offset, part.size});
     }
     return ret;
 }
@@ -52,7 +52,7 @@ void test() {
     AssertSorted({records, num_records});
     assert(parts == std::vector<Partition>({{{0, 1}, {1, 0}, {1, 4}, {5, 3}}}));
 
-    const auto& record_arrays = MakeRecordArrays(records, parts);
+    const auto& record_arrays = MakeConstRecordArrays(records, parts);
 
     // Call and verify MergePartitions().
     const auto& merged_array = MergePartitions(record_arrays);
@@ -86,7 +86,7 @@ int main() {
     const auto start1 = std::chrono::high_resolution_clock::now();
     const auto& parts = SortAndPartition({records, num_records}, boundaries);
     const auto stop1 = std::chrono::high_resolution_clock::now();
-    const auto& record_arrays = MakeRecordArrays(records, parts);
+    const auto& record_arrays = MakeConstRecordArrays(records, parts);
     const auto start2 = std::chrono::high_resolution_clock::now();
     const auto output = MergePartitions(record_arrays);
     const auto stop2 = std::chrono::high_resolution_clock::now();

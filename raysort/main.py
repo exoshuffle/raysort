@@ -87,11 +87,6 @@ def reducer(args, reducer_id, *parts):
         logging.info(f"Starting Reducer R-{reducer_id}")
         # Filter out the empty partitions.
         parts = [part for part in parts if part.size > 0]
-        # https://github.com/ray-project/ray/blob/master/python/ray/cloudpickle/cloudpickle_fast.py#L448
-        # Pickled numpy arrays are by default not writable, which creates problem for sortlib.
-        # Workaround until CloudPickle has a fix.
-        for part in parts:
-            part.setflags(write=True)
         logging.info(f"Input sizes: %s", [part.shape for part in parts])
         merged = sortlib.merge_partitions(parts)
         file_utils.save_partition(reducer_id, merged, use_s3=not args.no_s3)

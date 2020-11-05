@@ -36,6 +36,12 @@ struct Array {
     size_t size;
 };
 
+template <typename T>
+struct ConstArray {
+    const T* ptr;
+    size_t size;
+};
+
 struct Partition {
     size_t offset;
     size_t size;
@@ -70,7 +76,8 @@ std::vector<Key> GetBoundaries(size_t num_partitions);
 //
 // CPU cost: O(Pr * log(M))
 // where Pr == sum(len(p) for p in partitions), M == len(partitions)
-Array<Record> MergePartitions(const std::vector<Array<Record>>& partitions);
+Array<Record> MergePartitions(
+    const std::vector<ConstArray<Record>>& partitions);
 
 }  // namespace sortlib
 

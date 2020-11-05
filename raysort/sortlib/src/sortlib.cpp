@@ -128,7 +128,7 @@ std::vector<Key> GetBoundaries(size_t num_partitions) {
 }
 
 struct SortData {
-    Record* record;
+    const Record* record;
     size_t partition;
     size_t index;
 };
@@ -139,7 +139,7 @@ struct SortDataComparator {
     }
 };
 
-Array<Record> MergePartitions(const std::vector<Array<Record>>& parts) {
+Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
     const size_t num_parts = parts.size();
     if (num_parts == 0) {
         return {nullptr, 0};
