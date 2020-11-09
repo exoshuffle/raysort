@@ -9,6 +9,7 @@ import ray
 from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
+from raysort import ray_utils
 from raysort import sortlib
 
 
@@ -19,7 +20,7 @@ def get_args():
     parser.add_argument(
         "--num_records",
         "-n",
-        default=GB_RECORDS * 1,
+        default=GB_RECORDS * 4,
         type=int,
         help="Each record is 100B. Official requirement is 10^12 records (100 TiB).",
     )
@@ -36,10 +37,10 @@ def get_args():
         help="use local storage only, conflicts with --cluster",
     )
     parser.add_argument(
-        "--num_mappers", default=4, type=int, help="number of mapper workers"
+        "--num_mappers", default=2, type=int, help="number of mapper workers"
     )
     parser.add_argument(
-        "--num_reducers", default=4, type=int, help="number of reducer workers"
+        "--num_reducers", default=2, type=int, help="number of reducer workers"
     )
     # What stages to run?
     parser.add_argument("--all", action="store_true", help="run the entire benchmark")
@@ -110,7 +111,7 @@ def sort_main(args):
 
 
 def export_timeline():
-    timestr = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    timestr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"timeline-{timestr}.json"
     ray.timeline(filename=filename)
     logging.info(f"Exported timeline to {filename}")
@@ -121,9 +122,11 @@ def main():
     if args.cluster:
         ray.init(address="auto", _redis_password="5241590000000000")
     else:
-        ray.init()
+        ray_opts = ray_utils.get_ray_options(args)
+        ray.init(**ray_opts)
+
     logging_utils.init()
-    logging.info("Ray initialized")
+    ray_utils.check_ray_resources(args)
 
     if args.generate_input:
         file_utils.generate_input(args)
