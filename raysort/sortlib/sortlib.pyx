@@ -1,10 +1,10 @@
 # distutils: language = c++
 # distutils: sources = src/sortlib.cpp
 
-from cpython.array cimport array
 from libc.stdint cimport uint8_t, uint64_t
 from libcpp.vector cimport vector
 
+import io
 import numpy as np
 
 cdef extern from "src/sortlib.h" namespace "sortlib":
@@ -25,7 +25,7 @@ cdef extern from "src/sortlib.h" namespace "sortlib":
         size_t size
     cdef vector[Key] GetBoundaries(size_t num_partitions)
     cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries)
-    cdef Array[Record] MergePartitions(const vector[ConstArray[Record]]& parts)
+    cdef void MergePartitions(const vector[ConstArray[Record]]& parts, Record* const& ptr)
 
 
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
@@ -43,17 +43,11 @@ def _to_numpy(mv):
     return np.frombuffer(mv, dtype=RecordT)
 
 
-cdef Record[:] _to_memoryview(const Array[Record]& arr):
-    if arr.size == 0:
-        return None
-    return <Record[:arr.size]>arr.ptr
-
-
-cdef Array[Record] _to_record_array(data):
+cdef Array[Record] _to_record_array(buf):
     cdef Array[Record] ret
-    cdef Record[:] memview = data
-    ret.ptr = <Record*>&memview[0]
-    ret.size = data.size
+    cdef Record[:] mv = buf
+    ret.ptr = &mv[0]
+    ret.size = buf.size
     return ret
 
 
@@ -79,10 +73,21 @@ def sort_and_partition(data, boundaries):
 
 
 def merge_partitions(parts):
+    """
+    Returns: io.BytesIO.
+    """
     cdef vector[ConstArray[Record]] record_arrays
     record_arrays.reserve(len(parts))
+    total_records = 0
     for data in parts:
         ra = _to_const_record_array(data)
         record_arrays.push_back(ra)
-    cdef Array[Record] merged = MergePartitions(record_arrays)
-    return _to_numpy(_to_memoryview(merged))
+        total_records += ra.size
+    
+    total_bytes = total_records * RECORD_SIZE
+    ret = io.BytesIO(b"0" * total_bytes)
+    cdef uint8_t[:] mv = ret.getbuffer()
+    ptr = <Record*>&mv[0]
+    MergePartitions(record_arrays, ptr)
+    ret.seek(0)
+    return ret

@@ -139,17 +139,13 @@ struct SortDataComparator {
     }
 };
 
-Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
+void MergePartitions(const std::vector<ConstArray<Record>>& parts,
+                     Record* const& records) {
     const size_t num_parts = parts.size();
     if (num_parts == 0) {
-        return {nullptr, 0};
+        return;
     }
-    const size_t num_records = _TotalSize(parts);
-    if (num_records == 0) {
-        return {nullptr, 0};
-    }
-    Record* const ret = new Record[num_records];
-    auto cur = ret;
+    auto cur = records;
     std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
         heap;
 
@@ -169,7 +165,16 @@ Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
             heap.push({parts[i].ptr + j + 1, i, j + 1});
         }
     }
-    assert(cur == ret + num_records);
+    // assert(cur == record_array + num_records);
+}
+
+Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
+    const size_t num_records = _TotalSize(parts);
+    if (num_records == 0) {
+        return {nullptr, 0};
+    }
+    Record* const ret = new Record[num_records];
+    MergePartitions(parts, ret);
     return {ret, num_records};
 }
 

@@ -72,10 +72,14 @@ std::vector<Partition> SortAndPartition(const Array<Record>& record_array,
 // TODO: this will be more complicated for skewed distribution.
 std::vector<Key> GetBoundaries(size_t num_partitions);
 
-// Merge M sorted partitions into final output.
+// Merge M sorted partitions into preallocated memory in record_array.
 //
 // CPU cost: O(Pr * log(M))
 // where Pr == sum(len(p) for p in partitions), M == len(partitions)
+void MergePartitions(const std::vector<ConstArray<Record>>& partitions,
+                     Record* const& records);
+
+// A wrapper of MergePartitions that handles memory allocation.
 Array<Record> MergePartitions(
     const std::vector<ConstArray<Record>>& partitions);
 

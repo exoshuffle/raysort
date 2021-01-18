@@ -4,7 +4,6 @@ import datetime
 import time
 
 import aiobotocore
-import boto3
 import pandas as pd
 import ray
 
@@ -51,7 +50,7 @@ class RequestActor:
         assert isinstance(start, int)
         assert isinstance(end, int)
         start_time = time.time()
-        resp = await s3.get_object(
+        resp = await s3.download(
             Bucket="raysort-debug",
             Key=self.object_key,
             Range=f"bytes={start}-{end}",

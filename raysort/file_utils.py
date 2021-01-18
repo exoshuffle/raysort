@@ -29,7 +29,7 @@ def _get_part_key(part_id, kind="input"):
     return key
 
 
-@ray.remote(num_cpus=constants.NODE_CPUS)
+@ray.remote
 def generate_part(part_id, size, offset, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -41,7 +41,7 @@ def generate_part(part_id, size, offset, use_s3):
     logging.info(f"Generated input {filepath} containing {size:,} records")
     if use_s3:
         key = _get_part_key(part_id)
-        s3_utils.put_object(filepath, key)
+        s3_utils.upload(filepath, key)
 
 
 def generate_input(args):
@@ -60,14 +60,14 @@ def generate_input(args):
     ray.get(tasks)
 
 
-@ray.remote(num_cpus=constants.NODE_CPUS)
+@ray.remote
 def validate_part(part_id, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
     if use_s3:
         key = _get_part_key(part_id, kind="output")
-        data = s3_utils.get_object(key)
+        data = s3_utils.download(key)
         with open(filepath, "wb") as fout:
             fout.write(data)
     if os.path.getsize(filepath) == 0:
@@ -104,7 +104,7 @@ def _load_partition_local(part_id):
 
 def _load_partition_s3(part_id):
     key = _get_part_key(part_id)
-    data = s3_utils.get_object(key)
+    data = s3_utils.download(key)
     ret = np.frombuffer(data, dtype=sortlib.RecordT)
     ret = np.array(ret)
     return ret
@@ -124,5 +124,4 @@ def _save_partition_local(part_id, data):
 
 def _save_partition_s3(part_id, data):
     key = _get_part_key(part_id, kind="output")
-    data = data.tobytes()
-    s3_utils.put_object(data, key)
+    s3_utils.upload(data, key)
