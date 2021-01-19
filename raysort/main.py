@@ -21,7 +21,7 @@ RECORDS_PER_WORKER = 4 * GB_RECORDS  # How many records should a worker process.
 def get_args():
     parser = argparse.ArgumentParser()
     # Benchmark config
-    n_workers = 8
+    n_workers = 4
     
     parser.add_argument(
         "--num_records",
@@ -67,7 +67,7 @@ def get_args():
     return args
 
 
-@ray.remote(resources={"worker": 1})
+@ray.remote(resources={"mapper": 1})
 def mapper(args, mapper_id, boundaries):
     with ray.profiling.profile(f"Mapper M-{mapper_id}"):
         logging_utils.init()
@@ -83,7 +83,7 @@ def mapper(args, mapper_id, boundaries):
 
 
 # By using varargs, Ray will schedule the reducer when its arguments are ready.
-@ray.remote(resources={"worker": 1})
+@ray.remote(resources={"reducer": 1})
 def reducer(args, reducer_id, *parts):
     with ray.profiling.profile(f"Reducer R-{reducer_id}"):
         logging_utils.init()
