@@ -14,16 +14,19 @@ from raysort import logging_utils
 from raysort import ray_utils
 from raysort import sortlib
 
+GB_RECORDS = 1000 * 1000 * 10  # 1 GiB worth of records.
+RECORDS_PER_WORKER = 4 * GB_RECORDS  # How many records should a worker process.
+
 
 def get_args():
     parser = argparse.ArgumentParser()
     # Benchmark config
-    n_nodes = 8
-    GB_RECORDS = 1000 * 1000 * 10  # 1 GiB worth of records.
+    n_workers = 8
+    
     parser.add_argument(
         "--num_records",
         "-n",
-        default=4 * GB_RECORDS * n_nodes,
+        default=RECORDS_PER_WORKER * n_workers,
         type=int,
         help="Each record is 100B. Official requirement is 10^12 records (100 TiB).",
     )
@@ -40,10 +43,10 @@ def get_args():
         help="use local storage only; workers must live on the same node",
     )
     parser.add_argument(
-        "--num_mappers", default=n_nodes, type=int, help="number of mapper workers"
+        "--num_mappers", default=n_workers, type=int, help="number of mapper workers"
     )
     parser.add_argument(
-        "--num_reducers", default=n_nodes, type=int, help="number of reducer workers"
+        "--num_reducers", default=n_workers, type=int, help="number of reducer workers"
     )
     # Which tasks to run?
     tasks_group = parser.add_argument_group("tasks to run", "if no task is specified, will run all tasks")
@@ -64,7 +67,7 @@ def get_args():
     return args
 
 
-@ray.remote
+@ray.remote(resources={"worker": 1})
 def mapper(args, mapper_id, boundaries):
     with ray.profiling.profile(f"Mapper M-{mapper_id}"):
         logging_utils.init()
@@ -80,7 +83,7 @@ def mapper(args, mapper_id, boundaries):
 
 
 # By using varargs, Ray will schedule the reducer when its arguments are ready.
-@ray.remote
+@ray.remote(resources={"worker": 1})
 def reducer(args, reducer_id, *parts):
     with ray.profiling.profile(f"Reducer R-{reducer_id}"):
         logging_utils.init()
@@ -96,28 +99,17 @@ def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    if args.cluster:
-        allocator = ray_utils.NodeAllocator(args)
-
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
     for m in range(M):
-        if args.cluster:
-            resources = allocator.get()
-        else:
-            resources = None
-        mapper_results[m, :] = mapper.options(num_returns=R, resources=resources).remote(args, m, boundaries)
+        mapper_results[m, :] = mapper.options(num_returns=R).remote(args, m, boundaries)
     
     logging.info("Future IDs:\n%s", mapper_results)
 
     reducer_results = []
     for r in range(R):
-        if args.cluster:
-            resources = allocator.get()
-        else:
-            resources = None
         parts = mapper_results[:, r].tolist()
-        ret = reducer.options(resources=resources).remote(args, r, *parts)
+        ret = reducer.remote(args, r, *parts)
         reducer_results.append(ret)
 
     ray.get(reducer_results)
