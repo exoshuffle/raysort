@@ -41,9 +41,13 @@ def check_ray_resources(args, num_tries=6, wait_time=10):
         ray_resources = ray.cluster_resources()
         ready = check_ray_resources_impl(required_resources, ray_resources)
         if ready:
-            logging.info(f"Ray cluster is ready: required={required_resources}, actual={ray_resources}")
+            logging.info(
+                f"Ray cluster is ready: required={required_resources}, actual={ray_resources}"
+            )
             return
-        logging.info(f"Ray cluster is not ready yet, sleeping for {wait_time} secs: required={required_resources}, actual={ray_resources}")
+        logging.info(
+            f"Ray cluster is not ready yet, sleeping for {wait_time} secs: required={required_resources}, actual={ray_resources}"
+        )
         time.sleep(wait_time)
         num_tries -= 1
     raise RuntimeError("Ray cluster is not ready")
@@ -59,8 +63,11 @@ class NodeAllocator:
     def __init__(self, args):
         self.next_node_idx = 0
         self.nodes = get_node_resources()
-        assert len(self.nodes) >= args.num_mappers + args.num_reducers, ("Not enough worker nodes", self.nodes)
-    
+        assert len(self.nodes) >= args.num_mappers + args.num_reducers, (
+            "Not enough worker nodes",
+            self.nodes,
+        )
+
     def get(self):
         node = self.nodes[self.next_node_idx]
         self.next_node_idx += 1

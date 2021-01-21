@@ -22,7 +22,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     # Benchmark config
     n_workers = 4
-    
+
     parser.add_argument(
         "--num_records",
         "-n",
@@ -49,10 +49,14 @@ def get_args():
         "--num_reducers", default=n_workers, type=int, help="number of reducer workers"
     )
     # Which tasks to run?
-    tasks_group = parser.add_argument_group("tasks to run", "if no task is specified, will run all tasks")
+    tasks_group = parser.add_argument_group(
+        "tasks to run", "if no task is specified, will run all tasks"
+    )
     tasks = ["generate_input", "sort", "validate_output"]
     for task in tasks:
-        tasks_group.add_argument(f"--{task}", action="store_true", help=f"run task {task}")
+        tasks_group.add_argument(
+            f"--{task}", action="store_true", help=f"run task {task}"
+        )
     # Ray config
     parser.add_argument(
         "--export_timeline", action="store_true", help="export a Ray timeline trace"
@@ -103,7 +107,7 @@ def sort_main(args):
     mapper_results = np.empty((M, R), dtype=object)
     for m in range(M):
         mapper_results[m, :] = mapper.options(num_returns=R).remote(args, m, boundaries)
-    
+
     logging.info("Future IDs:\n%s", mapper_results)
 
     reducer_results = []
@@ -132,8 +136,17 @@ def trace_memory():
 
 
 def print_memory():
-    logging.info(subprocess.run(f"cat /proc/{os.getpid()}/status | grep Vm", shell=True, capture_output=True).stdout.decode("ascii"))
-    logging.info("\n%s", subprocess.run("free -h", shell=True, capture_output=True).stdout.decode("ascii"))
+    logging.info(
+        subprocess.run(
+            f"cat /proc/{os.getpid()}/status | grep Vm", shell=True, capture_output=True
+        ).stdout.decode("ascii")
+    )
+    logging.info(
+        "\n%s",
+        subprocess.run("free -h", shell=True, capture_output=True).stdout.decode(
+            "ascii"
+        ),
+    )
 
 
 def main():

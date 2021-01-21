@@ -20,9 +20,7 @@ def download(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET)
     return ret.getbuffer()
 
 
-def upload(
-    data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET
-):
+def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
     if isinstance(data, str):
         try:
             filedata = open(data, "rb")
