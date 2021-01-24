@@ -1,6 +1,8 @@
-cluster_name: raysort
-min_workers: 8
-max_workers: 8
+### Variables: 2, 2, 4
+
+cluster_name: raysort-cluster
+min_workers: 4
+max_workers: 4
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -54,13 +56,15 @@ available_node_types:
     mapper:
         node_config:
             InstanceType: r5.large  # 16GB RAM
-        max_workers: 4
+        min_workers: 2
+        max_workers: 2
         resources: {"mapper": 1}
 
     reducer:
         node_config:
             InstanceType: r5.large  # 16GB RAM
-        max_workers: 4
+        min_workers: 2
+        max_workers: 2
         resources: {"reducer": 1}
 
 # Files or directories to copy to the head and worker nodes. The format is a

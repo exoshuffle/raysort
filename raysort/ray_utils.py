@@ -19,10 +19,14 @@ def get_ray_options(args):
 
 
 def get_required_resources(args):
-    cpu = args.num_mappers + args.num_reducers
+    # This needs revisiting.
+    # If we rely on object spilling then no need to require obj_mem.
+    # If we run multiple waves of mapper/reducer tasks then no need
+    # to require mapper/reducer.
     obj_mem = get_required_memory(args)
     return {
-        "CPU": cpu,
+        "mapper": args.num_mappers,
+        "reducer": args.num_reducers,
         "object_store_memory": obj_mem,
     }
 
@@ -36,17 +40,20 @@ def check_ray_resources_impl(required_resources, ray_resources):
 
 
 def check_ray_resources(args, num_tries=6, wait_time=10):
-    required_resources = get_required_resources(args)
+    if isinstance(args, dict):
+        res = args
+    else:
+        res = get_required_resources(args)
     while num_tries > 0:
         ray_resources = ray.cluster_resources()
-        ready = check_ray_resources_impl(required_resources, ray_resources)
+        ready = check_ray_resources_impl(res, ray_resources)
         if ready:
             logging.info(
-                f"Ray cluster is ready: required={required_resources}, actual={ray_resources}"
+                f"Ray cluster is ready: required={res}, actual={ray_resources}"
             )
             return
         logging.info(
-            f"Ray cluster is not ready yet, sleeping for {wait_time} secs: required={required_resources}, actual={ray_resources}"
+            f"Ray cluster is not ready yet, sleeping for {wait_time} secs: required={res}, actual={ray_resources}"
         )
         time.sleep(wait_time)
         num_tries -= 1

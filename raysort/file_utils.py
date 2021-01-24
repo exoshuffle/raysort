@@ -29,7 +29,7 @@ def _get_part_key(part_id, kind="input"):
     return key
 
 
-@ray.remote
+@ray.remote(resources={"mapper": 1})
 def generate_part(part_id, size, offset, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -60,7 +60,7 @@ def generate_input(args):
     ray.get(tasks)
 
 
-@ray.remote
+@ray.remote(resources={"reducer": 1})
 def validate_part(part_id, use_s3):
     logging_utils.init()
     cpu_count = os.cpu_count()
