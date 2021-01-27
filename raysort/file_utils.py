@@ -58,6 +58,7 @@ def generate_input(args):
             M - 1, args.num_records - offset, offset
         )
     )
+    logging.info(f"Generating {len(tasks)} partitions")
     ray.get(tasks)
 
 
@@ -85,6 +86,7 @@ def validate_output(args):
     tasks = []
     for part_id in range(args.num_reducers):
         tasks.append(validate_part.remote(part_id))
+    logging.info(f"Validating {len(tasks)} partitions")
     ray.get(tasks)
 
 
@@ -105,5 +107,12 @@ def load_chunks(chunks, kind="temp"):
         ChunkInfo(_get_part_key(part_id, kind=kind), offset, size)
         for part_id, offset, size in chunks
     ]
-    ret = asyncio.run(s3_utils.download_chunks(chunks))
-    return ret
+    return asyncio.run(s3_utils.download_chunks(chunks))
+
+
+def cleanup(args):
+    temp_keys = [_get_part_key(i, kind="temp") for i in range(args.num_mappers)]
+    output_keys = [_get_part_key(i, kind="output") for i in range(args.num_reducers)]
+    keys = temp_keys + output_keys
+    logging.info(f"Cleaning up {len(keys)} files")
+    return asyncio.run(s3_utils.delete_files(keys))

@@ -52,7 +52,7 @@ def get_args():
     tasks_group = parser.add_argument_group(
         "tasks to run", "if no task is specified, will run all tasks"
     )
-    tasks = ["generate_input", "sort", "validate_output"]
+    tasks = ["generate_input", "sort", "validate_output", "cleanup"]
     for task in tasks:
         tasks_group.add_argument(
             f"--{task}", action="store_true", help=f"run task {task}"
@@ -188,6 +188,9 @@ def main():
 
     if args.validate_output:
         file_utils.validate_output(args)
+
+    if args.cleanup:
+        file_utils.cleanup(args)
 
     if args.export_timeline:
         export_timeline()

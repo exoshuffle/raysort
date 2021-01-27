@@ -65,3 +65,11 @@ async def download_chunk(s3, chunk, bucket):
     ret = io.BytesIO(await body.read())
     ret.seek(0)
     return ret
+
+
+async def delete_files(keys, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
+    session = aiobotocore.get_session()
+    async with session.create_client("s3", region_name=region) as s3:
+        return await asyncio.gather(
+            *[s3.delete_object(Bucket=bucket, Key=key) for key in keys]
+        )
