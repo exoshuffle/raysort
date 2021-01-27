@@ -16,16 +16,10 @@ flags.DEFINE_string(
     "Path to the cluster config file relative to repository root",
 )
 flags.DEFINE_integer(
-    "num_mappers",
+    "num_workers",
     4,
-    "number of mapper nodes",
-    short_name="m",
-)
-flags.DEFINE_integer(
-    "num_reducers",
-    4,
-    "number of reducer nodes",
-    short_name="r",
+    "number of worker nodes",
+    short_name="n",
 )
 
 
@@ -42,9 +36,7 @@ def write_cluster_config():
     template = string.Template(template)
     conf = template.substitute(
         {
-            "NUM_MAPPERS": FLAGS.num_mappers,
-            "NUM_REDUCERS": FLAGS.num_reducers,
-            "TOTAL_NUM_NODES": FLAGS.num_mappers + FLAGS.num_reducers,
+            "NUM_WORKERS": FLAGS.num_workers,
         }
     )
     output_path, _ = template_path.rsplit(".", 1)
@@ -70,8 +62,7 @@ def main(argv):
     launch_ray_cluster(cluster_config_file)
     # ray_utils.check_ray_resources(
     #     {
-    #         "mapper": FLAGS.num_mappers,
-    #         "reducer": FLAGS.num_reducers,
+    #         "worker": FLAGS.num_workers,
     #     }
     # )
 

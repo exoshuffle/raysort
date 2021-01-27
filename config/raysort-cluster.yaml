@@ -1,4 +1,4 @@
-### Variables: 2, 2, 4
+### Variables: 4
 
 cluster_name: raysort-cluster
 min_workers: 4
@@ -42,7 +42,7 @@ worker_nodes:
 head_node_type: head
 
 # Specify the default type of the worker node (as configured above).
-worker_default_node_type: mapper
+worker_default_node_type: worker
 
 # Tell the autoscaler the allowed node types and the resources they provide.
 # The key is the name of the node type, which is just for debugging purposes.
@@ -53,19 +53,12 @@ available_node_types:
             InstanceType: m5.xlarge  # 16GB RAM
         resources: {}
 
-    mapper:
+    worker:
         node_config:
             InstanceType: r5.large  # 16GB RAM
-        min_workers: 2
-        max_workers: 2
-        resources: {"mapper": 1}
-
-    reducer:
-        node_config:
-            InstanceType: r5.large  # 16GB RAM
-        min_workers: 2
-        max_workers: 2
-        resources: {"reducer": 1}
+        resources: {"worker": 1}
+        min_workers: 4
+        max_workers: 4
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.

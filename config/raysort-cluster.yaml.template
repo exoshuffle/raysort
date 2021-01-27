@@ -1,8 +1,8 @@
-### Variables: $NUM_MAPPERS, $NUM_REDUCERS, $TOTAL_NUM_NODES
+### Variables: $NUM_WORKERS
 
 cluster_name: raysort-cluster
-min_workers: $TOTAL_NUM_NODES
-max_workers: $TOTAL_NUM_NODES
+min_workers: $NUM_WORKERS
+max_workers: $NUM_WORKERS
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -42,7 +42,7 @@ worker_nodes:
 head_node_type: head
 
 # Specify the default type of the worker node (as configured above).
-worker_default_node_type: mapper
+worker_default_node_type: worker
 
 # Tell the autoscaler the allowed node types and the resources they provide.
 # The key is the name of the node type, which is just for debugging purposes.
@@ -53,19 +53,12 @@ available_node_types:
             InstanceType: m5.xlarge  # 16GB RAM
         resources: {}
 
-    mapper:
+    worker:
         node_config:
             InstanceType: r5.large  # 16GB RAM
-        min_workers: $NUM_MAPPERS
-        max_workers: $NUM_MAPPERS
-        resources: {"mapper": 1}
-
-    reducer:
-        node_config:
-            InstanceType: r5.large  # 16GB RAM
-        min_workers: $NUM_REDUCERS
-        max_workers: $NUM_REDUCERS
-        resources: {"reducer": 1}
+        resources: {"worker": 1}
+        min_workers: $NUM_WORKERS
+        max_workers: $NUM_WORKERS
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.

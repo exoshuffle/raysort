@@ -37,50 +37,37 @@ def get_boundaries(n):
     return GetBoundaries(n)
 
 
-def _to_numpy(mv):
-    if mv is None:
-        return np.empty(0, dtype=RecordT)
-    return np.frombuffer(mv, dtype=RecordT)
-
-
 cdef Array[Record] _to_record_array(buf):
     cdef Array[Record] ret
-    cdef Record[:] mv = buf
-    ret.ptr = &mv[0]
-    ret.size = buf.size
+    cdef uint8_t[:] mv = buf
+    ret.ptr = <Record *>&mv[0]
+    ret.size = int(buf.nbytes / RECORD_SIZE)
     return ret
 
 
-cdef ConstArray[Record] _to_const_record_array(data):
+cdef ConstArray[Record] _to_const_record_array(buf):
     cdef ConstArray[Record] ret
-    # FIXME: The next 3 lines of code is a temporary workaround due to a
-    # known Cython bug [https://github.com/cython/cython/issues/2251]
-    # preventing the creation of const memory views of cdef classes.
-    # The semantically correct version should be:
-    #     cdef const Record[:] memview = data
-    #     ret.ptr = <const Record*>&memview[0]
-    FlatRecordT = np.dtype((np.uint8, RECORD_SIZE))
-    cdef const uint8_t[:,:] memview = data.view(FlatRecordT)
-    ret.ptr = <const Record*>&memview[0,0]
-    ret.size = data.size
+    cdef const uint8_t[:] mv = buf
+    ret.ptr = <const Record*>&mv[0]
+    ret.size = int(buf.nbytes / RECORD_SIZE)
     return ret
 
 
-def sort_and_partition(data, boundaries):
-    arr = _to_record_array(data)
+def sort_and_partition(part, boundaries):
+    arr = _to_record_array(part.getbuffer())
     chunks = SortAndPartition(arr, boundaries)
-    return [data[c.offset : c.offset + c.size] for c in chunks]
+    return [(c.offset, c.size) for c in chunks]
 
 
-def merge_partitions(parts):
+def merge_partitions(chunks):
     """
     Returns: io.BytesIO.
     """
     cdef vector[ConstArray[Record]] record_arrays
-    record_arrays.reserve(len(parts))
+    record_arrays.reserve(len(chunks))
     total_records = 0
-    for data in parts:
-        ra = _to_const_record_array(data)
+    for chunk in chunks:
+        ra = _to_const_record_array(chunk.getbuffer())
         record_arrays.push_back(ra)
         total_records += ra.size
     

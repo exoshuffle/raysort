@@ -25,8 +25,7 @@ def get_required_resources(args):
     # to require mapper/reducer.
     obj_mem = get_required_memory(args)
     return {
-        "mapper": args.num_mappers,
-        "reducer": args.num_reducers,
+        "worker": max(args.num_mappers, args.num_reducers),
         "object_store_memory": obj_mem,
     }
 

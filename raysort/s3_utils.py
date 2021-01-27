@@ -6,10 +6,6 @@ import boto3
 from raysort import constants
 
 
-def _get_bucket(region, bucket):
-    return boto3.resource("s3", region_name=region).Bucket(bucket)
-
-
 def download(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
     """
     Returns: io.BytesIO stream.
@@ -17,7 +13,22 @@ def download(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET)
     s3 = boto3.client("s3", region_name=region)
     ret = io.BytesIO()
     s3.download_fileobj(bucket, object_key, ret)
-    return ret.getbuffer()
+    ret.seek(0)
+    return ret
+
+
+def download_range(
+    object_key, range_str, region=constants.S3_REGION, bucket=constants.S3_BUCKET
+):
+    """
+    Returns: io.BytesIO stream.
+    """
+    s3 = boto3.client("s3", region_name=region)
+    obj = s3.get_object(Bucket=bucket, Key=object_key, Range=range_str)
+    body = obj["Body"]
+    ret = io.BytesIO(body.read())
+    ret.seek(0)
+    return ret
 
 
 def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):

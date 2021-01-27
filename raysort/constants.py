@@ -17,6 +17,7 @@ S3_BUCKET = "raysort-debug"
 OBJECT_KEY_FMT = {
     "input": "input/input-{part_id:06}",
     "output": "output/output-{part_id:06}",
+    "temp": "temp/temp-{part_id:06}",
 }
 
 # Ray magic
