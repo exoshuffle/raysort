@@ -1,15 +1,14 @@
+import asyncio
 import logging
 import math
 import os
 import ray
 import subprocess
 
-import numpy as np
-
 from raysort import constants
 from raysort import logging_utils
 from raysort import s3_utils
-from raysort import sortlib
+from raysort.types import *
 
 
 def _get_part_path(part_id, kind="input"):
@@ -29,7 +28,7 @@ def _get_part_key(part_id, kind="input"):
     return key
 
 
-@ray.remote(resources={"worker": 1})
+@ray.remote
 def generate_part(part_id, size, offset):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -41,6 +40,7 @@ def generate_part(part_id, size, offset):
     logging.info(f"Generated input {filepath} containing {size:,} records")
     key = _get_part_key(part_id)
     s3_utils.upload(filepath, key)
+    os.remove(filepath)
     logging.info(f"Uploaded {filepath}")
 
 
@@ -49,22 +49,25 @@ def generate_input(args):
     size = math.ceil(args.num_records / M)
     offset = 0
     tasks = []
+    memory = size * constants.RECORD_SIZE
     for part_id in range(M - 1):
-        tasks.append(generate_part.remote(part_id, size, offset))
+        tasks.append(generate_part.options(memory=memory).remote(part_id, size, offset))
         offset += size
-    tasks.append(generate_part.remote(M - 1, args.num_records - offset, offset))
+    tasks.append(
+        generate_part.options(memory=memory).remote(
+            M - 1, args.num_records - offset, offset
+        )
+    )
     ray.get(tasks)
 
 
-@ray.remote(resources={"worker": 1})
+@ray.remote
 def validate_part(part_id):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
     key = _get_part_key(part_id, kind="output")
-    data = s3_utils.download(key)
-    with open(filepath, "wb") as fout:
-        fout.write(data)
+    s3_utils.download_file(key, filepath)
     if os.path.getsize(filepath) == 0:
         logging.info(f"Validated output {filepath} (empty)")
         return
@@ -74,6 +77,7 @@ def validate_part(part_id):
     if proc.returncode != 0:
         logging.critical("\n" + proc.stderr.decode("ascii"))
         raise RuntimeError(f"Validation failed for partition {part_id}")
+    os.remove(filepath)
     logging.info(f"Validated output {filepath}")
 
 
@@ -96,13 +100,10 @@ def save_partition(part_id, data, kind="output"):
     return key
 
 
-def load_chunk(part_id, offset, size, kind="temp"):
-    key = _get_part_key(part_id, kind=kind)
-    end = offset + size
-    range_str = f"bytes={offset}-{end}"
-    return s3_utils.download_range(key, range_str)
-
-
-# TODO: make this async and parallel
 def load_chunks(chunks, kind="temp"):
-    return [load_chunk(*chunk) for chunk in chunks]
+    chunks = [
+        ChunkInfo(_get_part_key(part_id, kind=kind), offset, size)
+        for part_id, offset, size in chunks
+    ]
+    ret = asyncio.run(s3_utils.download_chunks(chunks))
+    return ret

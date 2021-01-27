@@ -56,7 +56,7 @@ cdef ConstArray[Record] _to_const_record_array(buf):
 def sort_and_partition(part, boundaries):
     arr = _to_record_array(part.getbuffer())
     chunks = SortAndPartition(arr, boundaries)
-    return [(c.offset, c.size) for c in chunks]
+    return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in chunks]
 
 
 def merge_partitions(chunks):

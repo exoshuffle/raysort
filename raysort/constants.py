@@ -20,9 +20,5 @@ OBJECT_KEY_FMT = {
     "temp": "temp/temp-{part_id:06}",
 }
 
-# Ray magic
-# Set num_cpus to this to make sure the task will exclusively get a node.
-# By default we use m5.large which has 2 CPUs.
-NODE_CPUS = 2
 # Ray reports memory in 50MB units
 RAY_MEMORY_UNIT = 50 * 1024 * 1024

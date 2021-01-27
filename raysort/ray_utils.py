@@ -19,15 +19,8 @@ def get_ray_options(args):
 
 
 def get_required_resources(args):
-    # This needs revisiting.
-    # If we rely on object spilling then no need to require obj_mem.
-    # If we run multiple waves of mapper/reducer tasks then no need
-    # to require mapper/reducer.
-    obj_mem = get_required_memory(args)
-    return {
-        "worker": max(args.num_mappers, args.num_reducers),
-        "object_store_memory": obj_mem,
-    }
+    # Deprecated for now.
+    return {}
 
 
 def check_ray_resources_impl(required_resources, ray_resources):

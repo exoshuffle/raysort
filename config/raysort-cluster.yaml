@@ -1,8 +1,8 @@
-### Variables: 4
+### Variables: 32
 
 cluster_name: raysort-cluster
-min_workers: 4
-max_workers: 4
+min_workers: 32
+max_workers: 32
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -57,8 +57,8 @@ available_node_types:
         node_config:
             InstanceType: r5.large  # 16GB RAM
         resources: {"worker": 1}
-        min_workers: 4
-        max_workers: 4
+        min_workers: 32
+        max_workers: 32
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
@@ -119,4 +119,4 @@ head_start_ray_commands:
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --num-cpus=1
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076

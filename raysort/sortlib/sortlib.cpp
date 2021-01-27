@@ -2559,7 +2559,7 @@ static PyObject *__pyx_pf_7sortlib_2sort_and_partition(CYTHON_UNUSED PyObject *_
  * def sort_and_partition(part, boundaries):
  *     arr = _to_record_array(part.getbuffer())             # <<<<<<<<<<<<<<
  *     chunks = SortAndPartition(arr, boundaries)
- *     return [(c.offset, c.size) for c in chunks]
+ *     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in chunks]
  */
   __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_v_part, __pyx_n_s_getbuffer); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 57, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
@@ -2585,7 +2585,7 @@ static PyObject *__pyx_pf_7sortlib_2sort_and_partition(CYTHON_UNUSED PyObject *_
  * def sort_and_partition(part, boundaries):
  *     arr = _to_record_array(part.getbuffer())
  *     chunks = SortAndPartition(arr, boundaries)             # <<<<<<<<<<<<<<
- *     return [(c.offset, c.size) for c in chunks]
+ *     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in chunks]
  * 
  */
   __pyx_t_4 = __pyx_convert_vector_from_py_sortlib_3a__3a_Key(__pyx_v_boundaries); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 58, __pyx_L1_error)
@@ -2594,7 +2594,7 @@ static PyObject *__pyx_pf_7sortlib_2sort_and_partition(CYTHON_UNUSED PyObject *_
   /* "sortlib.pyx":59
  *     arr = _to_record_array(part.getbuffer())
  *     chunks = SortAndPartition(arr, boundaries)
- *     return [(c.offset, c.size) for c in chunks]             # <<<<<<<<<<<<<<
+ *     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in chunks]             # <<<<<<<<<<<<<<
  * 
  * 
  */
@@ -2608,9 +2608,9 @@ static PyObject *__pyx_pf_7sortlib_2sort_and_partition(CYTHON_UNUSED PyObject *_
       __pyx_t_6 = *__pyx_t_5;
       ++__pyx_t_5;
       __pyx_7genexpr__pyx_v_c = __pyx_t_6;
-      __pyx_t_2 = __Pyx_PyInt_FromSize_t(__pyx_7genexpr__pyx_v_c.offset); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 59, __pyx_L1_error)
+      __pyx_t_2 = __Pyx_PyInt_FromSize_t((__pyx_7genexpr__pyx_v_c.offset * sortlib::RECORD_SIZE)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_2);
-      __pyx_t_3 = __Pyx_PyInt_FromSize_t(__pyx_7genexpr__pyx_v_c.size); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 59, __pyx_L1_error)
+      __pyx_t_3 = __Pyx_PyInt_FromSize_t((__pyx_7genexpr__pyx_v_c.size * sortlib::RECORD_SIZE)); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_3);
       __pyx_t_7 = PyTuple_New(2); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 59, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_7);
