@@ -22,3 +22,7 @@ OBJECT_KEY_FMT = {
 
 # Ray reports memory in 50MB units
 RAY_MEMORY_UNIT = 50 * 1024 * 1024
+
+# Logging config
+# Maximum number of items to print in an array
+LOGGING_ITEMS_LIMIT = 10

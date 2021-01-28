@@ -6,8 +6,6 @@ from absl import flags
 from absl import logging
 import ray
 
-from raysort import ray_utils
-
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -20,6 +18,17 @@ flags.DEFINE_integer(
     4,
     "number of worker nodes",
     short_name="n",
+)
+flags.DEFINE_string(
+    "worker_type",
+    "m5.xlarge",
+    "worker instance type",
+    short_name="w",
+)
+flags.DEFINE_integer(
+    "object_store_memory",
+    100 * 1024 * 1024,
+    "memory reserved for object store per worker",
 )
 
 
@@ -37,6 +46,8 @@ def write_cluster_config():
     conf = template.substitute(
         {
             "NUM_WORKERS": FLAGS.num_workers,
+            "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,
+            "WORKER_TYPE": FLAGS.worker_type,
         }
     )
     output_path, _ = template_path.rsplit(".", 1)
@@ -60,11 +71,6 @@ def main(argv):
     del argv  # Unused.
     cluster_config_file = write_cluster_config()
     launch_ray_cluster(cluster_config_file)
-    # ray_utils.check_ray_resources(
-    #     {
-    #         "worker": FLAGS.num_workers,
-    #     }
-    # )
 
 
 if __name__ == "__main__":

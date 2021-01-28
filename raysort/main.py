@@ -87,8 +87,8 @@ def mapper(args, mapper_id, boundaries):
         file_utils.save_partition(mapper_id, part, kind="temp")
         ret = [ChunkInfo(mapper_id, offset, size) for offset, size in chunks]
         logging.info(
-            f"M-{mapper_id} uploaded sorted partition; output chunks: %s",
-            ret,
+            f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+            ret[: constants.LOGGING_ITEMS_LIMIT],
         )
         return ret
 
@@ -99,11 +99,14 @@ def reducer(args, reducer_id, *chunks):
     with ray.profiling.profile(f"R-{reducer_id}"):
         logging_utils.init()
         logging.info(f"R-{reducer_id} starting")
-        logging.info(f"R-{reducer_id} input chunks: %s", chunks)
+        logging.info(
+            f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+            chunks[: constants.LOGGING_ITEMS_LIMIT],
+        )
         chunks = file_utils.load_chunks(chunks)
         logging.info(
-            f"R-{reducer_id} downloaded chunks: %s",
-            [c.getbuffer().nbytes for c in chunks],
+            f"R-{reducer_id} downloaded chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+            [c.getbuffer().nbytes for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
         )
         merged = sortlib.merge_partitions(chunks)
         logging.info(f"R-{reducer_id} merged chunks")
@@ -116,7 +119,7 @@ def sort_main(args):
     R = args.num_reducers
 
     mapper_mem = args.num_records * constants.RECORD_SIZE / M
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 2
+    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 3
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
