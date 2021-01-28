@@ -7,6 +7,7 @@ import time
 
 import numpy as np
 import ray
+import wandb
 
 from raysort import constants
 from raysort import file_utils
@@ -57,10 +58,6 @@ def get_args():
         tasks_group.add_argument(
             f"--{task}", action="store_true", help=f"run task {task}"
         )
-    # Ray config
-    parser.add_argument(
-        "--export_timeline", action="store_true", help="export a Ray timeline trace"
-    )
 
     args = parser.parse_args()
     # Derive additional arguments.
@@ -144,6 +141,7 @@ def export_timeline():
     filename = f"timeline-{timestr}.json"
     ray.timeline(filename=filename)
     logging.info(f"Exported timeline to {filename}")
+    wandb.save(filename)
 
 
 def print_memory():
@@ -173,6 +171,7 @@ def main():
         ray.init()
 
     logging_utils.init()
+    logging_utils.wandb_init(args)
     if args.cluster:
         ray_utils.check_ray_resources(args)
 
@@ -183,11 +182,7 @@ def main():
         start_time = time.time()
         sort_main(args)
         end_time = time.time()
-        duration = end_time - start_time
-        total_size = args.num_records * 100 / 10 ** 9
-        logging.info(
-            f"Sorting {args.num_records:,} records ({total_size} GiB) took {duration:.3f} seconds."
-        )
+        logging_utils.log_benchmark_result(args, end_time - start_time)
 
     if args.validate_output:
         file_utils.validate_output(args)
@@ -195,8 +190,7 @@ def main():
     if args.cleanup:
         file_utils.cleanup(args)
 
-    if args.export_timeline:
-        export_timeline()
+    export_timeline()
 
 
 if __name__ == "__main__":

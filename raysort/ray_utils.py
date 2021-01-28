@@ -6,18 +6,6 @@ import ray
 from raysort import constants
 
 
-def get_required_memory(args):
-    total_data_size = args.num_records * constants.RECORD_SIZE  # bytes
-    obj_mem_bytes = total_data_size + 10 ** 8  # 100MB extra
-    return obj_mem_bytes / constants.RAY_MEMORY_UNIT  # in 50MB units
-
-
-def get_ray_options(args):
-    return {
-        "object_store_memory": get_required_memory(args),
-    }
-
-
 def get_required_resources(args):
     # Deprecated for now.
     return {}

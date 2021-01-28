@@ -1,8 +1,8 @@
-### Variables: 32, 104857600, m5.xlarge
+### Variables: 31, 104857600, m5.xlarge
 
 cluster_name: raysort-cluster
-min_workers: 32
-max_workers: 32
+min_workers: 31
+max_workers: 31
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -51,13 +51,14 @@ available_node_types:
     head:
         node_config:
             InstanceType: m5.xlarge
-        resources: {}
+        resources: {"worker:m5.xlarge": 1}
 
     worker:
         node_config:
             InstanceType: m5.xlarge
-        min_workers: 32
-        max_workers: 32
+        resources: {"worker:m5.xlarge": 1}
+        min_workers: 31
+        max_workers: 31
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
@@ -113,7 +114,7 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --object-store-memory=104857600
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:

@@ -45,7 +45,7 @@ def write_cluster_config():
     template = string.Template(template)
     conf = template.substitute(
         {
-            "NUM_WORKERS": FLAGS.num_workers,
+            "NUM_WORKERS": FLAGS.num_workers - 1,  # header node counts as 1
             "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,
             "WORKER_TYPE": FLAGS.worker_type,
         }
