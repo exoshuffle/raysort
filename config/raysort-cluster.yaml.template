@@ -1,8 +1,8 @@
-### Variables: $NUM_WORKERS, $OBJECT_STORE_MEMORY, $WORKER_TYPE
+### Variables: $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $RUN_ID, $WORKER_TYPE
 
 cluster_name: raysort-cluster
-min_workers: $NUM_WORKERS
-max_workers: $NUM_WORKERS
+min_workers: $MIN_WORKERS
+max_workers: $MAX_WORKERS
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -18,25 +18,29 @@ provider:
     type: aws
     region: us-west-2
     # availability_zone: us-west-2a,us-west-2b
-    # Whether to allow node reuse. If set to False, nodes will be terminated
-    # instead of stopped.
-    # cache_stopped_nodes: True # If not present, the default is True.
 
 # How Ray will authenticate with newly launched nodes.
 auth:
     ssh_user: ubuntu
 
-# Provider-specific config for the head node, e.g. instance type. By default
-# Ray will auto-configure unspecified fields such as SubnetId and KeyName.
+# Provider-specific config for the head node.
 head_node:
+    InstanceType: $WORKER_TYPE
     ImageId: ami-06515aeefbba7d475
-    InstanceMarketOptions:
-        MarketType: spot
 
+# Provider-specific config for worker nodes.
 worker_nodes:
+    InstanceType: $WORKER_TYPE
     ImageId: ami-06515aeefbba7d475
     InstanceMarketOptions:
         MarketType: spot
+    TagSpecifications:
+      - ResourceType: instance
+        Tags:
+          - Key: Project
+            Value: raysort
+          - Key: RunId
+            Value: "$RUN_ID"
 
 # Specify the node type of the head node (as configured above).
 head_node_type: head
@@ -49,16 +53,14 @@ worker_default_node_type: worker
 # The node config specifies the launch config and physical instance type.
 available_node_types:
     head:
-        node_config:
-            InstanceType: $WORKER_TYPE
-        resources: {"worker:$WORKER_TYPE": 1}
+        node_config: {}
+        resources: {"head": 1}
 
     worker:
-        node_config:
-            InstanceType: $WORKER_TYPE
-        resources: {"worker:$WORKER_TYPE": 1}
-        min_workers: $NUM_WORKERS
-        max_workers: $NUM_WORKERS
+        node_config: {}
+        resources: {"worker:$WORKER_TYPE": 1, "worker": 1}
+        min_workers: $MIN_WORKERS
+        max_workers: $MAX_WORKERS
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
@@ -86,8 +88,8 @@ rsync_exclude:
 # Pattern files to use for filtering out files when running rsync up or rsync down. The file is searched for
 # in the source directory and recursively through all subdirectories. For example, if .gitignore is provided
 # as a value, the behavior will match git's behavior for finding and using .gitignore files.
-rsync_filter: []
-    # - ".gitignore"
+rsync_filter:
+    - ".rsyncignore"
 
 # List of commands that will be run before `setup_commands`. If docker is
 # enabled, these commands will run outside the container and before docker
@@ -114,7 +116,7 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --object-store-memory=$OBJECT_STORE_MEMORY
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --object-store-memory=$OBJECT_STORE_MEMORY --num-cpus=0
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:

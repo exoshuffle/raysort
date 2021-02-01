@@ -9,3 +9,4 @@ cython_debug
 
 gensort
 raysort/sortlib/src/test
+wandb

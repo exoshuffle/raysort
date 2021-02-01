@@ -1,29 +1,36 @@
+import collections
 import logging
 import time
 
 import ray
-
-from raysort import constants
+import ray.autoscaler.sdk
 
 
 def get_required_resources(args):
-    # Deprecated for now.
-    return {}
+    num_workers = max(args.num_mappers, args.num_reducers)
+    return [{"worker": 1}] * num_workers
 
 
-def check_ray_resources_impl(required_resources, ray_resources):
-    for key, val in required_resources.items():
+def aggregate_bundles(bundles):
+    ret = collections.defaultdict(int)
+    for bundle in bundles:
+        for k, v in bundle.items():
+            ret[k] += v
+    return ret
+
+
+def check_ray_resources_impl(bundles, ray_resources):
+    resource_requirements = aggregate_bundles(bundles)
+    for key, val in resource_requirements.items():
         ray_val = ray_resources.get(key, 0)
         if ray_val < val:
             return False
     return True
 
 
-def check_ray_resources(args, num_tries=6, wait_time=10):
-    if isinstance(args, dict):
-        res = args
-    else:
-        res = get_required_resources(args)
+def request_resources(args, num_tries=6, wait_time=30):
+    res = get_required_resources(args)
+    autoscaler_requested = False
     while num_tries > 0:
         ray_resources = ray.cluster_resources()
         ready = check_ray_resources_impl(res, ray_resources)
@@ -32,6 +39,10 @@ def check_ray_resources(args, num_tries=6, wait_time=10):
                 f"Ray cluster is ready: required={res}, actual={ray_resources}"
             )
             return
+        if not autoscaler_requested:
+            ray.autoscaler.sdk.request_resources(bundles=res)
+            logging.info(f"Requested {res} from the autoscaler")
+            autoscaler_requested = True
         logging.info(
             f"Ray cluster is not ready yet, sleeping for {wait_time} secs: required={res}, actual={ray_resources}"
         )

@@ -87,6 +87,7 @@ def mapper(args, mapper_id, boundaries):
             f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
             ret[: constants.LOGGING_ITEMS_LIMIT],
         )
+        # wandb.log({"mapper_finished": f"M-{mapper_id}"})
         return ret
 
 
@@ -109,6 +110,7 @@ def reducer(args, reducer_id, *chunks):
         logging.info(f"R-{reducer_id} merged chunks")
         file_utils.save_partition(reducer_id, merged)
         logging.info(f"R-{reducer_id} uploaded partition")
+        # wandb.log({"reducer_finished": f"R-{reducer_id}"})
 
 
 def sort_main(args):
@@ -164,16 +166,16 @@ def print_memory():
 
 
 def main():
+    logging_utils.init()
     args = get_args()
+
     if args.cluster:
         ray.init(address="auto")
+        # ray_utils.request_resources(args)
     else:
         ray.init()
 
-    logging_utils.init()
     logging_utils.wandb_init(args)
-    if args.cluster:
-        ray_utils.check_ray_resources(args)
 
     if args.generate_input:
         file_utils.generate_input(args)

@@ -1,3 +1,4 @@
+import datetime
 import string
 import subprocess
 
@@ -11,7 +12,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "cluster_config_template",
     "config/raysort-cluster.yaml.template",
-    "Path to the cluster config file relative to repository root",
+    "path to the cluster config file relative to repository root",
 )
 flags.DEFINE_integer(
     "num_workers",
@@ -30,11 +31,21 @@ flags.DEFINE_integer(
     100 * 1024 * 1024,
     "memory reserved for object store per worker",
 )
+flags.DEFINE_bool(
+    "preallocate",
+    True,
+    "if set, allocate all worker nodes at startup",
+)
 
 
 def run(cmd, **kwargs):
     logging.info("$ " + cmd)
     return subprocess.run(cmd, shell=True, **kwargs)
+
+
+def get_run_id():
+    now = datetime.datetime.now()
+    return now.isoformat()
 
 
 def write_cluster_config():
@@ -45,9 +56,11 @@ def write_cluster_config():
     template = string.Template(template)
     conf = template.substitute(
         {
-            "NUM_WORKERS": FLAGS.num_workers - 1,  # header node counts as 1
+            "MIN_WORKERS": FLAGS.num_workers if FLAGS.preallocate else 0,
+            "MAX_WORKERS": FLAGS.num_workers,
             "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,
             "WORKER_TYPE": FLAGS.worker_type,
+            "RUN_ID": get_run_id(),
         }
     )
     output_path, _ = template_path.rsplit(".", 1)

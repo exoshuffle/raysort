@@ -18,10 +18,11 @@ def wandb_init(args):
     wandb.config.update(args)
     resources = ray.cluster_resources()
     for key in ["CPU", "memory", "object_store_memory"]:
-        wandb.config.update({key: resources[key]})
+        wandb.config.update({key: resources.get(key)})
     worker_resources = {k: v for k, v in resources.items() if k.startswith("worker:")}
     wandb.config.update(worker_resources)
     wandb.config.num_workers = sum(worker_resources.values())
+    logging.info(f"Cluster config %s", wandb.config)
 
 
 def log_benchmark_result(args, exec_time):
