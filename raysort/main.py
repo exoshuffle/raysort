@@ -1,4 +1,5 @@
 import argparse
+import collections
 import datetime
 import logging
 import os
@@ -87,7 +88,6 @@ def mapper(args, mapper_id, boundaries):
             f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
             ret[: constants.LOGGING_ITEMS_LIMIT],
         )
-        # wandb.log({"mapper_finished": f"M-{mapper_id}"})
         return ret
 
 
@@ -110,15 +110,37 @@ def reducer(args, reducer_id, *chunks):
         logging.info(f"R-{reducer_id} merged chunks")
         file_utils.save_partition(reducer_id, merged)
         logging.info(f"R-{reducer_id} uploaded partition")
-        # wandb.log({"reducer_finished": f"R-{reducer_id}"})
+
+
+def progress_tracker(mapper_results, reducer_futs):
+    logging.info("Progress tracker started")
+    future_to_id = {}
+    mapper_futs = mapper_results[:, 0].tolist()
+    for i, fut in enumerate(mapper_futs):
+        future_to_id[fut] = ("mapper", f"M-{i}")
+    for i, fut in enumerate(reducer_futs):
+        future_to_id[fut] = ("reducer", f"R-{i}")
+
+    for kind in ["mapper", "reducer"]:
+        wandb.log({f"{kind}_completed": 0})
+
+    done_count_dict = collections.defaultdict(int)
+    rest = mapper_futs + reducer_futs
+    while len(rest) > 0:
+        done, rest = ray.wait(rest)
+        assert len(done) == 1, (done, rest)
+        kind, task_id = future_to_id[done[0]]
+        done_count_dict[kind] += 1
+        logging.info(f"Task done: {task_id}")
+        wandb.log({f"{kind}_completed": done_count_dict[kind]})
 
 
 def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    mapper_mem = args.num_records * constants.RECORD_SIZE / M
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 3
+    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.5
+    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 2.5
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
@@ -127,7 +149,7 @@ def sort_main(args):
             args, m, boundaries
         )
 
-    logging.info("Futures:\n%s", mapper_results)
+    logging.info(f"Futures: {mapper_results.shape}\n{mapper_results}")
 
     reducer_results = []
     for r in range(R):
@@ -135,7 +157,8 @@ def sort_main(args):
         ret = reducer.options(memory=reducer_mem).remote(args, r, *parts)
         reducer_results.append(ret)
 
-    ray.get(reducer_results)
+    file_utils.create_empty_prefixes(args)
+    progress_tracker(mapper_results, reducer_results)
 
 
 def export_timeline():

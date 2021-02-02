@@ -14,10 +14,13 @@ FILENAME_FMT = {"input": "input-{part_id:06}", "output": "output-{part_id:06}"}
 # AWS S3 config
 S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
+S3_NUM_SHARDS = 100
+S3_NUM_UPLOAD_THREADS = 1
 OBJECT_KEY_FMT = {
     "input": "input/input-{part_id:06}",
-    "output": "output/output-{part_id:06}",
-    "temp": "temp/temp-{part_id:06}",
+    "output": "output/shard-{shard_id:05}/output-{part_id:06}",
+    "temp": "temp/shard-{shard_id:05}/temp-{part_id:06}",
+    "temp_prefix": "temp/shard-{shard_id:05}",
 }
 
 # Logging config

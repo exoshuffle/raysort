@@ -11,6 +11,10 @@ from raysort import s3_utils
 from raysort.types import *
 
 
+def _get_shard_id(part_id):
+    return part_id % constants.S3_NUM_SHARDS
+
+
 def _get_part_path(part_id, kind="input"):
     assert kind in {"input", "output"}
     dirpath = constants.DATA_DIR[kind]
@@ -22,9 +26,10 @@ def _get_part_path(part_id, kind="input"):
 
 
 def _get_part_key(part_id, kind="input"):
-    assert kind in {"input", "output", "temp"}
+    assert kind in {"input", "output", "temp", "temp_prefix"}
+    shard_id = _get_shard_id(part_id)
     key_fmt = constants.OBJECT_KEY_FMT[kind]
-    key = key_fmt.format(part_id=part_id)
+    key = key_fmt.format(part_id=part_id, shard_id=shard_id)
     return key
 
 
@@ -102,6 +107,13 @@ def save_partition(part_id, data, kind="output"):
     return key
 
 
+def create_empty_prefixes(args):
+    # Create empty prefixes to warm up S3 for higher concurrent throughput.
+    prefixes = list(set([_get_part_key(i) for i in range(args.num_mappers)]))
+    logging.info(f"Creating {len(prefixes)} prefixes")
+    return asyncio.run(s3_utils.touch_prefixes(prefixes))
+
+
 def load_chunks(chunks, kind="temp"):
     chunks = [
         ChunkInfo(_get_part_key(part_id, kind=kind), offset, size)
@@ -111,8 +123,5 @@ def load_chunks(chunks, kind="temp"):
 
 
 def cleanup(args):
-    temp_keys = [_get_part_key(i, kind="temp") for i in range(args.num_mappers)]
-    output_keys = [_get_part_key(i, kind="output") for i in range(args.num_reducers)]
-    keys = temp_keys + output_keys
-    logging.info(f"Cleaning up {len(keys)} files")
-    return asyncio.run(s3_utils.delete_files(keys))
+    logging.info(f"Cleaning up S3 files")
+    return s3_utils.delete_objects_with_prefix(["temp/", "output/"])
