@@ -101,7 +101,11 @@ def delete_objects_with_prefix(
 
 
 def multipart_upload(
-    dataloader, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET
+    dataloader,
+    object_key,
+    reducer_id,
+    region=constants.S3_REGION,
+    bucket=constants.S3_BUCKET,
 ):
     s3 = boto3.client("s3", region_name=region)
     mpu = s3.create_multipart_upload(Bucket=bucket, Key=object_key)
@@ -112,7 +116,7 @@ def multipart_upload(
         # TODO: do this on a thread to avoid blocking
         # TODO: fault-tolerance of SlowDown errors
         nbytes = datachunk.getbuffer().nbytes
-        logging.info(f"Uploading part {part_id} (size={nbytes}) for {object_key}")
+        logging.info(f"R-{reducer_id} uploading part {part_id} (size={nbytes})")
         up = s3.upload_part(
             Body=datachunk,
             Bucket=bucket,

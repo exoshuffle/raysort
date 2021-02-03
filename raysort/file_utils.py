@@ -111,7 +111,7 @@ def save_partition(part_id, data, kind="temp"):
 
 def save_partition_mpu(part_id, dataloader, kind="output"):
     key = _get_part_key(part_id, kind=kind)
-    s3_utils.multipart_upload(dataloader, key)
+    s3_utils.multipart_upload(dataloader, key, part_id)
     return key
 
 
