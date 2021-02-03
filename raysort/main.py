@@ -39,9 +39,15 @@ def get_args():
     )
     parser.add_argument(
         "--records_per_mapper",
-        default=4 * GB_RECORDS,
+        default=int(4 * GB_RECORDS),
         type=int,
         help="total number of records = this * num_mappers",
+    )
+    parser.add_argument(
+        "--reducer_batch_size",
+        default=int(0.1 * GB_RECORDS),
+        type=int,
+        help="size of multipart upload chunks for reducer",
     )
     # Cluster config
     cluster_config_group = parser.add_argument_group()
@@ -82,7 +88,7 @@ def mapper(args, mapper_id, boundaries):
         logging.info(f"M-{mapper_id} downloaded partition")
         chunks = sortlib.sort_and_partition(part, boundaries)
         logging.info(f"M-{mapper_id} sorted partition")
-        file_utils.save_partition(mapper_id, part, kind="temp")
+        file_utils.save_partition(mapper_id, part)
         ret = [ChunkInfo(mapper_id, offset, size) for offset, size in chunks]
         logging.info(
             f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
@@ -94,6 +100,8 @@ def mapper(args, mapper_id, boundaries):
 # By using varargs, Ray will schedule the reducer when its arguments are ready.
 @ray.remote
 def reducer(args, reducer_id, *chunks):
+    if len(chunks) == 1:
+        chunks = chunks[0]
     with ray.profiling.profile(f"R-{reducer_id}"):
         logging_utils.init()
         logging.info(f"R-{reducer_id} starting")
@@ -106,9 +114,11 @@ def reducer(args, reducer_id, *chunks):
             f"R-{reducer_id} downloaded chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
             [c.getbuffer().nbytes for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
         )
-        merged = sortlib.merge_partitions(chunks)
-        logging.info(f"R-{reducer_id} merged chunks")
-        file_utils.save_partition(reducer_id, merged)
+        merger = sortlib.merge_partitions(chunks, args.reducer_batch_size)
+        file_utils.save_partition_mpu(
+            reducer_id,
+            merger,
+        )
         logging.info(f"R-{reducer_id} uploaded partition")
 
 
@@ -122,7 +132,7 @@ def progress_tracker(mapper_results, reducer_futs):
         future_to_id[fut] = ("reducer", f"R-{i}")
 
     for kind in ["mapper", "reducer"]:
-        wandb.log({f"{kind}_completed": 0})
+        logging_utils.wandb_log({f"{kind}_completed": 0})
 
     done_count_dict = collections.defaultdict(int)
     rest = mapper_futs + reducer_futs
@@ -131,8 +141,7 @@ def progress_tracker(mapper_results, reducer_futs):
         assert len(done) == 1, (done, rest)
         kind, task_id = future_to_id[done[0]]
         done_count_dict[kind] += 1
-        logging.info(f"Task done: {task_id}")
-        wandb.log({f"{kind}_completed": done_count_dict[kind]})
+        logging_utils.wandb_log({f"{kind}_completed": done_count_dict[kind]})
 
 
 def sort_main(args):
@@ -140,7 +149,7 @@ def sort_main(args):
     R = args.num_reducers
 
     mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.5
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 2.5
+    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.5
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
@@ -157,13 +166,13 @@ def sort_main(args):
         ret = reducer.options(memory=reducer_mem).remote(args, r, *parts)
         reducer_results.append(ret)
 
-    file_utils.create_empty_prefixes(args)
     progress_tracker(mapper_results, reducer_results)
+    ray.get(reducer_results)
 
 
 def export_timeline():
     timestr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"timeline-{timestr}.json"
+    filename = f"/tmp/timeline-{timestr}.json"
     ray.timeline(filename=filename)
     logging.info(f"Exported timeline to {filename}")
     wandb.save(filename)
@@ -198,12 +207,12 @@ def main():
     else:
         ray.init()
 
-    logging_utils.wandb_init(args)
-
+    file_utils.touch_prefixes(args)
     if args.generate_input:
         file_utils.generate_input(args)
 
     if args.sort:
+        logging_utils.wandb_init(args)
         start_time = time.time()
         sort_main(args)
         end_time = time.time()

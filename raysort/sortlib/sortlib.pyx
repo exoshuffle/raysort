@@ -25,7 +25,9 @@ cdef extern from "src/sortlib.h" namespace "sortlib":
         size_t size
     cdef vector[Key] GetBoundaries(size_t num_partitions)
     cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries)
-    cdef void MergePartitions(const vector[ConstArray[Record]]& parts, Record* const& ptr)
+    cdef cppclass Merger:
+        Merger(const vector[ConstArray[Record]]& parts)
+        size_t GetBatch(Record* const& ptr, size_t max_num_records)
 
 
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
@@ -59,9 +61,9 @@ def sort_and_partition(part, boundaries):
     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in chunks]
 
 
-def merge_partitions(chunks):
+def merge_partitions(chunks, batch_num_records):
     """
-    Returns: io.BytesIO.
+    Returns: sortlib.Merger class
     """
     cdef vector[ConstArray[Record]] record_arrays
     record_arrays.reserve(len(chunks))
@@ -70,11 +72,19 @@ def merge_partitions(chunks):
         ra = _to_const_record_array(chunk.getbuffer())
         record_arrays.push_back(ra)
         total_records += ra.size
-    
-    total_bytes = total_records * RECORD_SIZE
-    ret = io.BytesIO(b"0" * total_bytes)
-    cdef uint8_t[:] mv = ret.getbuffer()
-    ptr = <Record*>&mv[0]
-    MergePartitions(record_arrays, ptr)
-    ret.seek(0)
-    return ret
+
+    merger = new Merger(record_arrays)
+    cdef uint8_t[:] mv
+    while True:
+        batch_bytes = batch_num_records * RECORD_SIZE
+        ret = io.BytesIO(b"0" * batch_bytes)
+        mv = ret.getbuffer()
+        ptr = <Record*>&mv[0]
+        cnt = merger.GetBatch(ptr, batch_num_records)
+        if cnt == 0:
+            return
+        del mv
+        actual_bytes = cnt * RECORD_SIZE
+        ret.seek(0)
+        ret.truncate(actual_bytes)
+        yield ret

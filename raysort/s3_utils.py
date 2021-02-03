@@ -20,7 +20,7 @@ def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUC
 
     s3 = boto3.client("s3", region_name=region)
     config = boto3.s3.transfer.TransferConfig(
-        max_concurrency=constants.S3_NUM_UPLOAD_THREADS
+        max_concurrency=constants.S3_UPLOAD_MAX_CONCURRENCY
     )
     s3.upload_fileobj(data, bucket, object_key, Config=config)
 
@@ -96,5 +96,34 @@ def delete_objects_with_prefix(
     s3 = boto3.resource("s3", region_name=region)
     bucket = s3.Bucket(bucket)
     for prefix in prefixes:
-        logging.info(f"objects {bucket.objects.filter(Prefix=prefix)}")
+        logging.info(f"Deleting {prefix}/*")
         bucket.objects.filter(Prefix=prefix).delete()
+
+
+def multipart_upload(
+    dataloader, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET
+):
+    s3 = boto3.client("s3", region_name=region)
+    mpu = s3.create_multipart_upload(Bucket=bucket, Key=object_key)
+    mpuid = mpu["UploadId"]
+    parts = []
+    logging.info(f"Created multipart upload for {object_key}")
+    for part_id, datachunk in enumerate(dataloader, start=1):
+        # TODO: do this on a thread to avoid blocking
+        # TODO: fault-tolerance of SlowDown errors
+        nbytes = datachunk.getbuffer().nbytes
+        logging.info(f"Uploading part {part_id} (size={nbytes}) for {object_key}")
+        up = s3.upload_part(
+            Body=datachunk,
+            Bucket=bucket,
+            Key=object_key,
+            UploadId=mpuid,
+            PartNumber=part_id,
+            ContentLength=nbytes,
+        )
+        etag = up["ETag"]
+        parts.append({"ETag": etag, "PartNumber": part_id})
+    s3.complete_multipart_upload(
+        Bucket=bucket, Key=object_key, UploadId=mpuid, MultipartUpload={"Parts": parts}
+    )
+    return parts

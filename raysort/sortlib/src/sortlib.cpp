@@ -139,33 +139,49 @@ struct SortDataComparator {
     }
 };
 
-void MergePartitions(const std::vector<ConstArray<Record>>& parts,
-                     Record* const& records) {
-    const size_t num_parts = parts.size();
-    if (num_parts == 0) {
-        return;
+class Merger::Impl {
+   public:
+    // TODO: need to make sure to avoid copying
+    Impl(const std::vector<ConstArray<Record>>& parts) : parts_(parts) {
+        for (size_t i = 0; i < parts_.size(); ++i) {
+            if (parts_[i].size > 0) {
+                heap_.push({parts_[i].ptr, i, 0});
+            }
+        }
     }
-    auto cur = records;
-    std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
-        heap;
 
-    for (size_t i = 0; i < num_parts; ++i) {
-        if (parts[i].size > 0) {
-            heap.push({parts[i].ptr, i, 0});
+    size_t GetBatch(Record* const& ret, size_t max_num_records) {
+        size_t cnt = 0;
+        auto cur = ret;
+        while (!heap_.empty()) {
+            if (cnt >= max_num_records) {
+                return cnt;
+            }
+            const SortData top = heap_.top();
+            heap_.pop();
+            const size_t i = top.partition;
+            const size_t j = top.index;
+            // Copy record to output array
+            *cur++ = parts_[i].ptr[j];
+            ++cnt;
+            if (j + 1 < parts_[i].size) {
+                heap_.push({parts_[i].ptr + j + 1, i, j + 1});
+            }
         }
+        return cnt;
     }
-    while (!heap.empty()) {
-        const SortData top = heap.top();
-        heap.pop();
-        const size_t i = top.partition;
-        const size_t j = top.index;
-        // Copy record to output array
-        *cur++ = parts[i].ptr[j];
-        if (j + 1 < parts[i].size) {
-            heap.push({parts[i].ptr + j + 1, i, j + 1});
-        }
-    }
-    // assert(cur == record_array + num_records);
+
+   private:
+    const std::vector<ConstArray<Record>> parts_;
+    std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
+        heap_;
+};
+
+Merger::Merger(const std::vector<ConstArray<Record>>& parts)
+    : impl_(std::make_unique<Impl>(parts)) {}
+
+size_t Merger::GetBatch(Record* const& ret, size_t max_num_records) {
+    return impl_->GetBatch(ret, max_num_records);
 }
 
 Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
@@ -174,7 +190,8 @@ Array<Record> MergePartitions(const std::vector<ConstArray<Record>>& parts) {
         return {nullptr, 0};
     }
     Record* const ret = new Record[num_records];
-    MergePartitions(parts, ret);
+    Merger merger(parts);
+    merger.GetBatch(ret, num_records);
     return {ret, num_records};
 }
 

@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include <memory>
+#include <queue>
 #include <vector>
 
 namespace sortlib {
@@ -72,14 +73,24 @@ std::vector<Partition> SortAndPartition(const Array<Record>& record_array,
 // TODO: this will be more complicated for skewed distribution.
 std::vector<Key> GetBoundaries(size_t num_partitions);
 
-// Merge M sorted partitions into preallocated memory in record_array.
+// Responsible for merging M sorted partitions and producing the output
+// in chunks.
 //
 // CPU cost: O(Pr * log(M))
 // where Pr == sum(len(p) for p in partitions), M == len(partitions)
-void MergePartitions(const std::vector<ConstArray<Record>>& partitions,
-                     Record* const& records);
+class Merger {
+   public:
+    Merger(const std::vector<ConstArray<Record>>& partitions);
 
-// A wrapper of MergePartitions that handles memory allocation.
+    // Returns the actual number of records written into `chunk_buffer`.
+    size_t GetBatch(Record* const& ret, size_t max_num_records);
+
+   private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+// A functional version of Merger that handles memory allocation.
 Array<Record> MergePartitions(
     const std::vector<ConstArray<Record>>& partitions);
 

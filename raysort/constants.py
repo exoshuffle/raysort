@@ -9,18 +9,30 @@ RECORD_SIZE = 100  # bytes
 GENSORT_PATH = os.path.join(__DIR__, "../gensort/64/gensort")
 VALSORT_PATH = os.path.join(__DIR__, "../gensort/64/valsort")
 DATA_DIR = {"input": "/var/tmp/raysort/input/", "output": "/var/tmp/raysort/output/"}
-FILENAME_FMT = {"input": "input-{part_id:06}", "output": "output-{part_id:06}"}
+FILENAME_FMT = {"input": "input-{part_id:08}", "output": "output-{part_id:08}"}
 
 # AWS S3 config
 S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
-S3_NUM_SHARDS = 100
-S3_NUM_UPLOAD_THREADS = 1
+S3_NUM_SHARDS = 1000
+S3_UPLOAD_MAX_CONCURRENCY = 1
 OBJECT_KEY_FMT = {
-    "input": "input/input-{part_id:06}",
-    "output": "output/shard-{shard_id:05}/output-{part_id:06}",
-    "temp": "temp/shard-{shard_id:05}/temp-{part_id:06}",
-    "temp_prefix": "temp/shard-{shard_id:05}",
+    "input": "input/shard-{shard_id:04}/input-{part_id:08}",
+    "output": "output/shard-{shard_id:04}/output-{part_id:08}",
+    "temp": "temp/shard-{shard_id:04}/temp-{part_id:08}",
+}
+
+# AWS EC2 constants
+# Retrieved on 2/2/2021 from https://aws.amazon.com/ec2/pricing/on-demand/
+EC2_HOURLY_PRICING = {
+    "m5.xlarge": 0.192,
+    "m5.2xlarge": 0.384,
+    "m5a.xlarge": 0.172,
+    "m5a.2xlarge": 0.344,
+    "r5.large": 0.126,
+    "r5.xlarge": 0.252,
+    "r5a.large": 0.113,
+    "r5a.xlarge": 0.226,
 }
 
 # Logging config

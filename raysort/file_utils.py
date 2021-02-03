@@ -25,11 +25,13 @@ def _get_part_path(part_id, kind="input"):
     return filepath
 
 
-def _get_part_key(part_id, kind="input"):
-    assert kind in {"input", "output", "temp", "temp_prefix"}
+def _get_part_key(part_id, kind="input", prefix_only=False):
+    assert kind in {"input", "output", "temp"}
     shard_id = _get_shard_id(part_id)
     key_fmt = constants.OBJECT_KEY_FMT[kind]
     key = key_fmt.format(part_id=part_id, shard_id=shard_id)
+    if prefix_only:
+        return key.rsplit("/", 1)[0]
     return key
 
 
@@ -101,16 +103,28 @@ def load_partition(part_id, kind="input"):
     return ret
 
 
-def save_partition(part_id, data, kind="output"):
+def save_partition(part_id, data, kind="temp"):
     key = _get_part_key(part_id, kind=kind)
     s3_utils.upload(data, key)
     return key
 
 
-def create_empty_prefixes(args):
-    # Create empty prefixes to warm up S3 for higher concurrent throughput.
-    prefixes = list(set([_get_part_key(i) for i in range(args.num_mappers)]))
-    logging.info(f"Creating {len(prefixes)} prefixes")
+def save_partition_mpu(part_id, dataloader, kind="output"):
+    key = _get_part_key(part_id, kind=kind)
+    s3_utils.multipart_upload(dataloader, key)
+    return key
+
+
+def touch_prefixes(args):
+    # Touch directory prefixes to warm up S3 for higher concurrent throughput.
+    prefixes = set()
+    for i in range(args.num_mappers):
+        prefixes.add(_get_part_key(i, kind="input", prefix_only=True))
+        prefixes.add(_get_part_key(i, kind="temp", prefix_only=True))
+    for i in range(args.num_reducers):
+        prefixes.add(_get_part_key(i, kind="output", prefix_only=True))
+    prefixes = list(prefixes)
+    logging.info(f"Touching {len(prefixes)} prefixes")
     return asyncio.run(s3_utils.touch_prefixes(prefixes))
 
 

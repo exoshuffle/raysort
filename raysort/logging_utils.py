@@ -25,12 +25,17 @@ def wandb_init(args):
     logging.info(f"Cluster config %s", wandb.config)
 
 
+def wandb_log(args):
+    logging.info(f"Logging metric: {args}")
+    wandb.log(args)
+
+
 def log_benchmark_result(args, exec_time):
     total_size = args.num_records * constants.RECORD_SIZE / 10 ** 9
     logging.info(
         f"Sorting {args.num_records:,} records ({total_size} GiB) took {exec_time:.3f} seconds."
     )
-    wandb.log(
+    wandb_log(
         {
             "num_records": args.num_records,
             "data_size": args.num_records * constants.RECORD_SIZE / 10 ** 9,
