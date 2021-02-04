@@ -148,8 +148,8 @@ def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.5
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.5
+    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.25
+    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.25
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)

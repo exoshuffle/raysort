@@ -141,7 +141,6 @@ struct SortDataComparator {
 
 class Merger::Impl {
    public:
-    // TODO: need to make sure to avoid copying
     Impl(const std::vector<ConstArray<Record>>& parts) : parts_(parts) {
         for (size_t i = 0; i < parts_.size(); ++i) {
             if (parts_[i].size > 0) {
