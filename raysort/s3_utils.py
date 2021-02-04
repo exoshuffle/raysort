@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import io
 import logging
 import os
@@ -112,12 +113,19 @@ def multipart_upload(
     mpuid = mpu["UploadId"]
     parts = []
     logging.info(f"Created multipart upload for {object_key}")
-    for part_id, datachunk in enumerate(dataloader, start=1):
-        # TODO: do this on a thread to avoid blocking
-        # TODO: fault-tolerance of SlowDown errors
+
+    def wait_and_process(task):
+        """Wait for the upload task and add it to the result set."""
+        nonlocal parts
+        if task is None:
+            return
+        etag, part_id = task.result()
+        parts.append({"ETag": etag, "PartNumber": part_id})
+
+    def upload(datachunk, part_id):
         nbytes = datachunk.getbuffer().nbytes
         logging.info(f"R-{reducer_id} uploading part {part_id} (size={nbytes})")
-        up = s3.upload_part(
+        resp = s3.upload_part(
             Body=datachunk,
             Bucket=bucket,
             Key=object_key,
@@ -125,8 +133,17 @@ def multipart_upload(
             PartNumber=part_id,
             ContentLength=nbytes,
         )
-        etag = up["ETag"]
-        parts.append({"ETag": etag, "PartNumber": part_id})
+        # TODO: tolerate SlowDown errors
+        return resp["ETag"], part_id
+
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=constants.S3_UPLOAD_MAX_CONCURRENCY
+    ) as executor:
+        upload_task = None
+        for part_id, datachunk in enumerate(dataloader, start=1):
+            wait_and_process(upload_task)
+            upload_task = executor.submit(upload, datachunk, part_id)
+        wait_and_process(upload_task)
     s3.complete_multipart_upload(
         Bucket=bucket, Key=object_key, UploadId=mpuid, MultipartUpload={"Parts": parts}
     )
