@@ -175,7 +175,10 @@ def export_timeline():
     filename = f"/tmp/timeline-{timestr}.json"
     ray.timeline(filename=filename)
     logging.info(f"Exported timeline to {filename}")
-    wandb.save(filename)
+    try:
+        wandb.save(filename)
+    except wandb.Error:
+        pass
 
 
 def print_memory():
