@@ -26,6 +26,12 @@ flags.DEFINE_string(
     "worker instance type",
     short_name="w",
 )
+flags.DEFINE_string(
+    "head_type",
+    "r5.xlarge",
+    "head instance type",
+    short_name="h",
+)
 flags.DEFINE_integer(
     "object_store_memory",
     100 * 1024 * 1024,
@@ -56,6 +62,7 @@ def write_cluster_config():
     template = string.Template(template)
     conf = template.substitute(
         {
+            "HEAD_TYPE": FLAGS.head_type,
             "MIN_WORKERS": FLAGS.num_workers if FLAGS.preallocate else 0,
             "MAX_WORKERS": FLAGS.num_workers,
             "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,

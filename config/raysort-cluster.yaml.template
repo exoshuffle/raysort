@@ -1,4 +1,4 @@
-### Variables: $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $RUN_ID, $WORKER_TYPE
+### Variables: $HEAD_TYPE, $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $RUN_ID, $WORKER_TYPE
 
 cluster_name: raysort-cluster
 min_workers: $MIN_WORKERS
@@ -25,7 +25,7 @@ auth:
 
 # Provider-specific config for the head node.
 head_node:
-    InstanceType: $WORKER_TYPE
+    InstanceType: $HEAD_TYPE
     ImageId: ami-06515aeefbba7d475
 
 # Provider-specific config for worker nodes.
@@ -67,6 +67,7 @@ available_node_types:
 file_mounts: {
 #    "/path1/on/remote/machine": "/path1/on/local/machine",
     "/home/ubuntu/.aws/credentials": "/home/ubuntu/.aws/credentials",
+    "/home/ubuntu/.netrc": "/home/ubuntu/.netrc",
     "/tmp/raysort": "/home/ubuntu/raysort",
 }
 
@@ -116,7 +117,7 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --object-store-memory=$OBJECT_STORE_MEMORY
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
