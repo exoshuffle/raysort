@@ -1,8 +1,8 @@
-### Variables: 128, 128, 104857600, 2021-02-01T21:37:39.888681, m5.xlarge
+### Variables: r5.xlarge, 4, 4, 104857600, 8090, 8091, 2021-02-04T23:07:21.042744, m5.xlarge
 
 cluster_name: raysort-cluster
-min_workers: 128
-max_workers: 128
+min_workers: 4
+max_workers: 4
 
 # The autoscaler will scale up the cluster faster with higher upscaling speed.
 # E.g., if the task requires adding more nodes then autoscaler will gradually
@@ -25,7 +25,7 @@ auth:
 
 # Provider-specific config for the head node.
 head_node:
-    InstanceType: m5.xlarge
+    InstanceType: r5.xlarge
     ImageId: ami-06515aeefbba7d475
 
 # Provider-specific config for worker nodes.
@@ -40,7 +40,7 @@ worker_nodes:
           - Key: Project
             Value: raysort
           - Key: RunId
-            Value: "2021-02-01T21:37:39.888681"
+            Value: "2021-02-04T23:07:21.042744"
 
 # Specify the node type of the head node (as configured above).
 head_node_type: head
@@ -54,19 +54,20 @@ worker_default_node_type: worker
 available_node_types:
     head:
         node_config: {}
-        resources: {"head": 1000}
+        resources: {"head": 1}
 
     worker:
         node_config: {}
         resources: {"worker:m5.xlarge": 1, "worker": 1}
-        min_workers: 128
-        max_workers: 128
+        min_workers: 4
+        max_workers: 4
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
 file_mounts: {
 #    "/path1/on/remote/machine": "/path1/on/local/machine",
     "/home/ubuntu/.aws/credentials": "/home/ubuntu/.aws/credentials",
+    "/home/ubuntu/.netrc": "/home/ubuntu/.netrc",
     "/tmp/raysort": "/home/ubuntu/raysort",
 }
 
@@ -116,9 +117,13 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --object-store-memory=104857600
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --metrics-export-port=8090 --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
+    - touch /tmp/ray/prom_metrics_sd_node_exporters.json
+    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:8091 &
+    - /tmp/raysort/bin/prometheus/prometheus --config.file=/tmp/raysort/config/prometheus.yml &
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --object-store-memory=104857600
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --metrics-export-port=8090 --object-store-memory=104857600
+    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:8091 &

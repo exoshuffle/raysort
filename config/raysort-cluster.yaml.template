@@ -1,4 +1,4 @@
-### Variables: $HEAD_TYPE, $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $RUN_ID, $WORKER_TYPE
+### Variables: $HEAD_TYPE, $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $PROM_RAY_EXPORTER_PORT, $PROM_NODE_EXPORTER_PORT, $RUN_ID, $WORKER_TYPE
 
 cluster_name: raysort-cluster
 min_workers: $MIN_WORKERS
@@ -54,7 +54,7 @@ worker_default_node_type: worker
 available_node_types:
     head:
         node_config: {}
-        resources: {"head": 1000}
+        resources: {"head": 1}
 
     worker:
         node_config: {}
@@ -117,9 +117,13 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --metrics-export-port=$PROM_RAY_EXPORTER_PORT --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
+    - touch /tmp/ray/prom_metrics_sd_node_exporters.json
+    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:$PROM_NODE_EXPORTER_PORT &
+    - /tmp/raysort/bin/prometheus/prometheus --config.file=/tmp/raysort/config/prometheus.yml &
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --address=$$RAY_HEAD_IP:6379 --object-manager-port=8076 --object-store-memory=$OBJECT_STORE_MEMORY
+    - ulimit -n 65536; ray start --address=$$RAY_HEAD_IP:6379 --object-manager-port=8076 --metrics-export-port=$PROM_RAY_EXPORTER_PORT --object-store-memory=$OBJECT_STORE_MEMORY
+    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:$PROM_NODE_EXPORTER_PORT &

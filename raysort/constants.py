@@ -6,10 +6,15 @@ __DIR__ = os.path.dirname(os.path.abspath(__file__))
 RECORD_SIZE = 100  # bytes
 
 # Executable locations
-GENSORT_PATH = os.path.join(__DIR__, "../gensort/64/gensort")
-VALSORT_PATH = os.path.join(__DIR__, "../gensort/64/valsort")
+GENSORT_PATH = os.path.join(__DIR__, "../bin/gensort/64/gensort")
+VALSORT_PATH = os.path.join(__DIR__, "../bin/gensort/64/valsort")
 DATA_DIR = {"input": "/var/tmp/raysort/input/", "output": "/var/tmp/raysort/output/"}
 FILENAME_FMT = {"input": "input-{part_id:08}", "output": "output-{part_id:08}"}
+
+# Prometheus config
+PROM_NODE_EXPORTER_SD_FILE_PATH = "/tmp/ray/prom_node_exporters.json"
+PROM_RAY_EXPORTER_PORT = 8090
+PROM_NODE_EXPORTER_PORT = 8091
 
 # AWS S3 config
 S3_REGION = "us-west-2"

@@ -7,6 +7,8 @@ from absl import flags
 from absl import logging
 import ray
 
+from raysort import constants
+
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -66,6 +68,8 @@ def write_cluster_config():
             "MIN_WORKERS": FLAGS.num_workers if FLAGS.preallocate else 0,
             "MAX_WORKERS": FLAGS.num_workers,
             "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,
+            "PROM_NODE_EXPORTER_PORT": constants.PROM_NODE_EXPORTER_PORT,
+            "PROM_RAY_EXPORTER_PORT": constants.PROM_RAY_EXPORTER_PORT,
             "WORKER_TYPE": FLAGS.worker_type,
             "RUN_ID": get_run_id(),
         }

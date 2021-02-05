@@ -13,6 +13,7 @@ import wandb
 from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
+from raysort import prom_utils
 from raysort import ray_utils
 from raysort import sortlib
 from raysort.types import *
@@ -210,12 +211,15 @@ def main():
     else:
         ray.init()
 
-    file_utils.touch_prefixes(args)
+    if args.generate_input or args.sort:
+        file_utils.touch_prefixes(args)
+
     if args.generate_input:
         file_utils.generate_input(args)
 
     if args.sort:
         logging_utils.wandb_init(args)
+        prom_utils.update_service_discovery_file()
         start_time = time.time()
         sort_main(args)
         end_time = time.time()

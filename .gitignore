@@ -7,6 +7,6 @@ __pycache__
 build
 cython_debug
 
-gensort
+bin
 raysort/sortlib/src/test
 wandb
