@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 import ray
@@ -42,3 +43,14 @@ def log_benchmark_result(args, exec_time):
             "execution_time": exec_time,
         }
     )
+
+
+def export_timeline():
+    timestr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"/tmp/timeline-{timestr}.json"
+    ray.timeline(filename=filename)
+    logging.info(f"Exported timeline to {filename}")
+    try:
+        wandb.save(filename)
+    except wandb.Error:
+        pass

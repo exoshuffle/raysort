@@ -12,9 +12,10 @@ DATA_DIR = {"input": "/var/tmp/raysort/input/", "output": "/var/tmp/raysort/outp
 FILENAME_FMT = {"input": "input-{part_id:08}", "output": "output-{part_id:08}"}
 
 # Prometheus config
+PROM_HTTP_ENDPOINT = "http://localhost:9090/api/v1/"
 PROM_NODE_EXPORTER_SD_FILE_PATH = "/tmp/ray/prom_node_exporters.json"
-PROM_RAY_EXPORTER_PORT = 8090
 PROM_NODE_EXPORTER_PORT = 8091
+PROM_RAY_EXPORTER_PORT = 8090
 
 # AWS S3 config
 S3_REGION = "us-west-2"

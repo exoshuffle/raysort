@@ -1,6 +1,5 @@
 import argparse
 import collections
-import datetime
 import logging
 import os
 import subprocess
@@ -13,7 +12,7 @@ import wandb
 from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
-from raysort import prom_utils
+from raysort import monitoring_utils
 from raysort import ray_utils
 from raysort import sortlib
 from raysort.types import *
@@ -149,8 +148,8 @@ def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.25
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.25
+    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.5
+    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.5
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
@@ -169,17 +168,6 @@ def sort_main(args):
 
     progress_tracker(mapper_results, reducer_results)
     ray.get(reducer_results)
-
-
-def export_timeline():
-    timestr = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"/tmp/timeline-{timestr}.json"
-    ray.timeline(filename=filename)
-    logging.info(f"Exported timeline to {filename}")
-    try:
-        wandb.save(filename)
-    except wandb.Error:
-        pass
 
 
 def print_memory():
@@ -219,11 +207,9 @@ def main():
 
     if args.sort:
         logging_utils.wandb_init(args)
-        prom_utils.update_service_discovery_file()
-        start_time = time.time()
+        mon = monitoring_utils.MonitoringAgent(args)
         sort_main(args)
-        end_time = time.time()
-        logging_utils.log_benchmark_result(args, end_time - start_time)
+        mon.log_metrics(completed=True)
 
     if args.validate_output:
         file_utils.validate_output(args)
@@ -231,7 +217,7 @@ def main():
     if args.cleanup:
         file_utils.cleanup(args)
 
-    export_timeline()
+    logging_utils.export_timeline()
 
 
 if __name__ == "__main__":
