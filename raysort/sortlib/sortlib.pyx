@@ -43,7 +43,7 @@ cdef Array[Record] _to_record_array(buf):
     cdef Array[Record] ret
     cdef uint8_t[:] mv = buf
     ret.ptr = <Record *>&mv[0]
-    ret.size = int(buf.nbytes / RECORD_SIZE)
+    ret.size = int(len(buf) / RECORD_SIZE)
     return ret
 
 
@@ -51,7 +51,7 @@ cdef ConstArray[Record] _to_const_record_array(buf):
     cdef ConstArray[Record] ret
     cdef const uint8_t[:] mv = buf
     ret.ptr = <const Record*>&mv[0]
-    ret.size = int(buf.nbytes / RECORD_SIZE)
+    ret.size = int(len(buf) / RECORD_SIZE)
     return ret
 
 
@@ -63,13 +63,15 @@ def sort_and_partition(part, boundaries):
 
 def merge_partitions(chunks, batch_num_records):
     """
-    Returns: sortlib.Merger class
+    An iterator that returns merged chunks for upload.
     """
     cdef vector[ConstArray[Record]] record_arrays
     record_arrays.reserve(len(chunks))
     total_records = 0
     for chunk in chunks:
-        ra = _to_const_record_array(chunk.getbuffer())
+        if isinstance(chunk, io.BytesIO):
+            chunk = chunk.getbuffer()
+        ra = _to_const_record_array(chunk)
         record_arrays.push_back(ra)
         total_records += ra.size
 

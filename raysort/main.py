@@ -49,12 +49,15 @@ def get_args():
         type=int,
         help="size of multipart upload chunks for reducer",
     )
-    # Cluster config
-    cluster_config_group = parser.add_argument_group()
-    cluster_config_group.add_argument(
-        "--cluster",
+    parser.add_argument(
+        "--use_s3_io",
         action="store_true",
-        help="try connecting to an existing Ray cluster",
+        help="save input and output data to S3",
+    )
+    parser.add_argument(
+        "--use_ray_shuffle",
+        action="store_true",
+        help="shuffle by saving partitions to the Ray memory store, instead of saving to S3",
     )
     # Which tasks to run?
     tasks_group = parser.add_argument_group(
@@ -84,17 +87,22 @@ def mapper(args, mapper_id, boundaries):
     with ray.profiling.profile(f"M-{mapper_id}"):
         logging_utils.init()
         logging.info(f"M-{mapper_id} starting")
-        part = file_utils.load_partition(mapper_id)
+        part = file_utils.load_partition(mapper_id, use_s3=args.use_s3_io)
         logging.info(f"M-{mapper_id} downloaded partition")
         chunks = sortlib.sort_and_partition(part, boundaries)
         logging.info(f"M-{mapper_id} sorted partition")
-        file_utils.save_partition(mapper_id, part)
-        ret = [ChunkInfo(mapper_id, offset, size) for offset, size in chunks]
-        logging.info(
-            f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-            ret[: constants.LOGGING_ITEMS_LIMIT],
-        )
-        return ret
+        if args.use_ray_shuffle:
+            # return bytes
+            buf = part.getbuffer()
+            return [buf[offset : offset + size] for offset, size in chunks]
+        else:
+            file_utils.save_partition(mapper_id, part)
+            ret = [ChunkInfo(mapper_id, offset, size) for offset, size in chunks]
+            logging.info(
+                f"M-{mapper_id} uploaded sorted partition; output chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+                ret[: constants.LOGGING_ITEMS_LIMIT],
+            )
+            return ret
 
 
 # By using varargs, Ray will schedule the reducer when its arguments are ready.
@@ -105,20 +113,18 @@ def reducer(args, reducer_id, *chunks):
     with ray.profiling.profile(f"R-{reducer_id}"):
         logging_utils.init()
         logging.info(f"R-{reducer_id} starting")
+        if not args.use_ray_shuffle:
+            logging.info(
+                f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+                chunks[: constants.LOGGING_ITEMS_LIMIT],
+            )
+            chunks = file_utils.load_chunks(chunks)
         logging.info(
             f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-            chunks[: constants.LOGGING_ITEMS_LIMIT],
-        )
-        chunks = file_utils.load_chunks(chunks)
-        logging.info(
-            f"R-{reducer_id} downloaded chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-            [c.getbuffer().nbytes for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
+            [len(c) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
         )
         merger = sortlib.merge_partitions(chunks, args.reducer_batch_size)
-        file_utils.save_partition_mpu(
-            reducer_id,
-            merger,
-        )
+        file_utils.save_partition_mpu(reducer_id, merger, use_s3=args.use_s3_io)
         logging.info(f"R-{reducer_id} uploaded partition")
 
 
@@ -192,12 +198,9 @@ def print_memory():
 def main():
     logging_utils.init()
     args = get_args()
+    logging.info(args)
 
-    if args.cluster:
-        ray.init(address="auto")
-        # ray_utils.request_resources(args)
-    else:
-        ray.init()
+    ray.init(address="auto")
 
     if args.generate_input or args.sort:
         file_utils.touch_prefixes(args)

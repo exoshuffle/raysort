@@ -43,7 +43,7 @@ EC2_HOURLY_PRICING = {
 
 # Logging config
 # Maximum number of items to print in an array
-LOGGING_ITEMS_LIMIT = 3
+LOGGING_ITEMS_LIMIT = 10
 
 # W&B logging config
 WANDB_PROJECT = "raysort"

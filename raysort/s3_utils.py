@@ -123,15 +123,15 @@ def multipart_upload(
         parts.append({"ETag": etag, "PartNumber": part_id})
 
     def upload(datachunk, part_id):
-        nbytes = datachunk.getbuffer().nbytes
-        logging.info(f"R-{reducer_id} uploading part {part_id} (size={nbytes})")
+        length = len(datachunk.getbuffer())
+        logging.info(f"R-{reducer_id} uploading part {part_id} (size={length})")
         resp = s3.upload_part(
             Body=datachunk,
             Bucket=bucket,
             Key=object_key,
             UploadId=mpuid,
             PartNumber=part_id,
-            ContentLength=nbytes,
+            ContentLength=length,
         )
         # TODO: tolerate SlowDown errors
         return resp["ETag"], part_id
@@ -147,4 +147,16 @@ def multipart_upload(
     s3.complete_multipart_upload(
         Bucket=bucket, Key=object_key, UploadId=mpuid, MultipartUpload={"Parts": parts}
     )
+    logging.info(f"R-{reducer_id} uploading complete")
     return parts
+
+
+def multipart_write(dataloader, filepath, reducer_id):
+    """Same interface as multipart_upload but write to local filesystem."""
+
+    with open(filepath, "wb") as fout:
+        for part_id, datachunk in enumerate(dataloader, start=1):
+            buf = datachunk.getbuffer()
+            logging.info(f"R-{reducer_id} writing part {part_id} (size={len(buf)})")
+            fout.write(buf)
+    logging.info(f"R-{reducer_id} writing complete")

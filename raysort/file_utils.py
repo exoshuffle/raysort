@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import math
 import os
@@ -36,7 +37,7 @@ def _get_part_key(part_id, kind="input", prefix_only=False):
 
 
 @ray.remote
-def generate_part(part_id, size, offset):
+def generate_part(part_id, size, offset, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id)
@@ -46,9 +47,10 @@ def generate_part(part_id, size, offset):
     )
     logging.info(f"Generated input {filepath} containing {size:,} records")
     key = _get_part_key(part_id)
-    s3_utils.upload(filepath, key)
-    os.remove(filepath)
-    logging.info(f"Uploaded {filepath}")
+    if use_s3:
+        s3_utils.upload(filepath, key)
+        os.remove(filepath)
+        logging.info(f"Uploaded {filepath}")
 
 
 def generate_input(args):
@@ -58,11 +60,21 @@ def generate_input(args):
     tasks = []
     memory = size * constants.RECORD_SIZE
     for part_id in range(M - 1):
-        tasks.append(generate_part.options(memory=memory).remote(part_id, size, offset))
+        tasks.append(
+            generate_part.options(memory=memory).remote(
+                part_id,
+                size,
+                offset,
+                use_s3=args.use_s3_io,
+            )
+        )
         offset += size
     tasks.append(
         generate_part.options(memory=memory).remote(
-            M - 1, args.num_records - offset, offset
+            M - 1,
+            args.num_records - offset,
+            offset,
+            use_s3=args.use_s3_io,
         )
     )
     logging.info(f"Generating {len(tasks)} partitions")
@@ -70,12 +82,13 @@ def generate_input(args):
 
 
 @ray.remote
-def validate_part(part_id):
+def validate_part(part_id, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
     filepath = _get_part_path(part_id, kind="output")
-    key = _get_part_key(part_id, kind="output")
-    s3_utils.download_file(key, filepath)
+    if use_s3:
+        key = _get_part_key(part_id, kind="output")
+        s3_utils.download_file(key, filepath)
     if os.path.getsize(filepath) == 0:
         logging.info(f"Validated output {filepath} (empty)")
         return
@@ -92,15 +105,23 @@ def validate_part(part_id):
 def validate_output(args):
     tasks = []
     for part_id in range(args.num_reducers):
-        tasks.append(validate_part.remote(part_id))
+        tasks.append(
+            validate_part.remote(
+                part_id,
+                use_s3=args.use_s3_io,
+            )
+        )
     logging.info(f"Validating {len(tasks)} partitions")
     ray.get(tasks)
 
 
-def load_partition(part_id, kind="input"):
-    key = _get_part_key(part_id, kind=kind)
-    ret = s3_utils.download(key)
-    return ret
+def load_partition(part_id, kind="input", use_s3=True):
+    if use_s3:
+        key = _get_part_key(part_id, kind=kind)
+        return s3_utils.download(key)
+    filepath = _get_part_path(part_id, kind)
+    with open(filepath, "rb") as fin:
+        return io.BytesIO(fin.read())
 
 
 def save_partition(part_id, data, kind="temp"):
@@ -109,10 +130,13 @@ def save_partition(part_id, data, kind="temp"):
     return key
 
 
-def save_partition_mpu(part_id, dataloader, kind="output"):
-    key = _get_part_key(part_id, kind=kind)
-    s3_utils.multipart_upload(dataloader, key, part_id)
-    return key
+def save_partition_mpu(part_id, dataloader, kind="output", use_s3=True):
+    if use_s3:
+        key = _get_part_key(part_id, kind=kind)
+        s3_utils.multipart_upload(dataloader, key, part_id)
+        return key
+    filepath = _get_part_path(part_id, kind="output")
+    s3_utils.multipart_write(dataloader, filepath, part_id)
 
 
 def touch_prefixes(args):

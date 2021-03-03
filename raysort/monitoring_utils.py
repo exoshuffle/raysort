@@ -75,14 +75,18 @@ class MonitoringAgent:
 
     def log_metrics(self, completed=False):
         end_time = time.time()
-        ret = self._make_wandb_plots(
-            {
-                "cpu_usage": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode='idle'}[2s]))",
-                "memory_usage": "1 - node_memory_MemFree_bytes / node_memory_MemTotal_bytes",
-                "network_in": "rate(node_network_receive_bytes_total[2s])",
-                "network_out": "rate(node_network_transmit_bytes_total[2s])",
-            }
-        )
-        wandb.log(ret)
+        try:
+            ret = self._make_wandb_plots(
+                {
+                    "cpu_usage": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode='idle'}[2s]))",
+                    "memory_usage": "1 - node_memory_MemFree_bytes / node_memory_MemTotal_bytes",
+                    "network_in": "rate(node_network_receive_bytes_total[2s])",
+                    "network_out": "rate(node_network_transmit_bytes_total[2s])",
+                }
+            )
+            wandb.log(ret)
+        except requests.exceptions.ConnectionError as e:
+            logging.warning(e)
+            logging.warning("Cannot query Prometheus, skipping performance plots")
         if completed:
             logging_utils.log_benchmark_result(self.args, end_time - self.start_time)
