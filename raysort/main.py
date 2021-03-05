@@ -119,10 +119,11 @@ def reducer(args, reducer_id, *chunks):
                 chunks[: constants.LOGGING_ITEMS_LIMIT],
             )
             chunks = file_utils.load_chunks(chunks)
-        logging.info(
-            f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-            [len(c) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
-        )
+        else:
+            logging.info(
+                f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+                [len(c) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
+            )
         merger = sortlib.merge_partitions(chunks, args.reducer_batch_size)
         file_utils.save_partition_mpu(reducer_id, merger, use_s3=args.use_s3_io)
         logging.info(f"R-{reducer_id} uploaded partition")

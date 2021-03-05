@@ -97,7 +97,7 @@ def delete_objects_with_prefix(
     s3 = boto3.resource("s3", region_name=region)
     bucket = s3.Bucket(bucket)
     for prefix in prefixes:
-        logging.info(f"Deleting {prefix}/*")
+        logging.info(f"Deleting {os.path.join(prefix, '*')}")
         bucket.objects.filter(Prefix=prefix).delete()
 
 
