@@ -2,6 +2,7 @@ absl-py
 aiobotocore
 boto3
 Cython
+intervaltree
 ipython
 memory_profiler
 numpy
