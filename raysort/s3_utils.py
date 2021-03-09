@@ -6,6 +6,7 @@ import os
 
 import aiobotocore
 import boto3
+import ray
 
 from raysort import constants
 
@@ -67,13 +68,30 @@ def download_file(
 
 
 async def download_chunks(
-    chunks, region=constants.S3_REGION, bucket=constants.S3_BUCKET
+    reducer_id,
+    chunks,
+    get_chunk_info,
+    region=constants.S3_REGION,
+    bucket=constants.S3_BUCKET,
 ):
+    """
+    Asynchronously download all chunks.
+    - chunks: a list of Ray futures of ChunkInfo.
+    - Returns: a list of chunk data.
+    """
     session = aiobotocore.get_session()
     async with session.create_client("s3", region_name=region) as s3:
-        return await asyncio.gather(
-            *[download_chunk(s3, chunk, bucket) for chunk in chunks if chunk.size > 0]
-        )
+        rest = chunks
+        download_tasks = []
+        while len(rest) > 0:
+            ready, rest = ray.wait(rest)
+            chunk = ray.get(ready[0])
+            chunk_info = get_chunk_info(*chunk)
+            if chunk.size > 0:
+                task = asyncio.create_task(download_chunk(s3, chunk_info, bucket))
+                download_tasks.append(task)
+                logging.info(f"R-{reducer_id} downloading {chunk}")
+        return await asyncio.gather(*download_tasks)
 
 
 async def download_chunk(s3, chunk, bucket):

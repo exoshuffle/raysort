@@ -152,12 +152,12 @@ def touch_prefixes(args):
     return asyncio.run(s3_utils.touch_prefixes(prefixes))
 
 
-def load_chunks(chunks, kind="temp"):
-    chunks = [
-        ChunkInfo(_get_part_key(part_id, kind=kind), offset, size)
-        for part_id, offset, size in chunks
-    ]
-    return asyncio.run(s3_utils.download_chunks(chunks))
+def get_chunk_info(part_id, offset, size, kind="temp"):
+    return ChunkInfo(_get_part_key(part_id, kind=kind), offset, size)
+
+
+def load_chunks(reducer_id, chunks):
+    return asyncio.run(s3_utils.download_chunks(reducer_id, chunks, get_chunk_info))
 
 
 def cleanup(args):

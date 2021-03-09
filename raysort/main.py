@@ -3,17 +3,14 @@ import collections
 import logging
 import os
 import subprocess
-import time
 
 import numpy as np
 import ray
-import wandb
 
 from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
 from raysort import monitoring_utils
-from raysort import ray_utils
 from raysort import sortlib
 from raysort.types import *
 
@@ -22,8 +19,8 @@ GB_RECORDS = 1000 * 1000 * 10  # 1 GiB worth of records.
 
 def get_args():
     parser = argparse.ArgumentParser()
-    # Benchmark config
 
+    # Benchmark config
     parser.add_argument(
         "-m",
         "--num_mappers",
@@ -48,6 +45,11 @@ def get_args():
         default=int(0.1 * GB_RECORDS),
         type=int,
         help="size of multipart upload chunks for reducer",
+    )
+    parser.add_argument(
+        "--reducer_pipelining",
+        action="store_true",
+        help="start downloading partitions as soon as they are ready in reducers",
     )
     parser.add_argument(
         "--use_s3_io",
@@ -96,6 +98,7 @@ def mapper(args, mapper_id, boundaries):
             buf = part.getbuffer()
             return [buf[offset : offset + size] for offset, size in chunks]
         else:
+            # upload bytes and return ChunkInfo's
             file_utils.save_partition(mapper_id, part)
             ret = [ChunkInfo(mapper_id, offset, size) for offset, size in chunks]
             logging.info(
@@ -105,25 +108,21 @@ def mapper(args, mapper_id, boundaries):
             return ret
 
 
-# By using varargs, Ray will schedule the reducer when its arguments are ready.
 @ray.remote
-def reducer(args, reducer_id, *chunks):
-    if len(chunks) == 1:
-        chunks = chunks[0]
+def reducer(args, reducer_id, chunks):
     with ray.profiling.profile(f"R-{reducer_id}"):
         logging_utils.init()
         logging.info(f"R-{reducer_id} starting")
         if not args.use_ray_shuffle:
-            logging.info(
-                f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-                chunks[: constants.LOGGING_ITEMS_LIMIT],
-            )
-            chunks = file_utils.load_chunks(chunks)
+            if not args.reducer_pipelining:
+                ray.wait(chunks, num_returns=len(chunks))
+            chunks = file_utils.load_chunks(reducer_id, chunks)
         else:
-            logging.info(
-                f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-                [len(c) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
-            )
+            chunks = ray.get(chunks)
+        logging.info(
+            f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
+            [len(c.getbuffer()) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
+        )
         merger = sortlib.merge_partitions(chunks, args.reducer_batch_size)
         file_utils.save_partition_mpu(reducer_id, merger, use_s3=args.use_s3_io)
         logging.info(f"R-{reducer_id} uploaded partition")
@@ -169,8 +168,8 @@ def sort_main(args):
 
     reducer_results = []
     for r in range(R):
-        parts = mapper_results[:, r].tolist()
-        ret = reducer.options(memory=reducer_mem).remote(args, r, *parts)
+        chunks = mapper_results[:, r].tolist()
+        ret = reducer.options(memory=reducer_mem).remote(args, r, chunks)
         reducer_results.append(ret)
 
     progress_tracker(mapper_results, reducer_results)
