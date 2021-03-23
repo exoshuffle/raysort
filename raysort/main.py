@@ -211,7 +211,7 @@ def main():
 
     ray.init(address="auto")
 
-    if args.generate_input or args.sort:
+    if args.use_s3_input and (args.generate_input or args.sort):
         file_utils.touch_prefixes(args)
 
     if args.generate_input:
@@ -226,7 +226,7 @@ def main():
     if args.validate_output:
         file_utils.validate_output(args)
 
-    if args.cleanup:
+    if args.use_s3_input and args.cleanup:
         file_utils.cleanup(args)
 
     logging_utils.export_timeline()
