@@ -41,20 +41,26 @@ def get_args():
         help="total number of records = this * num_mappers",
     )
     parser.add_argument(
+        "--max_mappers_per_node",
+        default=3,
+        type=int,
+        help="max number of parallel mapping jobs on a single node",
+    )
+    parser.add_argument(
         "--reducer_batch_size",
         default=int(0.1 * GB_RECORDS),
         type=int,
         help="size of multipart upload chunks for reducer",
     )
     parser.add_argument(
-        "--reducer_pipelining",
+        "--use_s3_input",
         action="store_true",
-        help="start downloading partitions as soon as they are ready in reducers",
+        help="save input data to S3",
     )
     parser.add_argument(
-        "--use_s3_io",
+        "--use_s3_output",
         action="store_true",
-        help="save input and output data to S3",
+        help="save output data to S3",
     )
     parser.add_argument(
         "--use_ray_shuffle",
@@ -89,7 +95,7 @@ def mapper(args, mapper_id, boundaries):
     with ray.profiling.profile(f"M-{mapper_id}"):
         logging_utils.init()
         logging.info(f"M-{mapper_id} starting")
-        part = file_utils.load_partition(mapper_id, use_s3=args.use_s3_io)
+        part = file_utils.load_partition(mapper_id, use_s3=args.use_s3_input)
         logging.info(f"M-{mapper_id} downloaded partition")
         chunks = sortlib.sort_and_partition(part, boundaries)
         logging.info(f"M-{mapper_id} sorted partition")
@@ -109,22 +115,26 @@ def mapper(args, mapper_id, boundaries):
 
 
 @ray.remote
-def reducer(args, reducer_id, chunks):
+def reducer(args, reducer_id, *chunks):
+    if len(chunks) == 1:
+        chunks = chunks[0]
     with ray.profiling.profile(f"R-{reducer_id}"):
         logging_utils.init()
         logging.info(f"R-{reducer_id} starting")
-        if not args.use_ray_shuffle:
-            if not args.reducer_pipelining:
-                ray.wait(chunks, num_returns=len(chunks))
-            chunks = file_utils.load_chunks(reducer_id, chunks)
+        lim = constants.LOGGING_ITEMS_LIMIT
+        if args.use_ray_shuffle:
+            logging.info(
+                f"R-{reducer_id} input chunks (first {lim}): %s",
+                [len(c) for c in chunks[:lim]],
+            )
         else:
-            chunks = ray.get(chunks)
-        logging.info(
-            f"R-{reducer_id} input chunks (first {constants.LOGGING_ITEMS_LIMIT}): %s",
-            [len(c.getbuffer()) for c in chunks[: constants.LOGGING_ITEMS_LIMIT]],
-        )
+            chunks = file_utils.load_chunks(reducer_id, chunks)
+            logging.info(
+                f"R-{reducer_id} input chunks (first {lim}): %s",
+                [len(c.getbuffer()) for c in chunks[:lim]],
+            )
         merger = sortlib.merge_partitions(chunks, args.reducer_batch_size)
-        file_utils.save_partition_mpu(reducer_id, merger, use_s3=args.use_s3_io)
+        file_utils.save_partition_mpu(reducer_id, merger, use_s3=args.use_s3_output)
         logging.info(f"R-{reducer_id} uploaded partition")
 
 
@@ -154,22 +164,21 @@ def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    mapper_mem = args.num_records * constants.RECORD_SIZE / M * 1.5
-    reducer_mem = args.num_records * constants.RECORD_SIZE / R * 1.5
+    mapper_resource = int(100 / args.max_mappers_per_node) / 100
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
     for m in range(M):
-        mapper_results[m, :] = mapper.options(num_returns=R, memory=mapper_mem).remote(
-            args, m, boundaries
-        )
+        mapper_results[m, :] = mapper.options(
+            num_returns=R, resources={"worker": mapper_resource}
+        ).remote(args, m, boundaries)
 
     logging.info(f"Futures: {mapper_results.shape}\n{mapper_results}")
 
     reducer_results = []
     for r in range(R):
         chunks = mapper_results[:, r].tolist()
-        ret = reducer.options(memory=reducer_mem).remote(args, r, chunks)
+        ret = reducer.remote(args, r, *chunks)
         reducer_results.append(ret)
 
     progress_tracker(mapper_results, reducer_results)

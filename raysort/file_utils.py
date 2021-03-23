@@ -65,7 +65,7 @@ def generate_input(args):
                 part_id,
                 size,
                 offset,
-                use_s3=args.use_s3_io,
+                use_s3=args.use_s3_input,
             )
         )
         offset += size
@@ -74,7 +74,7 @@ def generate_input(args):
             M - 1,
             args.num_records - offset,
             offset,
-            use_s3=args.use_s3_io,
+            use_s3=args.use_s3_input,
         )
     )
     logging.info(f"Generating {len(tasks)} partitions")
@@ -108,7 +108,7 @@ def validate_output(args):
         tasks.append(
             validate_part.remote(
                 part_id,
-                use_s3=args.use_s3_io,
+                use_s3=args.use_s3_output,
             )
         )
     logging.info(f"Validating {len(tasks)} partitions")

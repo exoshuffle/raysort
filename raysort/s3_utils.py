@@ -9,6 +9,14 @@ import boto3
 import ray
 
 from raysort import constants
+from raysort.types import *
+
+
+def get_s3_config(region=constants.S3_REGION):
+    return aiobotocore.config.AioConfig(
+        region_name=region,
+        max_pool_connections=constants.S3_MAX_POOL_CONNECTIONS,
+    )
 
 
 def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
@@ -20,7 +28,7 @@ def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUC
         except IOError:
             logging.error(f"Expected filename or binary stream: {data}")
 
-    s3 = boto3.client("s3", region_name=region)
+    s3 = boto3.client("s3", config=get_s3_config(region))
     config = boto3.s3.transfer.TransferConfig(
         max_concurrency=constants.S3_UPLOAD_MAX_CONCURRENCY
     )
@@ -32,7 +40,7 @@ async def touch_prefixes(
 ):
     session = aiobotocore.get_session()
     filename = "__init__"
-    async with session.create_client("s3", region_name=region) as s3:
+    async with session.create_client("s3", config=get_s3_config(region)) as s3:
         return await asyncio.gather(
             *[
                 s3.put_object(
@@ -49,7 +57,7 @@ def download(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET)
     """
     Returns: io.BytesIO stream.
     """
-    s3 = boto3.client("s3", region_name=region)
+    s3 = boto3.client("s3", config=get_s3_config(region))
     ret = io.BytesIO()
     s3.download_fileobj(bucket, object_key, ret)
     ret.seek(0)
@@ -62,7 +70,7 @@ def download_file(
     """
     Returns: io.BytesIO stream.
     """
-    s3 = boto3.client("s3", region_name=region)
+    s3 = boto3.client("s3", config=get_s3_config(region))
     s3.download_file(bucket, object_key, filepath)
     return filepath
 
@@ -79,18 +87,27 @@ async def download_chunks(
     - chunks: a list of Ray futures of ChunkInfo.
     - Returns: a list of chunk data.
     """
+    if len(chunks) == 0:
+        return []
+    wait_for_futures = not isinstance(chunks[0], tuple)
     session = aiobotocore.get_session()
-    async with session.create_client("s3", region_name=region) as s3:
-        rest = chunks
-        download_tasks = []
-        while len(rest) > 0:
-            ready, rest = ray.wait(rest)
-            chunk = ray.get(ready[0])
-            chunk_info = get_chunk_info(*chunk)
-            if chunk.size > 0:
-                task = asyncio.create_task(download_chunk(s3, chunk_info, bucket))
-                download_tasks.append(task)
-                logging.info(f"R-{reducer_id} downloading {chunk}")
+    async with session.create_client("s3", config=get_s3_config(region)) as s3:
+        if wait_for_futures:
+            download_tasks = []
+            rest = chunks
+            while len(rest) > 0:
+                ready, rest = ray.wait(rest)
+                chunk = ray.get(ready[0])
+                chunk_info = get_chunk_info(*chunk)
+                if chunk.size > 0:
+                    task = asyncio.create_task(download_chunk(s3, chunk_info, bucket))
+                    download_tasks.append(task)
+                    logging.info(f"R-{reducer_id} downloading {chunk}")
+        else:
+            download_tasks = [
+                asyncio.create_task(download_chunk(s3, get_chunk_info(*chunk), bucket))
+                for chunk in chunks
+            ]
         return await asyncio.gather(*download_tasks)
 
 
@@ -112,7 +129,7 @@ async def download_chunk(s3, chunk, bucket):
 def delete_objects_with_prefix(
     prefixes, region=constants.S3_REGION, bucket=constants.S3_BUCKET
 ):
-    s3 = boto3.resource("s3", region_name=region)
+    s3 = boto3.resource("s3", config=get_s3_config(region))
     bucket = s3.Bucket(bucket)
     for prefix in prefixes:
         logging.info(f"Deleting {os.path.join(prefix, '*')}")
@@ -126,7 +143,7 @@ def multipart_upload(
     region=constants.S3_REGION,
     bucket=constants.S3_BUCKET,
 ):
-    s3 = boto3.client("s3", region_name=region)
+    s3 = boto3.client("s3", config=get_s3_config(region))
     mpu = s3.create_multipart_upload(Bucket=bucket, Key=object_key)
     mpuid = mpu["UploadId"]
     parts = []

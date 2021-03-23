@@ -22,10 +22,11 @@ S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
 S3_NUM_SHARDS = 1000
 S3_UPLOAD_MAX_CONCURRENCY = 1
+S3_MAX_POOL_CONNECTIONS = 64
 OBJECT_KEY_FMT = {
-    "input": "input/shard-{shard_id:04}/input-{part_id:08}",
-    "output": "output/shard-{shard_id:04}/output-{part_id:08}",
-    "temp": "temp/shard-{shard_id:04}/temp-{part_id:08}",
+    "input": "input/{shard_id:04}/input-{part_id:08}",
+    "output": "output/{shard_id:04}/output-{part_id:08}",
+    "temp": "temp/{shard_id:04}/temp-{part_id:08}",
 }
 
 # AWS EC2 constants

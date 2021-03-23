@@ -24,7 +24,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string(
     "worker_type",
-    "m5.xlarge",
+    "m5n.xlarge",
     "worker instance type",
     short_name="w",
 )
