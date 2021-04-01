@@ -24,7 +24,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string(
     "worker_type",
-    "m5n.xlarge",
+    "m5.xlarge",
     "worker instance type",
     short_name="w",
 )
@@ -33,6 +33,11 @@ flags.DEFINE_string(
     "r5.xlarge",
     "head instance type",
     short_name="h",
+)
+flags.DEFINE_integer(
+    "worker_ebs_disk_size",
+    256,
+    "worker disk size (EBS)",
 )
 flags.DEFINE_integer(
     "object_store_memory",
@@ -70,7 +75,9 @@ def write_cluster_config():
             "OBJECT_STORE_MEMORY": FLAGS.object_store_memory,
             "PROM_NODE_EXPORTER_PORT": constants.PROM_NODE_EXPORTER_PORT,
             "PROM_RAY_EXPORTER_PORT": constants.PROM_RAY_EXPORTER_PORT,
+            "REDIS_PORT": constants.APPLICATION_REDIS_PORT,
             "WORKER_TYPE": FLAGS.worker_type,
+            "WORKER_EBS_DISK_SIZE": FLAGS.worker_ebs_disk_size,
             "RUN_ID": get_run_id(),
         }
     )

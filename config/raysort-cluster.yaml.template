@@ -1,4 +1,4 @@
-### Variables: $HEAD_TYPE, $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $PROM_RAY_EXPORTER_PORT, $PROM_NODE_EXPORTER_PORT, $RUN_ID, $WORKER_TYPE
+### Variables: $HEAD_TYPE, $MIN_WORKERS, $MAX_WORKERS, $OBJECT_STORE_MEMORY, $PROM_RAY_EXPORTER_PORT, $PROM_NODE_EXPORTER_PORT, $REDIS_PORT, $RUN_ID, $WORKER_TYPE, $WORKER_EBS_DISK_SIZE
 
 cluster_name: raysort-cluster
 min_workers: $MIN_WORKERS
@@ -34,6 +34,10 @@ head_node:
 worker_nodes:
     InstanceType: $WORKER_TYPE
     ImageId: ami-06515aeefbba7d475
+    BlockDeviceMappings:
+      - DeviceName: /dev/sda1
+        Ebs:
+            VolumeSize: $WORKER_EBS_DISK_SIZE
     InstanceMarketOptions:
         MarketType: spot
     TagSpecifications:
@@ -120,9 +124,9 @@ worker_setup_commands: []
 head_start_ray_commands:
     - ray stop
     - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --metrics-export-port=$PROM_RAY_EXPORTER_PORT --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
-    - touch /tmp/ray/prom_metrics_sd_node_exporters.json
     - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:$PROM_NODE_EXPORTER_PORT &
     - /tmp/raysort/bin/prometheus/prometheus --config.file=/tmp/raysort/config/prometheus.yml &
+    - redis-server --port $REDIS_PORT --protected-mode no --save '' &
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:

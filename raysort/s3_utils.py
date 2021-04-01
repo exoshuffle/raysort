@@ -9,6 +9,7 @@ import boto3
 import ray
 
 from raysort import constants
+from raysort import monitoring_utils
 from raysort.types import *
 
 
@@ -30,7 +31,7 @@ def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUC
 
     s3 = boto3.client("s3", config=get_s3_config(region))
     config = boto3.s3.transfer.TransferConfig(
-        max_concurrency=constants.S3_UPLOAD_MAX_CONCURRENCY
+        max_concurrency=constants.S3_MAX_POOL_CONNECTIONS,
     )
     s3.upload_fileobj(data, bucket, object_key, Config=config)
 
@@ -115,14 +116,15 @@ async def download_chunk(s3, chunk, bucket):
     object_key, offset, size = chunk
     end = offset + size - 1
     range_str = f"bytes={offset}-{end}"
-    resp = await s3.get_object(
-        Bucket=bucket,
-        Key=object_key,
-        Range=range_str,
-    )
-    body = resp["Body"]
-    ret = io.BytesIO(await body.read())
-    ret.seek(0)
+    with monitoring_utils.timeit("shuffle_download", size):
+        resp = await s3.get_object(
+            Bucket=bucket,
+            Key=object_key,
+            Range=range_str,
+        )
+        body = resp["Body"]
+        ret = io.BytesIO(await body.read())
+        ret.seek(0)
     return ret
 
 

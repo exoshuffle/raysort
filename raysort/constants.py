@@ -13,16 +13,19 @@ FILENAME_FMT = {"input": "input-{part_id:08}", "output": "output-{part_id:08}"}
 
 # Prometheus config
 PROM_HTTP_ENDPOINT = "http://localhost:9090/api/v1/"
-PROM_NODE_EXPORTER_SD_FILE_PATH = "/tmp/ray/prom_node_exporters.json"
+PROM_NODE_EXPORTER_SD_FILE_PATH = "/tmp/ray/prom_metrics_node_exporters.json"
 PROM_NODE_EXPORTER_PORT = 8091
 PROM_RAY_EXPORTER_PORT = 8090
+
+# Redis data store config
+APPLICATION_REDIS_PORT = 7379
 
 # AWS S3 config
 S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
 S3_NUM_SHARDS = 1000
 S3_UPLOAD_MAX_CONCURRENCY = 1
-S3_MAX_POOL_CONNECTIONS = 64
+S3_MAX_POOL_CONNECTIONS = 16
 OBJECT_KEY_FMT = {
     "input": "input/{shard_id:04}/input-{part_id:08}",
     "output": "output/{shard_id:04}/output-{part_id:08}",

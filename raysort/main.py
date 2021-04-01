@@ -1,5 +1,4 @@
 import argparse
-import collections
 import logging
 import os
 import subprocess
@@ -44,7 +43,13 @@ def get_args():
         "--max_mappers_per_node",
         default=3,
         type=int,
-        help="max number of parallel mapping jobs on a single node",
+        help="max number of parallel mapper jobs on a single node",
+    )
+    parser.add_argument(
+        "--max_reducers_per_node",
+        default=3,
+        type=int,
+        help="max number of parallel reducer jobs on a single node",
     )
     parser.add_argument(
         "--reducer_batch_size",
@@ -92,9 +97,10 @@ def get_args():
 
 @ray.remote
 def mapper(args, mapper_id, boundaries):
-    with ray.profiling.profile(f"M-{mapper_id}"):
-        logging_utils.init()
-        logging.info(f"M-{mapper_id} starting")
+    logging_utils.init()
+    task_id = f"M-{mapper_id}"
+    logging.info(f"{task_id} starting")
+    with monitoring_utils.log_task_completed("mapper", task_id):
         part = file_utils.load_partition(mapper_id, use_s3=args.use_s3_input)
         logging.info(f"M-{mapper_id} downloaded partition")
         chunks = sortlib.sort_and_partition(part, boundaries)
@@ -116,11 +122,12 @@ def mapper(args, mapper_id, boundaries):
 
 @ray.remote
 def reducer(args, reducer_id, *chunks):
-    if len(chunks) == 1:
-        chunks = chunks[0]
-    with ray.profiling.profile(f"R-{reducer_id}"):
-        logging_utils.init()
-        logging.info(f"R-{reducer_id} starting")
+    logging_utils.init()
+    task_id = f"R-{reducer_id}"
+    logging.info(f"{task_id} starting")
+    with monitoring_utils.log_task_completed("reducer", task_id):
+        if len(chunks) == 1:
+            chunks = chunks[0]
         lim = constants.LOGGING_ITEMS_LIMIT
         if args.use_ray_shuffle:
             logging.info(
@@ -138,33 +145,12 @@ def reducer(args, reducer_id, *chunks):
         logging.info(f"R-{reducer_id} uploaded partition")
 
 
-def progress_tracker(mapper_results, reducer_futs):
-    logging.info("Progress tracker started")
-    future_to_id = {}
-    mapper_futs = mapper_results[:, 0].tolist()
-    for i, fut in enumerate(mapper_futs):
-        future_to_id[fut] = ("mapper", f"M-{i}")
-    for i, fut in enumerate(reducer_futs):
-        future_to_id[fut] = ("reducer", f"R-{i}")
-
-    for kind in ["mapper", "reducer"]:
-        logging_utils.wandb_log({f"{kind}_completed": 0})
-
-    done_count_dict = collections.defaultdict(int)
-    rest = mapper_futs + reducer_futs
-    while len(rest) > 0:
-        done, rest = ray.wait(rest)
-        assert len(done) == 1, (done, rest)
-        kind, task_id = future_to_id[done[0]]
-        done_count_dict[kind] += 1
-        logging_utils.wandb_log({f"{kind}_completed": done_count_dict[kind]})
-
-
 def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
     mapper_resource = int(100 / args.max_mappers_per_node) / 100
+    reducer_resource = int(100 / args.max_reducers_per_node) / 100
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)
@@ -178,10 +164,12 @@ def sort_main(args):
     reducer_results = []
     for r in range(R):
         chunks = mapper_results[:, r].tolist()
-        ret = reducer.remote(args, r, *chunks)
+        ret = reducer.options(resources={"worker": reducer_resource}).remote(
+            args, r, *chunks
+        )
         reducer_results.append(ret)
 
-    progress_tracker(mapper_results, reducer_results)
+    monitoring_utils.progress_tracker(mapper_results, reducer_results)
     ray.get(reducer_results)
 
 
@@ -221,7 +209,7 @@ def main():
         logging_utils.wandb_init(args)
         mon = monitoring_utils.MonitoringAgent(args)
         sort_main(args)
-        mon.log_metrics(completed=True)
+        mon.submit_metrics()
 
     if args.validate_output:
         file_utils.validate_output(args)

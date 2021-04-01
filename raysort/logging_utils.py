@@ -1,15 +1,18 @@
 import datetime
+import json
 import logging
 
 import ray
+import redis
 import wandb
 
 from raysort import constants
 
 
 def init():
+    fmt = "%(levelname)s %(asctime)s %(filename)s:%(lineno)s] %(message)s"
     logging.basicConfig(
-        format="%(levelname)s %(asctime)s %(filename)s:%(lineno)s] %(message)s",
+        format=fmt,
         level=logging.INFO,
     )
 
@@ -26,9 +29,22 @@ def wandb_init(args):
     logging.info(f"Cluster config %s", wandb.config)
 
 
-def wandb_log(args):
-    logging.info(f"Logging metric: {args}")
-    wandb.log(args)
+def get_redis():
+    head_addr = ray.worker._global_node.address
+    head_ip, _ = head_addr.split(":")
+    return redis.Redis(head_ip, constants.APPLICATION_REDIS_PORT)
+
+
+def log_metric(event, args):
+    args = json.dumps(args)
+    get_redis().lpush(event, args)
+    logging.debug(f"{event} {args}")
+
+
+def wandb_log(args, log_to_wandb=True):
+    logging.info(args)
+    if log_to_wandb:
+        wandb.log(args)
 
 
 def log_benchmark_result(args, exec_time):

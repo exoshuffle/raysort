@@ -8,6 +8,7 @@ import subprocess
 
 from raysort import constants
 from raysort import logging_utils
+from raysort import monitoring_utils
 from raysort import s3_utils
 from raysort.types import *
 
@@ -36,7 +37,7 @@ def _get_part_key(part_id, kind="input", prefix_only=False):
     return key
 
 
-@ray.remote
+@ray.remote(resources={"worker": 1})
 def generate_part(part_id, size, offset, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -81,7 +82,7 @@ def generate_input(args):
     ray.get(tasks)
 
 
-@ray.remote
+@ray.remote(resources={"worker": 1})
 def validate_part(part_id, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -118,7 +119,8 @@ def validate_output(args):
 def load_partition(part_id, kind="input", use_s3=True):
     if use_s3:
         key = _get_part_key(part_id, kind=kind)
-        return s3_utils.download(key)
+        with monitoring_utils.timeit("mapper_download"):
+            return s3_utils.download(key)
     filepath = _get_part_path(part_id, kind)
     with open(filepath, "rb") as fin:
         return io.BytesIO(fin.read())
@@ -126,7 +128,8 @@ def load_partition(part_id, kind="input", use_s3=True):
 
 def save_partition(part_id, data, kind="temp"):
     key = _get_part_key(part_id, kind=kind)
-    s3_utils.upload(data, key)
+    with monitoring_utils.timeit("shuffle_upload", len(data.getbuffer())):
+        s3_utils.upload(data, key)
     return key
 
 
