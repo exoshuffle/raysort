@@ -37,10 +37,12 @@ def update_service_discovery_file():
     logging.info(f"Updated Prometheus service discovery file {filepath}")
 
 
-def redis_init(start_time):
+def redis_init():
     r = logging_utils.get_redis()
     r.flushall()
+    start_time = time.time()
     r.set("start_time", start_time)
+    return start_time
 
 
 # run as a Ray actor on the head node
@@ -49,8 +51,7 @@ class MonitoringAgent:
         update_service_discovery_file()
         # launch Prom server
         self.args = args
-        self.start_time = time.time()
-        redis_init(self.start_time)
+        self.start_time = redis_init()
 
     def _prom_query_range(self, query, start_time, end_time, step):
         url = urllib.parse.urljoin(constants.PROM_HTTP_ENDPOINT, "query_range")
@@ -134,20 +135,20 @@ def log_task_completed(task, task_id):
 
 
 @contextlib.contextmanager
-def timeit(event="operation", size=0):
+def timeit(event="operation", size=0, args={}):
     start = time.time()
     yield
     end = time.time()
     duration = end - start
-    logging_utils.log_metric(
-        event,
+    args.update(
         {
             "time": end,
             "duration": duration,
             "size": size,
             "throughput": size / duration,
-        },
+        }
     )
+    logging_utils.log_metric(event, args)
 
 
 def get_all_datapoints(r, key):

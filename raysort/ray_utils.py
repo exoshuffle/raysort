@@ -1,9 +1,15 @@
 import collections
 import logging
+import socket
 import time
 
 import ray
 import ray.autoscaler.sdk
+
+
+def get_current_node_resource():
+    ip = socket.gethostbyname(socket.gethostname())
+    return f"node:{ip}"
 
 
 def get_required_resources(args):

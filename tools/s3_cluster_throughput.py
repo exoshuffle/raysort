@@ -15,7 +15,6 @@ import wandb
 from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
-from raysort import ray_utils
 from raysort import s3_utils
 from raysort.types import *
 
