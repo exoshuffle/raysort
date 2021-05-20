@@ -17,7 +17,7 @@ idle_timeout_minutes: 5
 provider:
     type: aws
     region: us-west-2
-    use_internal_ip: yes
+    use_internal_ips: yes
 
     # availability_zone: us-west-2a,us-west-2b
 
@@ -105,17 +105,16 @@ initialization_commands: []
 
 # List of shell commands to run to set up nodes.
 setup_commands:
-    # Note: if you're developing Ray, you probably want to create a Docker image that
-    # has your Ray repo pre-cloned. Then, you can replace the pip installs
-    # below with a git checkout <your_sha> (and possibly a recompile).
-    # Uncomment the following line if you want to run the nightly version of ray (as opposed to the latest)
-    # - pip install -U https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp37-cp37m-manylinux2014_x86_64.whl
+    - sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y
     - conda activate base
     - cd /tmp/raysort && pip install -U -r requirements.txt && pip install -e .
     - cd /tmp/raysort/raysort/sortlib && python setup.py build_ext --inplace
 
 # Custom commands that will be run on the head node after common setup.
-head_setup_commands: []
+head_setup_commands:
+    - sudo apt install -y redis-server
+    - sudo service redis-server stop
+    - sudo systemctl disable redis-server
 
 # Custom commands that will be run on worker nodes after common setup.
 worker_setup_commands: []
@@ -131,5 +130,5 @@ head_start_ray_commands:
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --address=$$RAY_HEAD_IP:6379 --object-manager-port=8076 --metrics-export-port=$PROM_RAY_EXPORTER_PORT --object-store-memory=$OBJECT_STORE_MEMORY
+    - ulimit -n 65536; ray start --address=$$RAY_HEAD_IP:6379 --object-manager-port=8076 --metrics-export-port=$PROM_RAY_EXPORTER_PORT
     - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:$PROM_NODE_EXPORTER_PORT &

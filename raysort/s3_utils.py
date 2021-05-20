@@ -1,27 +1,36 @@
-import asyncio
 import concurrent.futures
 import io
 import logging
 import os
+import time
 
-import aiobotocore
 import boto3
+import botocore
+from botocore.exceptions import ClientError
+import numpy as np
 import ray
 
 from raysort import constants
 from raysort import monitoring_utils
+from raysort import ray_utils
 from raysort.types import *
 
 
-def get_s3_config(region=constants.S3_REGION):
-    return aiobotocore.config.AioConfig(
+def get_s3_client(region=constants.S3_REGION):
+    config = botocore.config.Config(
         region_name=region,
         max_pool_connections=constants.S3_MAX_POOL_CONNECTIONS,
     )
+    return boto3.client("s3", config=config)
 
 
-def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
-    # TODO: fault-tolerance of SlowDown errors
+def upload(
+    data,
+    object_key,
+    region=constants.S3_REGION,
+    bucket=constants.S3_BUCKET,
+    retries=constants.S3_MAX_RETRIES,
+):
     if isinstance(data, str):
         try:
             with open(data, "rb") as filedata:
@@ -29,28 +38,34 @@ def upload(data, object_key, region=constants.S3_REGION, bucket=constants.S3_BUC
         except IOError:
             logging.error(f"Expected filename or binary stream: {data}")
 
-    s3 = boto3.client("s3", config=get_s3_config(region))
+    s3 = get_s3_client(region)
     config = boto3.s3.transfer.TransferConfig(
-        max_concurrency=constants.S3_MAX_POOL_CONNECTIONS,
+        max_concurrency=constants.S3_UPLOAD_CONCURRENCY_PER_MAPPER,
     )
-    s3.upload_fileobj(data, bucket, object_key, Config=config)
+    while retries > 0:
+        retries -= 1
+        try:
+            if isinstance(data, io.BytesIO):
+                data.seek(0)
+            s3.upload_fileobj(data, bucket, object_key, Config=config)
+            return
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "SlowDown" and retries > 0:
+                t = constants.S3_SLOWDOWN_TIME
+                logging.warning(f"Received AWS SlowDown error. Waiting for {t}s.")
+                time.sleep(t)
+            else:
+                raise e
 
 
-async def touch_prefixes(
-    prefixes, region=constants.S3_REGION, bucket=constants.S3_BUCKET
-):
-    session = aiobotocore.get_session()
+def touch_prefixes(prefixes, region=constants.S3_REGION, bucket=constants.S3_BUCKET):
     filename = "__init__"
-    async with session.create_client("s3", config=get_s3_config(region)) as s3:
-        return await asyncio.gather(
-            *[
-                s3.put_object(
-                    Bucket=bucket,
-                    Key=os.path.join(prefix, filename),
-                    Body=b"",
-                )
-                for prefix in prefixes
-            ]
+    s3 = get_s3_client(region)
+    for prefix in prefixes:
+        s3.put_object(
+            Bucket=bucket,
+            Key=os.path.join(prefix, filename),
+            Body=b"",
         )
 
 
@@ -58,7 +73,7 @@ def download(object_key, region=constants.S3_REGION, bucket=constants.S3_BUCKET)
     """
     Returns: io.BytesIO stream.
     """
-    s3 = boto3.client("s3", config=get_s3_config(region))
+    s3 = get_s3_client(region)
     ret = io.BytesIO()
     s3.download_fileobj(bucket, object_key, ret)
     ret.seek(0)
@@ -71,12 +86,12 @@ def download_file(
     """
     Returns: io.BytesIO stream.
     """
-    s3 = boto3.client("s3", config=get_s3_config(region))
+    s3 = get_s3_client(region)
     s3.download_file(bucket, object_key, filepath)
     return filepath
 
 
-async def download_chunks(
+def download_chunks(
     reducer_id,
     chunks,
     get_chunk_info,
@@ -91,47 +106,55 @@ async def download_chunks(
     if len(chunks) == 0:
         return []
     wait_for_futures = not isinstance(chunks[0], tuple)
-    session = aiobotocore.get_session()
-    async with session.create_client("s3", config=get_s3_config(region)) as s3:
-        if wait_for_futures:
-            download_tasks = []
-            rest = chunks
-            while len(rest) > 0:
-                ready, rest = ray.wait(rest)
-                chunk = ray.get(ready[0])
-                chunk_info = get_chunk_info(*chunk)
-                if chunk.size > 0:
-                    task = asyncio.create_task(download_chunk(s3, chunk_info, bucket))
-                    download_tasks.append(task)
-                    logging.info(f"R-{reducer_id} downloading {chunk}")
-        else:
-            download_tasks = [
-                asyncio.create_task(download_chunk(s3, get_chunk_info(*chunk), bucket))
-                for chunk in chunks
-            ]
-        return await asyncio.gather(*download_tasks)
+    resources_dict = {
+        ray_utils.get_current_node_resource(): 1
+        / constants.S3_DOWNLOAD_CONCURRENCY_PER_REDUCER
+    }
+    if wait_for_futures:
+        download_tasks = []
+        rest = chunks
+        while len(rest) > 0:
+            ready, rest = ray.wait(rest)
+            chunk = ray.get(ready[0])
+            chunk_info = get_chunk_info(*chunk)
+            if chunk.size > 0:
+                task = download_chunk.remote(chunk_info, bucket, region)
+                download_tasks.append(task)
+                logging.info(f"R-{reducer_id} downloading {chunk}")
+    else:
+        download_tasks = [
+            download_chunk.options(resources_dict).remote(
+                get_chunk_info(*chunk), bucket, region
+            )
+            for chunk in chunks
+        ]
+    refs = ray.get(download_tasks)
+    arrs = ray.get(refs)
+    return [io.BytesIO(arr.tobytes()) for arr in arrs]
 
 
-async def download_chunk(s3, chunk, bucket):
+@ray.remote
+def download_chunk(chunk, bucket, region):
     object_key, offset, size = chunk
     end = offset + size - 1
     range_str = f"bytes={offset}-{end}"
+    s3 = get_s3_client(region)
     with monitoring_utils.timeit("shuffle_download", size):
-        resp = await s3.get_object(
+        resp = s3.get_object(
             Bucket=bucket,
             Key=object_key,
             Range=range_str,
         )
         body = resp["Body"]
-        ret = io.BytesIO(await body.read())
-        ret.seek(0)
-    return ret
+        buf = body.read()
+        ret = np.frombuffer(buf, dtype=np.uint8)
+    return ray.put(ret)
 
 
 def delete_objects_with_prefix(
     prefixes, region=constants.S3_REGION, bucket=constants.S3_BUCKET
 ):
-    s3 = boto3.resource("s3", config=get_s3_config(region))
+    s3 = get_s3_client(region)
     bucket = s3.Bucket(bucket)
     for prefix in prefixes:
         logging.info(f"Deleting {os.path.join(prefix, '*')}")
@@ -145,7 +168,7 @@ def multipart_upload(
     region=constants.S3_REGION,
     bucket=constants.S3_BUCKET,
 ):
-    s3 = boto3.client("s3", config=get_s3_config(region))
+    s3 = get_s3_client(region)
     mpu = s3.create_multipart_upload(Bucket=bucket, Key=object_key)
     mpuid = mpu["UploadId"]
     parts = []
@@ -174,7 +197,7 @@ def multipart_upload(
         return resp["ETag"], part_id
 
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=constants.S3_UPLOAD_MAX_CONCURRENCY
+        max_workers=constants.S3_MULTIPART_UPLOAD_CONCURRENCY
     ) as executor:
         upload_task = None
         for part_id, datachunk in enumerate(dataloader, start=1):

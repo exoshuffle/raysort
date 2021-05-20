@@ -24,13 +24,13 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_string(
     "worker_type",
-    "m5.xlarge",
+    "r5.8xlarge",
     "worker instance type",
     short_name="w",
 )
 flags.DEFINE_string(
     "head_type",
-    "r5.xlarge",
+    "r5.8xlarge",
     "head instance type",
     short_name="h",
 )
@@ -88,14 +88,7 @@ def write_cluster_config():
 
 
 def launch_ray_cluster(cluster_config_file):
-    # run("ray stop")
     run(f"ray up -y {cluster_config_file}")
-    # head_ip = (
-    #     run(f"ray get-head-ip {cluster_config_file}", capture_output=True)
-    #     .stdout.decode("ascii")
-    #     .strip()
-    # )
-    # run(f"ulimit -n 65536 && ray start --address='{head_ip}:6379'")
 
 
 def main(argv):

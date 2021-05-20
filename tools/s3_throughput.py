@@ -7,6 +7,7 @@ import random
 
 import botocore
 import boto3
+import numpy as np
 import ray
 
 from raysort import logging_utils
@@ -36,7 +37,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--total_data_size",
-        default=4 * BYTES_PER_GB,
+        default=16 * BYTES_PER_GB,
         type=int,
         help="total data size in bytes",
     )
@@ -87,7 +88,7 @@ def upload_objects(args, config, buckets):
     obj_size = int(args.total_data_size / config.num_objects)
     concurrency_per_obj = int(config.num_connections / config.num_objects)
     object_keys = [f"{i}/obj-{i}-{obj_size}" for i in range(config.num_objects)]
-    resources_dict = {ray_utils.get_current_node_resource(): 1e-4}
+    resources_dict = {ray_utils.get_current_node_resource(): 1 / len(object_keys)}
 
     with monitoring_utils.timeit(
         "upload",
@@ -121,13 +122,15 @@ def download_object(object_key, bucket, concurrency):
     )
     ret = io.BytesIO()
     s3.download_fileobj(bucket, object_key, ret, Config=config)
-    del ret
+    ret.seek(0)
+    ret = np.frombuffer(ret.getbuffer(), dtype=np.uint8)
+    obj_id = ray.put(ret)
+    return obj_id
 
 
 def download_objects(args, config, object_paths):
     concurrency_per_obj = int(config.num_connections / config.num_objects)
-    resources_dict = {ray_utils.get_current_node_resource(): 1e-4}
-    # TODO: placement group
+    resources_dict = {ray_utils.get_current_node_resource(): 1 / len(object_paths)}
 
     with monitoring_utils.timeit(
         "download",
@@ -162,7 +165,19 @@ def benchmark(args, config):
 
     buckets = create_buckets(args, config.num_buckets)
     object_paths = upload_objects(args, config, buckets)
-    download_objects(args, config, object_paths)
+    with monitoring_utils.timeit(
+        "download_and_copy",
+        int(args.total_data_size / BYTES_PER_MB),
+        {
+            "num_buckets": config.num_buckets,
+            "num_objects": config.num_objects,
+            "num_connections": config.num_connections,
+        },
+    ):
+        obj_ids = download_objects(args, config, object_paths)
+        ret = ray.get(obj_ids)
+        # print([len(b.getbuffer()) for b in ret])
+        print([b.shape for b in ret])
 
 
 def main():
@@ -192,6 +207,10 @@ def main():
     r = logging_utils.get_redis()
     print("upload =", monitoring_utils.get_all_datapoints(r, "upload"))
     print("download =", monitoring_utils.get_all_datapoints(r, "download"))
+    print(
+        "download_and_copy =",
+        monitoring_utils.get_all_datapoints(r, "download_and_copy"),
+    )
 
 
 if __name__ == "__main__":

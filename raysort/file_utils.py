@@ -1,4 +1,3 @@
-import asyncio
 import io
 import logging
 import math
@@ -13,7 +12,7 @@ from raysort import s3_utils
 from raysort.types import *
 
 
-def _get_shard_id(part_id):
+def _get_prefix_id(part_id):
     return part_id % constants.S3_NUM_SHARDS
 
 
@@ -29,15 +28,15 @@ def _get_part_path(part_id, kind="input"):
 
 def _get_part_key(part_id, kind="input", prefix_only=False):
     assert kind in {"input", "output", "temp"}
-    shard_id = _get_shard_id(part_id)
+    prefix_id = _get_prefix_id(part_id)
     key_fmt = constants.OBJECT_KEY_FMT[kind]
-    key = key_fmt.format(part_id=part_id, shard_id=shard_id)
+    key = key_fmt.format(part_id=part_id, prefix_id=prefix_id)
     if prefix_only:
         return key.rsplit("/", 1)[0]
     return key
 
 
-@ray.remote(resources={"worker": 1})
+@ray.remote(resources={"worker": 1 / 32})
 def generate_part(part_id, size, offset, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -82,7 +81,7 @@ def generate_input(args):
     ray.get(tasks)
 
 
-@ray.remote(resources={"worker": 1})
+@ray.remote(resources={"worker": 1 / 32})
 def validate_part(part_id, use_s3=True):
     logging_utils.init()
     cpu_count = os.cpu_count()
@@ -140,6 +139,7 @@ def save_partition_mpu(part_id, dataloader, kind="output", use_s3=True):
         return key
     filepath = _get_part_path(part_id, kind="output")
     s3_utils.multipart_write(dataloader, filepath, part_id)
+    os.remove(filepath)
 
 
 def touch_prefixes(args):
@@ -152,7 +152,7 @@ def touch_prefixes(args):
         prefixes.add(_get_part_key(i, kind="output", prefix_only=True))
     prefixes = list(prefixes)
     logging.info(f"Touching {len(prefixes)} prefixes")
-    return asyncio.run(s3_utils.touch_prefixes(prefixes))
+    return s3_utils.touch_prefixes(prefixes)
 
 
 def get_chunk_info(part_id, offset, size, kind="temp"):
@@ -160,7 +160,7 @@ def get_chunk_info(part_id, offset, size, kind="temp"):
 
 
 def load_chunks(reducer_id, chunks):
-    return asyncio.run(s3_utils.download_chunks(reducer_id, chunks, get_chunk_info))
+    return s3_utils.download_chunks(reducer_id, chunks, get_chunk_info)
 
 
 def cleanup(args):

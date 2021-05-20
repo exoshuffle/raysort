@@ -41,13 +41,13 @@ def get_args():
     )
     parser.add_argument(
         "--max_mappers_per_node",
-        default=3,
+        default=32,
         type=int,
         help="max number of parallel mapper jobs on a single node",
     )
     parser.add_argument(
         "--max_reducers_per_node",
-        default=3,
+        default=32,
         type=int,
         help="max number of parallel reducer jobs on a single node",
     )
@@ -149,8 +149,8 @@ def sort_main(args):
     M = args.num_mappers
     R = args.num_reducers
 
-    mapper_resource = int(100 / args.max_mappers_per_node) / 100
-    reducer_resource = int(100 / args.max_reducers_per_node) / 100
+    mapper_resource = 1 / args.max_mappers_per_node
+    reducer_resource = 1 / args.max_reducers_per_node
 
     boundaries = sortlib.get_boundaries(R)
     mapper_results = np.empty((M, R), dtype=object)

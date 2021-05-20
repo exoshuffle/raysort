@@ -19,17 +19,22 @@ PROM_RAY_EXPORTER_PORT = 8090
 
 # Redis data store config
 APPLICATION_REDIS_PORT = 7379
+APPLICATION_METRIC_SAMPLE_RATE = 1 / 10
 
 # AWS S3 config
 S3_REGION = "us-west-2"
 S3_BUCKET = "raysort-debug"
-S3_NUM_SHARDS = 1000
-S3_UPLOAD_MAX_CONCURRENCY = 1
+S3_NUM_SHARDS = 100000
+S3_MULTIPART_UPLOAD_CONCURRENCY = 1
+S3_UPLOAD_CONCURRENCY_PER_MAPPER = 1
+S3_DOWNLOAD_CONCURRENCY_PER_REDUCER = 64
 S3_MAX_POOL_CONNECTIONS = 16
+S3_MAX_RETRIES = 10
+S3_SLOWDOWN_TIME = 60
 OBJECT_KEY_FMT = {
-    "input": "input/{shard_id:04}/input-{part_id:08}",
-    "output": "output/{shard_id:04}/output-{part_id:08}",
-    "temp": "temp/{shard_id:04}/temp-{part_id:08}",
+    "input": "input/{prefix_id:06}/input-{part_id:08}",
+    "output": "output/{prefix_id:06}/output-{part_id:08}",
+    "temp": "temp/{prefix_id:06}/temp-{part_id:08}",
 }
 
 # AWS EC2 constants

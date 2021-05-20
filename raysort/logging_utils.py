@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import random
 
 import ray
 import redis
@@ -35,7 +36,9 @@ def get_redis():
     return redis.Redis(head_ip, constants.APPLICATION_REDIS_PORT)
 
 
-def log_metric(event, args):
+def log_metric(event, args, sample=False):
+    if sample and random.random() > constants.APPLICATION_METRIC_SAMPLE_RATE:
+        return
     args = json.dumps(args)
     get_redis().lpush(event, args)
     logging.debug(f"{event} {args}")

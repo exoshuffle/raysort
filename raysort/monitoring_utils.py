@@ -148,7 +148,7 @@ def timeit(event="operation", size=0, args={}):
             "throughput": size / duration,
         }
     )
-    logging_utils.log_metric(event, args)
+    logging_utils.log_metric(event, args, sample=True)
 
 
 def get_all_datapoints(r, key):
