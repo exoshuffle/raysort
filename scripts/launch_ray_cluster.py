@@ -176,7 +176,7 @@ def wait_until_ready(cluster_config_file):
 
 def write_prom_sd_file(cluster_config_file):
     run(f"ray submit {cluster_config_file} raysort/create_prom_sd_file.py"
-        "-- --expected_num_nodes={FLAGS.num_workers}")
+        " -- --expected_num_nodes={FLAGS.num_workers}")
 
 
 def main(argv):

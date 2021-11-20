@@ -132,7 +132,7 @@ head_start_ray_commands:
         --metrics-export-port={{PROM_RAY_EXPORTER_PORT}}
         --system-config='{"max_io_workers":8,"object_spilling_threshold":{{OBJECT_SPILLING_THRESHOLD}},"object_spilling_config":"{\"type\":\"filesystem\",\"params\":{\"directory_path\":[{{SPILL_DIRS_STR}}]}}"}'
         {% if OBJECT_STORE_MEMORY is defined -%} --object-store-memory={{OBJECT_STORE_MEMORY}} {% endif %}
-    - /tmp/raysort/raysort/bin/prometheus/prometheus --config.file=/tmp/raydev/python/ray/experimental/raysort/config/prometheus.yml &
+    - /tmp/raysort/raysort/bin/prometheus/prometheus --config.file=/tmp/raysort/config/prometheus.yml &
     - /tmp/raysort/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:{{PROM_NODE_EXPORTER_PORT}} &
 
 # --plasma-directory={{PLASMA_DIRECTORY}}
@@ -146,4 +146,4 @@ worker_start_ray_commands:
         --object-manager-port=8076
         --metrics-export-port={{PROM_RAY_EXPORTER_PORT}}
         {% if OBJECT_STORE_MEMORY is defined -%} --object-store-memory={{OBJECT_STORE_MEMORY}} {% endif %}
-    - /tmp/raydev/python/ray/experimental/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:{{PROM_NODE_EXPORTER_PORT}} &
+    - /tmp/raysort/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:{{PROM_NODE_EXPORTER_PORT}} &
