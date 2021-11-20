@@ -13,11 +13,11 @@ from typing import Callable, Dict, Iterable, List
 import numpy as np
 import ray
 
-from ray.experimental.raysort import constants
-from ray.experimental.raysort import logging_utils
-from ray.experimental.raysort import sortlib
-from ray.experimental.raysort import tracing_utils
-from ray.experimental.raysort.types import \
+from raysort import constants
+from raysort import logging_utils
+from raysort import sortlib
+from raysort import tracing_utils
+from raysort.types import \
     BlockInfo, ByteCount, RecordCount, PartId, PartInfo, Path
 
 Args = argparse.Namespace
@@ -121,8 +121,8 @@ def derive_additional_args(args: Args):
 
     # Calculate additional parameters.
     assert isinstance(args.num_workers, int), args
-    args.num_mappers = int(
-        np.ceil(args.total_data_size / args.input_part_size))
+    args.num_mappers = int(np.ceil(args.total_data_size /
+                                   args.input_part_size))
     args.num_reducers = args.num_workers
     assert args.map_parallelism % args.merge_factor == 0, args
     args.merge_parallelism = args.map_parallelism // args.merge_factor
@@ -220,9 +220,9 @@ def _load_manifest(args: Args, path: Path) -> List[PartInfo]:
 def _generate_partition(part_size: int) -> np.ndarray:
     num_records = part_size // 100
     mat = np.empty((num_records, 100), dtype=np.uint8)
-    mat[:, :10] = np.frombuffer(
-        np.random.default_rng().bytes(num_records * 10),
-        dtype=np.uint8).reshape((num_records, -1))
+    mat[:, :10] = np.frombuffer(np.random.default_rng().bytes(num_records *
+                                                              10),
+                                dtype=np.uint8).reshape((num_records, -1))
     return mat.flatten()
 
 
@@ -344,11 +344,10 @@ def final_merge(args: Args, reducer_id: PartId,
         part = merged_parts[i]
         if part is None:
             return None
-        return np.fromfile(
-            part.path,
-            dtype=np.uint8,
-            count=args.reducer_input_chunk,
-            offset=d * args.reducer_input_chunk)
+        return np.fromfile(part.path,
+                           dtype=np.uint8,
+                           count=args.reducer_input_chunk,
+                           offset=d * args.reducer_input_chunk)
         return part[d * args.reducer_input_chunk:(d + 1) *
                     args.reducer_input_chunk]
 
@@ -409,8 +408,8 @@ def sort_main(args: Args):
             # Submit map tasks.
             num_map_tasks = min(num_map_tasks_per_round,
                                 args.num_mappers - part_id)
-            map_results = np.empty(
-                (num_map_tasks, args.num_reducers), dtype=object)
+            map_results = np.empty((num_map_tasks, args.num_reducers),
+                                   dtype=object)
             for _ in range(num_map_tasks):
                 _, node, path = parts[part_id]
                 opt = dict(**mapper_opt, **_node_res(node))
@@ -422,10 +421,9 @@ def sort_main(args: Args):
             # Make sure previous rounds finish before scheduling merge tasks.
             num_extra_rounds = round - args.num_concurrent_rounds + 1
             if num_extra_rounds > 0:
-                ray.wait(
-                    [t for t in merge_results[:, 0] if t is not None],
-                    num_returns=num_extra_rounds * args.merge_parallelism,
-                    fetch_local=False)
+                ray.wait([t for t in merge_results[:, 0] if t is not None],
+                         num_returns=num_extra_rounds * args.merge_parallelism,
+                         fetch_local=False)
 
             # Submit merge tasks.
             for j in range(args.merge_parallelism):
@@ -435,18 +433,16 @@ def sort_main(args: Args):
                     merge_results[m, :] = [
                         merge_mapper_blocks_ray.options(
                             placement_group=pgs[r]).remote(
-                                args, r, m,
-                                map_results[j * f:(j + 1) *
-                                            f, r].flatten().tolist())
+                                args, r, m, map_results[j * f:(j + 1) * f,
+                                                        r].flatten().tolist())
                         for r in range(args.num_reducers)
                     ]
                 else:
                     merge_results[m, :] = [
                         merge_mapper_blocks.options(
                             placement_group=pgs[r]).remote(
-                                args, r, m,
-                                *map_results[j * f:(j + 1) *
-                                             f, r].flatten().tolist())
+                                args, r, m, *map_results[j * f:(j + 1) * f,
+                                                         r].flatten().tolist())
                         for r in range(args.num_reducers)
                     ]
 

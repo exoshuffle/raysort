@@ -2,8 +2,10 @@
 
 set -x
 
+BIN_DIR=raysort/bin
+
 install_gensort() {
-    DIR=bin/gensort
+    DIR=$BIN_DIR/gensort
     mkdir -p $DIR || exit $?
     pushd $DIR
     TARFILE=gensort-linux-1.5.tar.gz
@@ -17,7 +19,7 @@ _install_github_binary() {
     BIN=$2
     VER=$3
     SEP=$4
-    DIR=bin
+    DIR=$BIN_DIR
     mkdir -p $DIR || exit $?
     pushd $DIR
     TARNAME=${BIN}-${VER}${SEP}linux-amd64
@@ -29,11 +31,11 @@ _install_github_binary() {
 }
 
 install_prometheus() {
-    _install_github_binary prometheus prometheus 2.27.1 .
+    _install_github_binary prometheus prometheus 2.31.1 .
 }
 
 install_node_exporter() {
-    _install_github_binary prometheus node_exporter 1.1.2 .
+    _install_github_binary prometheus node_exporter 1.3.0 .
 }
 
 install_jaeger() {
@@ -45,7 +47,7 @@ cleanup() {
 }
 
 show_tree() {
-    tree bin
+    tree $BIN_DIR
 }
 
 install_gensort

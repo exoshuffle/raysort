@@ -10,8 +10,8 @@ import pandas as pd
 import ray
 from ray.util.metrics import Gauge
 
-from ray.experimental.raysort import constants
-from ray.experimental.raysort import logging_utils
+from raysort import constants
+from raysort import logging_utils
 
 Span = collections.namedtuple(
     "Span",

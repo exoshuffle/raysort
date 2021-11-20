@@ -1005,7 +1005,7 @@ struct __pyx_memoryviewslice_obj;
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 1 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
  */
 struct __pyx_obj_7sortlib___pyx_scope_struct__merge_partitions {
   PyObject_HEAD
@@ -2337,7 +2337,7 @@ static PyObject *__pyx_tp_new_memoryview(PyTypeObject *t, PyObject *a, PyObject 
 static PyObject *__pyx_tp_new__memoryviewslice(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_int_0;
 static PyObject *__pyx_int_1;
-static PyObject *__pyx_int_1048576;
+static PyObject *__pyx_int_10485760;
 static PyObject *__pyx_int_184977713;
 static PyObject *__pyx_int_neg_1;
 static PyObject *__pyx_codeobj_;
@@ -2856,7 +2856,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 1 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
  */
 
 /* Python wrapper */
@@ -2876,7 +2876,7 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
   {
     static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_num_blocks,&__pyx_n_s_get_block,&__pyx_n_s_batch_num_records,0};
     PyObject* values[3] = {0,0,0};
-    values[2] = ((PyObject *)__pyx_int_1048576);
+    values[2] = ((PyObject *)__pyx_int_10485760);
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
@@ -3644,7 +3644,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 1 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
  */
 
   /* function exit code */
@@ -18231,7 +18231,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 1 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
  */
   __pyx_tuple__24 = PyTuple_Pack(17, __pyx_n_s_num_blocks, __pyx_n_s_get_block, __pyx_n_s_batch_num_records, __pyx_n_s_blocks, __pyx_n_s_block_indexes, __pyx_n_s_record_arrays, __pyx_n_s_block, __pyx_n_s_merger, __pyx_n_s_buffer, __pyx_n_s_mv, __pyx_n_s_ptr, __pyx_n_s_max_num_records, __pyx_n_s_ret, __pyx_n_s_cnt, __pyx_n_s_part_id, __pyx_n_s_actual_bytes, __pyx_n_s_i); if (unlikely(!__pyx_tuple__24)) __PYX_ERR(0, 73, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__24);
@@ -18313,7 +18313,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitGlobals(void) {
   if (__Pyx_InitStrings(__pyx_string_tab) < 0) __PYX_ERR(0, 1, __pyx_L1_error);
   __pyx_int_0 = PyInt_FromLong(0); if (unlikely(!__pyx_int_0)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_1 = PyInt_FromLong(1); if (unlikely(!__pyx_int_1)) __PYX_ERR(0, 1, __pyx_L1_error)
-  __pyx_int_1048576 = PyInt_FromLong(1048576L); if (unlikely(!__pyx_int_1048576)) __PYX_ERR(0, 1, __pyx_L1_error)
+  __pyx_int_10485760 = PyInt_FromLong(10485760L); if (unlikely(!__pyx_int_10485760)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_184977713 = PyInt_FromLong(184977713L); if (unlikely(!__pyx_int_184977713)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_neg_1 = PyInt_FromLong(-1); if (unlikely(!__pyx_int_neg_1)) __PYX_ERR(0, 1, __pyx_L1_error)
   return 0;
@@ -18900,7 +18900,7 @@ if (!__Pyx_RefNanny) {
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 1 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
  */
   __pyx_t_3 = PyCFunction_NewEx(&__pyx_mdef_7sortlib_5merge_partitions, NULL, __pyx_n_s_sortlib); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 73, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);

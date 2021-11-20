@@ -1,6 +1,6 @@
 import os
 
-from ray.experimental.raysort.types import ByteCount, PartId, RecordCount
+from raysort.types import ByteCount, PartId, RecordCount
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 

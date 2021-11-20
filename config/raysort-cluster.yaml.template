@@ -66,7 +66,7 @@ available_node_types:
 file_mounts: {
 #    "/path1/on/remote/machine": "/path1/on/local/machine",
     "/home/ubuntu/.aws": "/home/ubuntu/.aws",
-    "/tmp/raydev": "/home/ubuntu/ray",
+    "/tmp/raysort": "/home/ubuntu/raysort",
 }
 
 # Files or directories to copy from the head node to the worker nodes. The format is a
@@ -83,8 +83,6 @@ file_mounts_sync_continuously: False
 rsync_exclude:
     - "**/.git"
     - "**/.git/**"
-    - "**/node_modules"
-    - "**/node_modules/**"
 
 # Pattern files to use for filtering out files when running rsync up or rsync down. The file is searched for
 # in the source directory and recursively through all subdirectories. For example, if .gitignore is provided
@@ -111,11 +109,9 @@ initialization_commands:
 setup_commands:
     - sudo bash -c 'rm -rf /etc/security/limits.d; echo "* soft nofile 65535" >> /etc/security/limits.conf; echo "* hard nofile 65535" >> /etc/security/limits.conf;'
     - conda activate base
-    - find /home/ubuntu/miniconda3/lib/python3.9/site-packages/ray -maxdepth 1 -type l -delete
-    - pip install --force-reinstall https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
-    - pip install -U -r /tmp/raydev/python/ray/experimental/raysort/requirements.txt
-    - python /tmp/raydev/python/ray/setup-dev.py -y
-    - cd /tmp/raydev/python/ray/experimental/raysort/sortlib && python setup.py build_ext --inplace
+    - pip install -U -r /tmp/raysort/requirements.txt
+    - cd /tmp/raysort/raysort && pip install -e .
+    - cd /tmp/raysort/raysort/sortlib && python setup.py build_ext --inplace
     - mkdir -p {{PLASMA_DIRECTORY}}
 
 # Custom commands that will be run on the head node after common setup.
@@ -135,12 +131,10 @@ head_start_ray_commands:
         --metrics-export-port={{PROM_RAY_EXPORTER_PORT}}
         --system-config='{"max_io_workers":8,"object_spilling_threshold":{{OBJECT_SPILLING_THRESHOLD}},"object_spilling_config":"{\"type\":\"filesystem\",\"params\":{\"directory_path\":[{{SPILL_DIRS_STR}}]}}"}'
         {% if OBJECT_STORE_MEMORY is defined -%} --object-store-memory={{OBJECT_STORE_MEMORY}} {% endif %}
-    - /tmp/raydev/python/ray/experimental/raysort/bin/prometheus/prometheus --config.file=/tmp/raydev/python/ray/experimental/raysort/config/prometheus.yml &
-    - /tmp/raydev/python/ray/experimental/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:{{PROM_NODE_EXPORTER_PORT}} &
-    # - /tmp/raydev/python/ray/experimental/raysort/bin/jaeger/jaeger-all-in-one &
+    - /tmp/raysort/raysort/bin/prometheus/prometheus --config.file=/tmp/raydev/python/ray/experimental/raysort/config/prometheus.yml &
+    - /tmp/raysort/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:{{PROM_NODE_EXPORTER_PORT}} &
 
 # --plasma-directory={{PLASMA_DIRECTORY}}
-# --tracing-startup-hook=ray.util.tracing.setup_jaeger_tracing:setup_tracing
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
