@@ -46,7 +46,7 @@ def create_sd_file(expected_num_nodes: int = 0):
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--expected_num_nodes", default=0)
+    parser.add_argument("--expected_num_nodes", type=int, default=0)
     return parser.parse_args()
 
 
