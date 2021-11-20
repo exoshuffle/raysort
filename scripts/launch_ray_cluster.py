@@ -43,8 +43,7 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_float(
     "object_spilling_threshold",
-    # 1.0,
-    0.8,
+    1.0,
     "threshold at which object store starts to spill",
 )
 flags.DEFINE_integer(
@@ -166,14 +165,18 @@ def launch_ray_cluster(cluster_config_file):
 
 def wait_until_ready(cluster_config_file):
     while True:
-        proc = run(
-            f"ray exec {cluster_config_file} 'ray status'",
-            capture_output=True)
+        proc = run(f"ray exec {cluster_config_file} 'ray status'",
+                   capture_output=True)
         out = proc.stdout.decode("ascii")
         print(out)
         if f"{FLAGS.num_workers} ray.worker.default" in out:
             break
         time.sleep(10)
+
+
+def write_prom_sd_file(cluster_config_file):
+    run(f"ray submit {cluster_config_file} raysort/create_prom_sd_file.py"
+        "-- --expected_num_nodes={FLAGS.num_workers}")
 
 
 def main(argv):
@@ -182,6 +185,7 @@ def main(argv):
     launch_ray_cluster(cluster_config_file)
     run("./scripts/forward_dashboards.sh")
     wait_until_ready(cluster_config_file)
+    write_prom_sd_file(cluster_config_file)
 
 
 if __name__ == "__main__":

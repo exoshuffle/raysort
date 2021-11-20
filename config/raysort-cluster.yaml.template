@@ -109,8 +109,9 @@ initialization_commands:
 setup_commands:
     - sudo bash -c 'rm -rf /etc/security/limits.d; echo "* soft nofile 65535" >> /etc/security/limits.conf; echo "* hard nofile 65535" >> /etc/security/limits.conf;'
     - conda activate base
+    - pip uninstall -y ray
     - pip install -U -r /tmp/raysort/requirements.txt
-    - cd /tmp/raysort/raysort && pip install -e .
+    - cd /tmp/raysort && pip install -e .
     - cd /tmp/raysort/raysort/sortlib && python setup.py build_ext --inplace
     - mkdir -p {{PLASMA_DIRECTORY}}
 
