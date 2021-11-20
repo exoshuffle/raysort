@@ -7,6 +7,11 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: ray
+  - job_name: python
     static_configs:
-      - targets: ["localhost:8080"]
+      - targets: ["localhost:8000"]
+
+  - job_name: ray
+    file_sd_configs:
+      - files:
+          - "/tmp/ray/prom_metrics_service_discovery.json"

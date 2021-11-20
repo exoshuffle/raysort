@@ -1,80 +1,65 @@
-### Variables: r5.8xlarge, 1, 1, 104857600, 8090, 8091, 7379, 2021-04-26T14:42:57.422183, r5.8xlarge, 256
+### Variables: i3.2xlarge, 1.0, 30064771072, 16, 16, [('/dev/nvme0n1', '/mnt/nvme0')], \"/mnt/nvme0/tmp/ray\", [], 500, i3.2xlarge
 
 cluster_name: raysort-cluster
-min_workers: 1
-max_workers: 1
-
-# The autoscaler will scale up the cluster faster with higher upscaling speed.
-# E.g., if the task requires adding more nodes then autoscaler will gradually
-# scale up the cluster in chunks of upscaling_speed*currently_running_nodes.
-# This number should be > 0.
-upscaling_speed: 1.0
-
-# If a node is idle for this many minutes, it will be removed.
-idle_timeout_minutes: 5
+max_workers: 16
 
 # Cloud-provider specific configuration.
 provider:
     type: aws
     region: us-west-2
-    use_internal_ips: yes
-
-    # availability_zone: us-west-2a,us-west-2b
+    availability_zone: us-west-2b
+    use_internal_ips: no
+    cache_stopped_nodes: no
 
 # How Ray will authenticate with newly launched nodes.
 auth:
     ssh_user: ubuntu
-
-# Provider-specific config for the head node.
-head_node:
-    InstanceType: r5.8xlarge
-    ImageId: ami-06515aeefbba7d475
-
-# Provider-specific config for worker nodes.
-worker_nodes:
-    InstanceType: r5.8xlarge
-    ImageId: ami-06515aeefbba7d475
-    BlockDeviceMappings:
-      - DeviceName: /dev/sda1
-        Ebs:
-            VolumeSize: 256
-    InstanceMarketOptions:
-        MarketType: spot
-    TagSpecifications:
-      - ResourceType: instance
-        Tags:
-          - Key: Project
-            Value: raysort
-          - Key: RunId
-            Value: "2021-04-26T14:42:57.422183"
-
-# Specify the node type of the head node (as configured above).
-head_node_type: head
-
-# Specify the default type of the worker node (as configured above).
-worker_default_node_type: worker
+    ssh_private_key: ~/.ssh/ray-autoscaler_us-west-2.pem
 
 # Tell the autoscaler the allowed node types and the resources they provide.
 # The key is the name of the node type, which is just for debugging purposes.
 # The node config specifies the launch config and physical instance type.
 available_node_types:
-    head:
-        node_config: {}
-        resources: {"head": 1}
+    ray.head.default:
+        min_workers: 0
+        max_workers: 0
+        resources:
+            CPU: 0
+        # For more documentation on available fields, see:
+        # http://boto3.readthedocs.io/en/latest/reference/services/ec2.html#EC2.ServiceResource.create_instances
+        node_config:
+            InstanceType: i3.2xlarge
+            ImageId: ami-0cc7b9f3e255deb54
+            KeyName: ray-autoscaler_us-west-2
+            Placement:
+                GroupName: raysort-pg
 
-    worker:
-        node_config: {}
-        resources: {"worker:r5.8xlarge": 1, "worker": 1}
-        min_workers: 1
-        max_workers: 1
+    ray.worker.default:
+        min_workers: 16
+        max_workers: 16
+        resources:
+            worker:i3.2xlarge: 1
+            worker: 1
+        node_config:
+            InstanceType: i3.2xlarge
+            ImageId: ami-0cc7b9f3e255deb54
+            KeyName: ray-autoscaler_us-west-2
+            Placement:
+                GroupName: raysort-pg
+            InstanceMarketOptions:
+                MarketType: spot
+            BlockDeviceMappings:
+                - DeviceName: /dev/sda1
+                  Ebs:
+                      VolumeSize: 100
+            
 
 # Files or directories to copy to the head and worker nodes. The format is a
 # dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
 file_mounts: {
 #    "/path1/on/remote/machine": "/path1/on/local/machine",
-    "/home/ubuntu/.aws/credentials": "/home/ubuntu/.aws/credentials",
-    "/home/ubuntu/.netrc": "/home/ubuntu/.netrc",
-    "/tmp/raysort": "/home/ubuntu/raysort",
+    "/home/ubuntu/.aws": "/home/ubuntu/.aws",
+    "/tmp/raydev": "/home/ubuntu/ray",
 }
 
 # Files or directories to copy from the head node to the worker nodes. The format is a
@@ -91,6 +76,8 @@ file_mounts_sync_continuously: False
 rsync_exclude:
     - "**/.git"
     - "**/.git/**"
+    - "**/node_modules"
+    - "**/node_modules/**"
 
 # Pattern files to use for filtering out files when running rsync up or rsync down. The file is searched for
 # in the source directory and recursively through all subdirectories. For example, if .gitignore is provided
@@ -101,20 +88,29 @@ rsync_filter:
 # List of commands that will be run before `setup_commands`. If docker is
 # enabled, these commands will run outside the container and before docker
 # is setup.
-initialization_commands: []
+initialization_commands:
+
+
+    - test -b /dev/nvme0n1 && sudo mkfs -F -t ext4 /dev/nvme0n1 || true
+    - sudo mkdir -p /mnt/nvme0
+    - test -b /dev/nvme0n1 && sudo mount /dev/nvme0n1 /mnt/nvme0 || true
+    - sudo chmod 777 /mnt/nvme0
+
+
 
 # List of shell commands to run to set up nodes.
 setup_commands:
-    - sudo apt update && sudo apt upgrade -y && sudo apt autoremove -y
+    - sudo bash -c 'rm -rf /etc/security/limits.d; echo "* soft nofile 65535" >> /etc/security/limits.conf; echo "* hard nofile 65535" >> /etc/security/limits.conf;'
     - conda activate base
-    - cd /tmp/raysort && pip install -U -r requirements.txt && pip install -e .
-    - cd /tmp/raysort/raysort/sortlib && python setup.py build_ext --inplace
+    - find /home/ubuntu/miniconda3/lib/python3.9/site-packages/ray -maxdepth 1 -type l -delete
+    - pip install --force-reinstall https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
+    - pip install -U -r /tmp/raydev/python/ray/experimental/raysort/requirements.txt
+    - python /tmp/raydev/python/ray/setup-dev.py -y
+    - cd /tmp/raydev/python/ray/experimental/raysort/sortlib && python setup.py build_ext --inplace
+    - mkdir -p /mnt/nvme0/tmp/ray
 
 # Custom commands that will be run on the head node after common setup.
-head_setup_commands:
-    - sudo apt install -y redis-server
-    - sudo service redis-server stop
-    - sudo systemctl disable redis-server
+head_setup_commands: []
 
 # Custom commands that will be run on worker nodes after common setup.
 worker_setup_commands: []
@@ -122,13 +118,28 @@ worker_setup_commands: []
 # Command to start ray on the head node. You don't need to change this.
 head_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --metrics-export-port=8090 --autoscaling-config=~/ray_bootstrap_config.yaml --num-cpus=0
-    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:8091 &
-    - /tmp/raysort/bin/prometheus/prometheus --config.file=/tmp/raysort/config/prometheus.yml &
-    - redis-server --port 7379 --protected-mode no --save '' &
+    - >
+        RAY_SCHEDULER_SPREAD_THRESHOLD=0
+        ray start --head --port=6379
+        --autoscaling-config=~/ray_bootstrap_config.yaml
+        --object-manager-port=8076
+        --metrics-export-port=8090
+        --system-config='{"max_io_workers":8,"object_spilling_threshold":1.0,"object_spilling_config":"{\"type\":\"filesystem\",\"params\":{\"directory_path\":[\"/mnt/nvme0/tmp/ray\"]}}"}'
+        --object-store-memory=30064771072 
+    - /tmp/raydev/python/ray/experimental/raysort/bin/prometheus/prometheus --config.file=/tmp/raydev/python/ray/experimental/raysort/config/prometheus.yml &
+    - /tmp/raydev/python/ray/experimental/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:8091 &
+    # - /tmp/raydev/python/ray/experimental/raysort/bin/jaeger/jaeger-all-in-one &
+
+# --plasma-directory=/mnt/nvme0/tmp/ray
+# --tracing-startup-hook=ray.util.tracing.setup_jaeger_tracing:setup_tracing
 
 # Command to start ray on worker nodes. You don't need to change this.
 worker_start_ray_commands:
     - ray stop
-    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --metrics-export-port=8090
-    - /tmp/raysort/bin/prometheus/node_exporter --web.listen-address 0.0.0.0:8091 &
+    - >
+        RAY_SCHEDULER_SPREAD_THRESHOLD=0
+        ray start --address=$RAY_HEAD_IP:6379
+        --object-manager-port=8076
+        --metrics-export-port=8090
+        --object-store-memory=30064771072 
+    - /tmp/raydev/python/ray/experimental/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:8091 &

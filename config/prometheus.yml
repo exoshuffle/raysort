@@ -7,11 +7,6 @@ scrape_configs:
     static_configs:
       - targets: ["localhost:9090"]
 
-  - job_name: node
-    file_sd_configs:
-      - files:
-          - "/tmp/ray/prom_metrics_node_exporters.json"
-
   - job_name: ray
     file_sd_configs:
       - files:
