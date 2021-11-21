@@ -101,7 +101,7 @@ setup_commands:
     - sudo bash -c 'rm -rf /etc/security/limits.d; echo "* soft nofile 65535" >> /etc/security/limits.conf; echo "* hard nofile 65535" >> /etc/security/limits.conf;'
     - conda activate base
     - pip uninstall -y ray
-    - pip install -U -r /tmp/raysort/requirements.txt
+    - pip install -Ur /tmp/raysort/requirements.txt
     - cd /tmp/raysort && pip install -e .
     - cd /tmp/raysort/raysort/sortlib && python setup.py build_ext --inplace
     - mkdir -p /mnt/nvme0/tmp/ray

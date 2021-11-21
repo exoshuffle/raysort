@@ -6,5 +6,5 @@ IPython
 jinja2
 numpy
 pandas
-https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
+ray[debug]
 yapf
