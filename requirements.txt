@@ -6,5 +6,5 @@ IPython
 jinja2
 numpy
 pandas
-ray[debug]
+ray
 yapf
