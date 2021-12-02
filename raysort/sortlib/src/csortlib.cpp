@@ -162,7 +162,7 @@ class Merger::Impl {
     _PushFirstItem(part, part_id);
   }
 
-  GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records) {
+  GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records, bool ask_for_refills) {
     size_t cnt = 0;
     auto cur = ret;
     while (!heap_.empty()) {
@@ -178,7 +178,7 @@ class Merger::Impl {
       ++cnt;
       if (j + 1 < parts_[i].size) {
         heap_.push({top.record + 1, i, j + 1});
-      } else {
+      } else if (ask_for_refills) {
         return std::make_pair(cnt, i);
       }
     }
@@ -189,8 +189,8 @@ class Merger::Impl {
 Merger::Merger(const std::vector<ConstArray<Record>> &parts)
     : impl_(std::make_unique<Impl>(parts)) {}
 
-GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records) {
-  return impl_->GetBatch(ret, max_num_records);
+GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records, bool ask_for_refills) {
+  return impl_->GetBatch(ret, max_num_records, ask_for_refills);
 }
 
 void Merger::Refill(const ConstArray<Record> &part, int part_id) {

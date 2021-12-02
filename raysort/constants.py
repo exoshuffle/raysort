@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from raysort.types import ByteCount, PartId, RecordCount
 
@@ -24,9 +25,9 @@ DATA_DIR_FMT = {
     "temp": "{mnt}/tmp/temp/",
 }
 FILENAME_FMT = {
-    "input": "input-{part_id:08}",
-    "output": "output-{part_id:08}",
-    "temp": "temp-{part_id:08}",
+    "input": "input-{part_id:010x}",
+    "output": "output-{part_id:010x}",
+    "temp": "temp-{part_id:010x}",
 }
 
 # Prometheus config
@@ -40,5 +41,10 @@ def bytes_to_records(n_bytes: ByteCount) -> RecordCount:
     return int(n_bytes / RECORD_SIZE)
 
 
-def merge_part_ids(reducer_id: PartId, mapper_id: PartId) -> PartId:
-    return reducer_id * 1_000_000 + mapper_id
+def merge_part_ids(*part_ids: List[PartId], skip_places: int = 4) -> PartId:
+    ret = 0
+    mul = 1
+    for p in reversed(part_ids):
+        ret += p * mul
+        mul *= 16**skip_places
+    return ret

@@ -27,11 +27,11 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
     cdef cppclass ConstArray[T]:
         const T* ptr
         size_t size
-    cdef vector[Key] GetBoundaries(size_t num_partitions)
+    cdef vector[Key] GetBoundaries(size_t num_partitions) nogil
     cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries, bool skip_sorting) nogil
     cdef cppclass Merger:
         Merger(const vector[ConstArray[Record]]& parts) nogil
-        pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
+        pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records, bool ask_for_refills) nogil
         void Refill(const ConstArray[Record]& part, int part_id) nogil
 
 
@@ -73,7 +73,7 @@ def sort_and_partition(part: np.ndarray, boundaries: List[int], skip_sorting: bo
 
 def merge_partitions(
         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
-        batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+        batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
     """
     An iterator that returns merged blocks for upload.
     """
@@ -93,7 +93,7 @@ def merge_partitions(
     cdef size_t max_num_records = batch_num_records
     while True:
         with nogil:
-            ret = merger.GetBatch(ptr, max_num_records)
+            ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
         cnt, part_id = ret
         if cnt == 0:
             return

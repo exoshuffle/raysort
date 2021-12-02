@@ -1005,11 +1005,12 @@ struct __pyx_memoryviewslice_obj;
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
  */
 struct __pyx_obj_7sortlib___pyx_scope_struct__merge_partitions {
   PyObject_HEAD
   PyObject *__pyx_v_actual_bytes;
+  bool __pyx_v_ask_for_refills;
   PyObject *__pyx_v_batch_num_records;
   PyObject *__pyx_v_block;
   PyObject *__pyx_v_block_indexes;
@@ -2120,6 +2121,7 @@ static const char __pyx_k_reduce_cython[] = "__reduce_cython__";
 static const char __pyx_k_get_boundaries[] = "get_boundaries";
 static const char __pyx_k_View_MemoryView[] = "View.MemoryView";
 static const char __pyx_k_allocate_buffer[] = "allocate_buffer";
+static const char __pyx_k_ask_for_refills[] = "ask_for_refills";
 static const char __pyx_k_dtype_is_object[] = "dtype_is_object";
 static const char __pyx_k_max_num_records[] = "max_num_records";
 static const char __pyx_k_pyx_PickleError[] = "__pyx_PickleError";
@@ -2189,6 +2191,7 @@ static PyObject *__pyx_n_s_actual_bytes;
 static PyObject *__pyx_n_s_allocate_buffer;
 static PyObject *__pyx_n_s_args;
 static PyObject *__pyx_n_s_arr;
+static PyObject *__pyx_n_s_ask_for_refills;
 static PyObject *__pyx_n_s_base;
 static PyObject *__pyx_n_s_batch_num_records;
 static PyObject *__pyx_n_s_block;
@@ -2291,7 +2294,7 @@ static PyObject *__pyx_n_s_update;
 static PyObject *__pyx_n_s_zeros;
 static PyObject *__pyx_pf_7sortlib_get_boundaries(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_n); /* proto */
 static PyObject *__pyx_pf_7sortlib_2sort_and_partition(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_part, PyObject *__pyx_v_boundaries, bool __pyx_v_skip_sorting); /* proto */
-static PyObject *__pyx_pf_7sortlib_4merge_partitions(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_num_blocks, PyObject *__pyx_v_get_block, PyObject *__pyx_v_batch_num_records); /* proto */
+static PyObject *__pyx_pf_7sortlib_4merge_partitions(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_num_blocks, PyObject *__pyx_v_get_block, PyObject *__pyx_v_batch_num_records, bool __pyx_v_ask_for_refills); /* proto */
 static int __pyx_array___pyx_pf_15View_dot_MemoryView_5array___cinit__(struct __pyx_array_obj *__pyx_v_self, PyObject *__pyx_v_shape, Py_ssize_t __pyx_v_itemsize, PyObject *__pyx_v_format, PyObject *__pyx_v_mode, int __pyx_v_allocate_buffer); /* proto */
 static int __pyx_array___pyx_pf_15View_dot_MemoryView_5array_2__getbuffer__(struct __pyx_array_obj *__pyx_v_self, Py_buffer *__pyx_v_info, int __pyx_v_flags); /* proto */
 static void __pyx_array___pyx_pf_15View_dot_MemoryView_5array_4__dealloc__(struct __pyx_array_obj *__pyx_v_self); /* proto */
@@ -2878,7 +2881,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
  */
 
 /* Python wrapper */
@@ -2889,6 +2892,7 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
   PyObject *__pyx_v_num_blocks = 0;
   PyObject *__pyx_v_get_block = 0;
   PyObject *__pyx_v_batch_num_records = 0;
+  bool __pyx_v_ask_for_refills;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
@@ -2896,13 +2900,15 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("merge_partitions (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_num_blocks,&__pyx_n_s_get_block,&__pyx_n_s_batch_num_records,0};
-    PyObject* values[3] = {0,0,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_num_blocks,&__pyx_n_s_get_block,&__pyx_n_s_batch_num_records,&__pyx_n_s_ask_for_refills,0};
+    PyObject* values[4] = {0,0,0,0};
     values[2] = ((PyObject *)__pyx_int_10485760);
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
       switch (pos_args) {
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
         case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
         CYTHON_FALLTHROUGH;
         case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
@@ -2921,7 +2927,7 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_get_block)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("merge_partitions", 0, 2, 3, 1); __PYX_ERR(0, 74, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("merge_partitions", 0, 2, 4, 1); __PYX_ERR(0, 74, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
@@ -2929,12 +2935,20 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
           PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_batch_num_records);
           if (value) { values[2] = value; kw_args--; }
         }
+        CYTHON_FALLTHROUGH;
+        case  3:
+        if (kw_args > 0) {
+          PyObject* value = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_ask_for_refills);
+          if (value) { values[3] = value; kw_args--; }
+        }
       }
       if (unlikely(kw_args > 0)) {
         if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "merge_partitions") < 0)) __PYX_ERR(0, 74, __pyx_L3_error)
       }
     } else {
       switch (PyTuple_GET_SIZE(__pyx_args)) {
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
         case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
         CYTHON_FALLTHROUGH;
         case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
@@ -2946,23 +2960,44 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
     __pyx_v_num_blocks = values[0];
     __pyx_v_get_block = values[1];
     __pyx_v_batch_num_records = values[2];
+    if (values[3]) {
+      __pyx_v_ask_for_refills = __Pyx_PyObject_IsTrue(values[3]); if (unlikely((__pyx_v_ask_for_refills == ((bool)-1)) && PyErr_Occurred())) __PYX_ERR(0, 76, __pyx_L3_error)
+    } else {
+
+      /* "sortlib.pyx":76
+ * def merge_partitions(
+ *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:             # <<<<<<<<<<<<<<
+ *     """
+ *     An iterator that returns merged blocks for upload.
+ */
+      __pyx_v_ask_for_refills = ((bool)1);
+    }
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("merge_partitions", 0, 2, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 74, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("merge_partitions", 0, 2, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 74, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("sortlib.merge_partitions", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_7sortlib_4merge_partitions(__pyx_self, __pyx_v_num_blocks, __pyx_v_get_block, __pyx_v_batch_num_records);
+  __pyx_r = __pyx_pf_7sortlib_4merge_partitions(__pyx_self, __pyx_v_num_blocks, __pyx_v_get_block, __pyx_v_batch_num_records, __pyx_v_ask_for_refills);
+
+  /* "sortlib.pyx":74
+ * 
+ * 
+ * def merge_partitions(             # <<<<<<<<<<<<<<
+ *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
+ */
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_7sortlib_4merge_partitions(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_num_blocks, PyObject *__pyx_v_get_block, PyObject *__pyx_v_batch_num_records) {
+static PyObject *__pyx_pf_7sortlib_4merge_partitions(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_num_blocks, PyObject *__pyx_v_get_block, PyObject *__pyx_v_batch_num_records, bool __pyx_v_ask_for_refills) {
   struct __pyx_obj_7sortlib___pyx_scope_struct__merge_partitions *__pyx_cur_scope;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -2987,6 +3022,7 @@ static PyObject *__pyx_pf_7sortlib_4merge_partitions(CYTHON_UNUSED PyObject *__p
   __pyx_cur_scope->__pyx_v_batch_num_records = __pyx_v_batch_num_records;
   __Pyx_INCREF(__pyx_cur_scope->__pyx_v_batch_num_records);
   __Pyx_GIVEREF(__pyx_cur_scope->__pyx_v_batch_num_records);
+  __pyx_cur_scope->__pyx_v_ask_for_refills = __pyx_v_ask_for_refills;
   {
     __pyx_CoroutineObject *gen = __Pyx_Generator_New((__pyx_coroutine_body_t) __pyx_gb_7sortlib_6generator, __pyx_codeobj_, (PyObject *) __pyx_cur_scope, __pyx_n_s_merge_partitions, __pyx_n_s_merge_partitions, __pyx_n_s_sortlib); if (unlikely(!gen)) __PYX_ERR(0, 74, __pyx_L1_error)
     __Pyx_DECREF(__pyx_cur_scope);
@@ -3329,7 +3365,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  *     cdef size_t max_num_records = batch_num_records
  *     while True:             # <<<<<<<<<<<<<<
  *         with nogil:
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  */
   while (1) {
 
@@ -3337,7 +3373,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  *     cdef size_t max_num_records = batch_num_records
  *     while True:
  *         with nogil:             # <<<<<<<<<<<<<<
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  *         cnt, part_id = ret
  */
     {
@@ -3351,18 +3387,18 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
           /* "sortlib.pyx":96
  *     while True:
  *         with nogil:
- *             ret = merger.GetBatch(ptr, max_num_records)             # <<<<<<<<<<<<<<
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)             # <<<<<<<<<<<<<<
  *         cnt, part_id = ret
  *         if cnt == 0:
  */
-          __pyx_cur_scope->__pyx_v_ret = __pyx_cur_scope->__pyx_v_merger->GetBatch(__pyx_cur_scope->__pyx_v_ptr, __pyx_cur_scope->__pyx_v_max_num_records);
+          __pyx_cur_scope->__pyx_v_ret = __pyx_cur_scope->__pyx_v_merger->GetBatch(__pyx_cur_scope->__pyx_v_ptr, __pyx_cur_scope->__pyx_v_max_num_records, __pyx_cur_scope->__pyx_v_ask_for_refills);
         }
 
         /* "sortlib.pyx":95
  *     cdef size_t max_num_records = batch_num_records
  *     while True:
  *         with nogil:             # <<<<<<<<<<<<<<
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  *         cnt, part_id = ret
  */
         /*finally:*/ {
@@ -3379,7 +3415,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
 
     /* "sortlib.pyx":97
  *         with nogil:
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  *         cnt, part_id = ret             # <<<<<<<<<<<<<<
  *         if cnt == 0:
  *             return
@@ -3442,7 +3478,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
     __pyx_t_6 = 0;
 
     /* "sortlib.pyx":98
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  *         cnt, part_id = ret
  *         if cnt == 0:             # <<<<<<<<<<<<<<
  *             return
@@ -3466,7 +3502,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
       goto __pyx_L0;
 
       /* "sortlib.pyx":98
- *             ret = merger.GetBatch(ptr, max_num_records)
+ *             ret = merger.GetBatch(ptr, max_num_records, ask_for_refills)
  *         cnt, part_id = ret
  *         if cnt == 0:             # <<<<<<<<<<<<<<
  *             return
@@ -3666,7 +3702,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
  */
 
   /* function exit code */
@@ -17913,6 +17949,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_allocate_buffer, __pyx_k_allocate_buffer, sizeof(__pyx_k_allocate_buffer), 0, 0, 1, 1},
   {&__pyx_n_s_args, __pyx_k_args, sizeof(__pyx_k_args), 0, 0, 1, 1},
   {&__pyx_n_s_arr, __pyx_k_arr, sizeof(__pyx_k_arr), 0, 0, 1, 1},
+  {&__pyx_n_s_ask_for_refills, __pyx_k_ask_for_refills, sizeof(__pyx_k_ask_for_refills), 0, 0, 1, 1},
   {&__pyx_n_s_base, __pyx_k_base, sizeof(__pyx_k_base), 0, 0, 1, 1},
   {&__pyx_n_s_batch_num_records, __pyx_k_batch_num_records, sizeof(__pyx_k_batch_num_records), 0, 0, 1, 1},
   {&__pyx_n_s_block, __pyx_k_block, sizeof(__pyx_k_block), 0, 0, 1, 1},
@@ -18254,12 +18291,12 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
  */
-  __pyx_tuple__24 = PyTuple_Pack(17, __pyx_n_s_num_blocks, __pyx_n_s_get_block, __pyx_n_s_batch_num_records, __pyx_n_s_blocks, __pyx_n_s_block_indexes, __pyx_n_s_record_arrays, __pyx_n_s_block, __pyx_n_s_merger, __pyx_n_s_buffer, __pyx_n_s_mv, __pyx_n_s_ptr, __pyx_n_s_max_num_records, __pyx_n_s_ret, __pyx_n_s_cnt, __pyx_n_s_part_id, __pyx_n_s_actual_bytes, __pyx_n_s_i); if (unlikely(!__pyx_tuple__24)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_tuple__24 = PyTuple_Pack(18, __pyx_n_s_num_blocks, __pyx_n_s_get_block, __pyx_n_s_batch_num_records, __pyx_n_s_ask_for_refills, __pyx_n_s_blocks, __pyx_n_s_block_indexes, __pyx_n_s_record_arrays, __pyx_n_s_block, __pyx_n_s_merger, __pyx_n_s_buffer, __pyx_n_s_mv, __pyx_n_s_ptr, __pyx_n_s_max_num_records, __pyx_n_s_ret, __pyx_n_s_cnt, __pyx_n_s_part_id, __pyx_n_s_actual_bytes, __pyx_n_s_i); if (unlikely(!__pyx_tuple__24)) __PYX_ERR(0, 74, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__24);
   __Pyx_GIVEREF(__pyx_tuple__24);
-  __pyx_codeobj_ = (PyObject*)__Pyx_PyCode_New(3, 0, 17, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__24, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_sortlib_pyx, __pyx_n_s_merge_partitions, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj_)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_codeobj_ = (PyObject*)__Pyx_PyCode_New(4, 0, 18, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__24, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_sortlib_pyx, __pyx_n_s_merge_partitions, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj_)) __PYX_ERR(0, 74, __pyx_L1_error)
 
   /* "View.MemoryView":286
  *         return self.name
@@ -18923,7 +18960,7 @@ if (!__Pyx_RefNanny) {
  * 
  * def merge_partitions(             # <<<<<<<<<<<<<<
  *         num_blocks: int, get_block: Callable[[int, int], np.ndarray],
- *         batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+ *         batch_num_records: int = 10 * 1024 * 1024, ask_for_refills: bool = True) -> Iterable[np.ndarray]:
  */
   __pyx_t_3 = PyCFunction_NewEx(&__pyx_mdef_7sortlib_5merge_partitions, NULL, __pyx_n_s_sortlib); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 74, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);

@@ -96,7 +96,7 @@ namespace csortlib
     // Returns (count, part_id) where
     // - count is the actual number of records written into `ret`, and
     // - part_id is the partition that has been depleted (-1 if none).
-    GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records);
+    GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records, bool ask_for_refills = true);
 
     void Refill(const ConstArray<Record> &part, int part_id);
 
