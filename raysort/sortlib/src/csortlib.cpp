@@ -59,10 +59,11 @@ std::unique_ptr<std::vector<SortItem>> _MakeSortItems(const Array<Record> &recor
 #endif
 
 std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
-                                        const std::vector<Key> &boundaries) {
+                                        const std::vector<Key> &boundaries, bool skip_sorting) {
   Record *const records = record_array.ptr;
   const size_t num_records = record_array.size;
 
+  if (!skip_sorting) {
 #ifdef CSORTLIB_USE_ALT_MEMORY_LAYOUT
   auto sort_items = _MakeSortItems(record_array);
 
@@ -84,6 +85,7 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
 #else
   std::sort(records, records + num_records, HeaderComparator<Record>());
 #endif
+  }
 
   std::vector<Partition> ret;
   ret.reserve(boundaries.size());

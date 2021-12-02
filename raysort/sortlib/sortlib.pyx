@@ -2,6 +2,7 @@
 # distutils: sources = src/csortlib.cpp
 
 from libc.stdint cimport uint8_t, uint64_t
+from libcpp cimport bool
 from libcpp.pair cimport pair
 from libcpp.vector cimport vector
 
@@ -27,7 +28,7 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
         const T* ptr
         size_t size
     cdef vector[Key] GetBoundaries(size_t num_partitions)
-    cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries) nogil
+    cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries, bool skip_sorting) nogil
     cdef cppclass Merger:
         Merger(const vector[ConstArray[Record]]& parts) nogil
         pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
@@ -64,9 +65,9 @@ cdef ConstArray[Record] _to_const_record_array(buf):
     return ret
 
 
-def sort_and_partition(part: np.ndarray, boundaries: List[int]) -> List[BlockInfo]:
+def sort_and_partition(part: np.ndarray, boundaries: List[int], skip_sorting: bool = False) -> List[BlockInfo]:
     arr = _to_record_array(part)
-    blocks = SortAndPartition(arr, boundaries)
+    blocks = SortAndPartition(arr, boundaries, skip_sorting)
     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in blocks]
 
 
