@@ -1,0 +1,6 @@
+ansible
+azure-cli
+jinja2
+memory_profiler
+pyyaml
+yapf

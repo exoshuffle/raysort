@@ -8,5 +8,4 @@ build
 cython_debug
 
 bin
-raysort/sortlib/src/test
-wandb
+data

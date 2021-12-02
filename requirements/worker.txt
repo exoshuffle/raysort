@@ -1,10 +1,6 @@
 absl-py
-boto3
-botocore
 Cython
 IPython
-jinja2
 numpy
 pandas
-ray
-yapf
+ray[all]==1.9.0rc2
