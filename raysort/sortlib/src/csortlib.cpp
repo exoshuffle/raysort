@@ -17,8 +17,7 @@
 
 namespace csortlib {
 
-template <typename T>
-size_t _TotalSize(const std::vector<T> &parts) {
+template <typename T> size_t _TotalSize(const std::vector<T> &parts) {
   size_t ret = 0;
   for (const auto &part : parts) {
     ret += part.size;
@@ -42,7 +41,8 @@ struct SortItemComparator {
   }
 };
 
-std::unique_ptr<std::vector<SortItem>> _MakeSortItems(const Array<Record> &record_array) {
+std::unique_ptr<std::vector<SortItem>>
+_MakeSortItems(const Array<Record> &record_array) {
   Record *const records = record_array.ptr;
   const size_t num_records = record_array.size;
   auto ret = std::make_unique<std::vector<SortItem>>();
@@ -59,21 +59,22 @@ std::unique_ptr<std::vector<SortItem>> _MakeSortItems(const Array<Record> &recor
 #endif
 
 std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
-                                        const std::vector<Key> &boundaries, bool skip_sorting) {
+                                        const std::vector<Key> &boundaries) {
   Record *const records = record_array.ptr;
   const size_t num_records = record_array.size;
 
-  if (!skip_sorting) {
 #ifdef CSORTLIB_USE_ALT_MEMORY_LAYOUT
   auto sort_items = _MakeSortItems(record_array);
 
   const auto start1 = std::chrono::high_resolution_clock::now();
 
-  std::sort(sort_items->begin(), sort_items->end(), HeaderComparator<SortItem>());
+  std::sort(sort_items->begin(), sort_items->end(),
+            HeaderComparator<SortItem>());
 
   const auto stop1 = std::chrono::high_resolution_clock::now();
   printf("Sort,%ld\n",
-         std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1).count());
+         std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+             .count());
 
   Record *buffer = new Record[num_records];
   Record *cur = buffer;
@@ -85,7 +86,6 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
 #else
   std::sort(records, records + num_records, HeaderComparator<Record>());
 #endif
-  }
 
   std::vector<Partition> ret;
   ret.reserve(boundaries.size());
@@ -140,14 +140,29 @@ struct SortDataComparator {
 };
 
 class Merger::Impl {
- public:
+public:
   std::vector<ConstArray<Record>> parts_;
-  std::priority_queue<SortData, std::vector<SortData>, SortDataComparator> heap_;
+  std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
+      heap_;
+  bool ask_for_refills_;
+  std::vector<Key> boundaries_;
 
-  Impl(const std::vector<ConstArray<Record>> &parts) : parts_(parts) {
+  size_t bound_i_ = 0;
+  bool past_last_bound_ = false;
+
+  Impl(const std::vector<ConstArray<Record>> &parts, bool ask_for_refills,
+       const std::vector<Key> &boundaries)
+      : parts_(parts), ask_for_refills_(ask_for_refills),
+        boundaries_(boundaries) {
     for (int i = 0; i < (int)parts_.size(); ++i) {
       _PushFirstItem(parts_[i], i);
     }
+    _IncBound();
+  }
+
+  void _IncBound() {
+    bound_i_++;
+    past_last_bound_ = bound_i_ >= boundaries_.size();
   }
 
   inline void _PushFirstItem(const ConstArray<Record> &part, int part_id) {
@@ -162,14 +177,19 @@ class Merger::Impl {
     _PushFirstItem(part, part_id);
   }
 
-  GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records, bool ask_for_refills) {
+  GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records) {
     size_t cnt = 0;
     auto cur = ret;
+    Key bound = past_last_bound_ ? 0 : boundaries_[bound_i_];
     while (!heap_.empty()) {
       if (cnt >= max_num_records) {
         return std::make_pair(cnt, -1);
       }
       const SortData top = heap_.top();
+      if (!past_last_bound_ && top.record->key() >= bound) {
+        _IncBound();
+        return std::make_pair(cnt, -1);
+      }
       heap_.pop();
       const int i = top.partition;
       const size_t j = top.index;
@@ -178,32 +198,35 @@ class Merger::Impl {
       ++cnt;
       if (j + 1 < parts_[i].size) {
         heap_.push({top.record + 1, i, j + 1});
-      } else if (ask_for_refills) {
+      } else if (ask_for_refills_) {
         return std::make_pair(cnt, i);
       }
     }
     return std::make_pair(cnt, -1);
   }
-};
+}; // namespace csortlib
 
-Merger::Merger(const std::vector<ConstArray<Record>> &parts)
-    : impl_(std::make_unique<Impl>(parts)) {}
+Merger::Merger(const std::vector<ConstArray<Record>> &parts,
+               bool ask_for_refills, const std::vector<Key> &boundaries)
+    : impl_(std::make_unique<Impl>(parts, ask_for_refills, boundaries)) {}
 
-GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records, bool ask_for_refills) {
-  return impl_->GetBatch(ret, max_num_records, ask_for_refills);
+GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records) {
+  return impl_->GetBatch(ret, max_num_records);
 }
 
 void Merger::Refill(const ConstArray<Record> &part, int part_id) {
   return impl_->Refill(part, part_id);
 }
 
-Array<Record> MergePartitions(const std::vector<ConstArray<Record>> &parts) {
+Array<Record> MergePartitions(const std::vector<ConstArray<Record>> &parts,
+                              bool ask_for_refills,
+                              const std::vector<Key> &boundaries) {
   const size_t num_records = _TotalSize(parts);
   if (num_records == 0) {
     return {nullptr, 0};
   }
-  Record *const ret = new Record[num_records];  // need to manually delete
-  Merger merger(parts);
+  Record *const ret = new Record[num_records]; // need to manually delete
+  Merger merger(parts, ask_for_refills, boundaries);
   merger.GetBatch(ret, num_records);
   return {ret, num_records};
 }
@@ -212,7 +235,7 @@ void _ReadPartition(const std::string &filename, size_t offset, char *buffer,
                     size_t buffer_size, ConstArray<Record> *ret) {
   printf("Read %s offset=%lu\n", filename.c_str(), offset);
   std::ifstream fin(filename, std::ios::in | std::ios::binary);
-  fin.seekg(offset);  // TODO: what bits does this set, if any?
+  fin.seekg(offset); // TODO: what bits does this set, if any?
   fin.read(buffer, buffer_size);
   const auto bytes_read = fin.gcount();
   assert(bytes_read % RECORD_SIZE == 0);
@@ -223,8 +246,7 @@ void _ReadPartition(const std::string &filename, size_t offset, char *buffer,
 FileMerger::FileMerger(const std::vector<std::string> &input_files,
                        const std::string &output_file, size_t input_batch_bytes,
                        size_t output_batch_records)
-    : input_files_(input_files),
-      output_file_(output_file),
+    : input_files_(input_files), output_file_(output_file),
       input_batch_bytes_(input_batch_bytes),
       output_batch_records_(output_batch_records),
       num_inputs_(input_files.size()) {}
@@ -239,15 +261,16 @@ size_t FileMerger::Run() {
     input_buffers.emplace_back(std::make_unique<char[]>(input_batch_bytes_));
     input_record_arrays.emplace_back(ConstArray<Record>());
   }
-  auto output_buffer = std::make_unique<char[]>(output_batch_records_ * RECORD_SIZE);
+  auto output_buffer =
+      std::make_unique<char[]>(output_batch_records_ * RECORD_SIZE);
 
   // Load initial partitions.
   std::vector<std::thread> input_threads;
   input_threads.reserve(num_inputs_);
   for (size_t i = 0; i < num_inputs_; ++i) {
-    input_threads.emplace_back(std::thread(_ReadPartition, input_files_[i], 0,
-                                           input_buffers[i].get(), input_batch_bytes_,
-                                           &input_record_arrays[i]));
+    input_threads.emplace_back(
+        std::thread(_ReadPartition, input_files_[i], 0, input_buffers[i].get(),
+                    input_batch_bytes_, &input_record_arrays[i]));
   }
   for (auto &thread : input_threads) {
     thread.join();
@@ -260,4 +283,4 @@ size_t FileMerger::Run() {
   return 0;
 }
 
-}  // namespace csortlib
+} // namespace csortlib

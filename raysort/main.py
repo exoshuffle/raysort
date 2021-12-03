@@ -1,5 +1,4 @@
 import argparse
-import contextlib
 import csv
 import datetime
 import logging
@@ -154,7 +153,7 @@ def generate_input(args: Args):
     offset = 0
     tasks = []
     for part_id in range(args.num_mappers):
-        node = args.node_resources[part_id % args.num_workers]
+        node = args.node_ips[part_id % args.num_workers]
         tasks.append(
             generate_part.options(**_node_res(node)).remote(
                 args, part_id, min(size, total_size - offset), offset))
@@ -175,7 +174,7 @@ def generate_input(args: Args):
 def _load_manifest(args: Args, path: Path) -> List[PartInfo]:
     if args.skip_input:
         return [
-            PartInfo(i, args.node_resources[i % args.num_workers], None)
+            PartInfo(i, args.node_ips[i % args.num_workers], None)
             for i in range(args.num_mappers)
         ]
     with open(path) as fin:
@@ -202,8 +201,8 @@ def _load_partition(args: Args, path: Path) -> np.ndarray:
 
 
 def _dummy_sort_and_partition(part: np.ndarray,
-                              boundaries: List[int]) -> List[BlockInfo]:
-    N = len(boundaries)
+                              bounds: List[int]) -> List[BlockInfo]:
+    N = len(bounds)
     offset = 0
     size = int(np.ceil(part.size / N))
     blocks = []
@@ -218,7 +217,7 @@ def _dummy_sort_and_partition(part: np.ndarray,
 def mapper(
     args: Args,
     mapper_id: PartId,
-    boundaries: List[int],
+    bounds: List[int],
     path: Path,
 ) -> List[np.ndarray]:
     start_time = time.time()
@@ -227,7 +226,7 @@ def mapper(
     tracing_utils.record_value("map_disk_time", load_duration)
     sort_fn = _dummy_sort_and_partition \
         if args.skip_sorting else sortlib.sort_and_partition
-    blocks = sort_fn(part, boundaries)
+    blocks = sort_fn(part, bounds)
     return [part[offset:offset + size] for offset, size in blocks]
     # return [ray.put(part[offset:offset + size]) for offset, size in blocks]
 
@@ -269,8 +268,7 @@ def _merge_impl(
     return pinfo
 
 
-# See worker_placement_groups() for why `num_cpus=0`.
-@ray.remote(num_cpus=0, resources={"worker": 1})
+@ray.remote
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
     args: Args,
@@ -280,8 +278,8 @@ def merge_mapper_blocks(
     *blocks: List[np.ndarray],
 ) -> PartInfo:
     M = len(blocks)
-    num_bytes = sum(b.size for b in blocks)
-    num_records = int(num_bytes // constants.RECORD_SIZE)
+    total_bytes = sum(b.size for b in blocks)
+    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
 
     # blocks = ray.get(list(blocks))
 
@@ -291,42 +289,39 @@ def merge_mapper_blocks(
         return blocks[i]
 
     merge_fn = _dummy_merge if args.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block, num_records, False)
+    merger = merge_fn(M, get_block, num_records, False, bounds)
 
-    chunks = list(merger)
-    del merger, blocks
-    assert len(chunks) == 1, (len(chunks), num_records,
-                              [c.size for c in chunks])
-    part = chunks[0]
-    blocks = sortlib.sort_and_partition(part, bounds, skip_sorting=True)
-    if args.use_object_store:
-        return [part[offset:offset + size] for offset, size in blocks]
-    else:
-        ret = []
-        for i, (offset, size) in enumerate(blocks):
+    ret = []
+    for i, datachunk in enumerate(merger):
+        if args.use_object_store:
+            ret.append(ray.put(datachunk))
+        else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = _part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
-                fout.write(part[offset:offset + size])
+                datachunk.tofile(fout)
             ret.append(pinfo)
-        return ret
+    assert len(ret) == len(bounds), (ret, bounds)
+    return ret
 
 
-# See worker_placement_groups() for why `num_cpus=0`.
-@ray.remote(num_cpus=0, resources={"worker": 1})
+# TODO: Find out optimal reduce concurrency
+@ray.remote(resources={"worker": 1 / 2})
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
     worker_id: PartId,
     reducer_id: PartId,
-    *merged_parts: List[PartInfo],
+    *parts: List[PartInfo],
 ) -> PartInfo:
-    M = len(merged_parts)
+    M = len(parts)
 
     def get_block(i: int, d: int) -> np.ndarray:
         if i >= M or d > 0:
             return None
-        part = merged_parts[i]
+        part = ray.get(parts[i])
+        if args.use_object_store:
+            return part
         if part is None:
             return None
         with open(part.path, "rb", buffering=args.io_size) as fin:
@@ -334,7 +329,6 @@ def final_merge(
             if ret.size == 0:
                 return None
             return ret
-        # return part
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = _part_info(args, part_id, "output")
@@ -345,36 +339,12 @@ def _node_res(node: str) -> Dict[str, float]:
     return {"resources": {f"node:{node}": 1e-3}}
 
 
-@contextlib.contextmanager
-def worker_placement_groups(args: Args) -> List[ray.PlacementGroupID]:
-    """
-    Returns one placement group per node with a `worker` resource. To run
-    tasks in the placement group, use
-    `@ray.remote(num_cpus=0, resources={"worker": 1})`. Ray does not
-    automatically reserve CPU resources, so tasks must specify `num_cpus=0`
-    in order to run in a placement group.
-    """
-    pgs = [
-        ray.util.placement_group([{
-            "worker": 1
-        }]) for _ in range(args.num_workers)
-    ]
-    ray.get([pg.ready() for pg in pgs])
-    try:
-        yield pgs
-    finally:
-        for pg in pgs:
-            ray.util.remove_placement_group(pg)
-
-
 def get_boundaries(args: Args) -> Tuple[List[int], List[List[int]]]:
-    map_bounds = sortlib.get_boundaries(args.num_workers)
     merge_bounds_flat = sortlib.get_boundaries(args.num_workers *
                                                args.num_reducers_per_worker)
     merge_bounds = np.array(merge_bounds_flat, dtype=np.uint64).reshape(
         args.num_workers, args.num_reducers_per_worker).tolist()
-    assert map_bounds == [b[0]
-                          for b in merge_bounds], (map_bounds, merge_bounds)
+    map_bounds = [b[0] for b in merge_bounds]
     return map_bounds, merge_bounds
 
 
@@ -390,70 +360,68 @@ def sort_main(args: Args):
                               args.num_reducers_per_worker),
                              dtype=object)
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
+    worker_res = [_node_res(node) for node in args.node_ips]
 
     part_id = 0
-    with worker_placement_groups(args) as pgs:
-        for round in range(args.num_rounds):
-            # Submit map tasks.
-            num_map_tasks = min(num_map_tasks_per_round,
-                                args.num_mappers - part_id)
-            map_results = np.empty((num_map_tasks, args.num_workers),
-                                   dtype=object)
-            for _ in range(num_map_tasks):
-                _, node, path = parts[part_id]
-                opt = dict(**mapper_opt, **_node_res(node))
-                m = part_id % num_map_tasks_per_round
-                map_results[m, :] = mapper.options(**opt).remote(
-                    args, part_id, map_bounds, path)
-                part_id += 1
+    for round in range(args.num_rounds):
+        # Submit map tasks.
+        num_map_tasks = min(num_map_tasks_per_round,
+                            args.num_mappers - part_id)
+        map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
+        for _ in range(num_map_tasks):
+            _, node, path = parts[part_id]
+            opt = dict(**mapper_opt, **_node_res(node))
+            m = part_id % num_map_tasks_per_round
+            map_results[m, :] = mapper.options(**opt).remote(
+                args, part_id, map_bounds, path)
+            part_id += 1
 
-            # Make sure previous rounds finish before scheduling merge tasks.
-            num_extra_rounds = round - args.num_concurrent_rounds + 1
-            if num_extra_rounds > 0:
-                ray.wait([t for t in merge_results[0, :, 0] if t is not None],
-                         num_returns=num_extra_rounds * args.merge_parallelism,
-                         fetch_local=False)
+        # Make sure previous rounds finish before scheduling merge tasks.
+        num_extra_rounds = round - args.num_concurrent_rounds + 1
+        if num_extra_rounds > 0:
+            ray.wait([t for t in merge_results[0, :, 0] if t is not None],
+                     num_returns=num_extra_rounds * args.merge_parallelism,
+                     fetch_local=False)
 
-            # Submit merge tasks.
-            for j in range(args.merge_parallelism):
-                m = round * args.merge_parallelism + j
-                f = int(np.ceil(num_map_tasks / args.merge_parallelism))
-                for w in range(args.num_workers):
-                    merge_results[w, m, :] = merge_mapper_blocks.options(
-                        **merger_opt, placement_group=pgs[w]).remote(
-                            args, w, m, merge_bounds[w],
-                            *map_results[j * f:(j + 1) * f,
-                                         w].flatten().tolist())
+        # Submit merge tasks.
+        for j in range(args.merge_parallelism):
+            m = round * args.merge_parallelism + j
+            f = int(np.ceil(num_map_tasks / args.merge_parallelism))
+            for w in range(args.num_workers):
+                merge_results[w, m, :] = merge_mapper_blocks.options(
+                    **merger_opt, **worker_res[w]).remote(
+                        args, w, m, merge_bounds[w],
+                        *map_results[j * f:(j + 1) * f, w].flatten().tolist())
 
-            # Wait for at least one map task from this round to finish before
-            # scheduling the next round.
-            ray.wait(map_results[:, 0].tolist(), fetch_local=False)
-            map_results = None
+        # Wait for at least one map task from this round to finish before
+        # scheduling the next round.
+        ray.wait(map_results[:, 0].tolist(), fetch_local=False)
+        map_results = None
 
-        if args.skip_final_merge:
-            tasks = [t for t in merge_results.flatten() if t is not None]
-            ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
-            return
+    if args.skip_final_merge:
+        tasks = [t for t in merge_results.flatten() if t is not None]
+        ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
+        return
 
-        # print(ray.internal.internal_api.memory_summary())
+    # print(ray.internal.internal_api.memory_summary())
 
-        # Submit second-stage reduce tasks.
-        reducer_results = np.empty(
-            (args.num_workers, args.num_reducers_per_worker), dtype=object)
-        # TODO: rate-limit this
-        for r in range(args.num_reducers_per_worker):
-            reducer_results[:, r] = [
-                final_merge.options(placement_group=pgs[w]).remote(
-                    args, w, r, *merge_results[w, :, r].tolist())
-                for w in range(args.num_workers)
-            ]
-        reducer_results = reducer_results.flatten().tolist()
-        reducer_results = ray.get(reducer_results)
+    # Submit second-stage reduce tasks.
+    reducer_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object)
+    for r in range(args.num_reducers_per_worker):
+        reducer_results[:, r] = [
+            final_merge.options(**worker_res[w]).remote(
+                args, w, r, *merge_results[w, :, r].tolist())
+            for w in range(args.num_workers)
+        ]
 
-        if not args.skip_output:
-            with open(constants.OUTPUT_MANIFEST_FILE, "w") as fout:
-                writer = csv.writer(fout)
-                writer.writerows(reducer_results)
+    reducer_results = reducer_results.flatten().tolist()
+    reducer_results = ray.get(reducer_results)
+
+    if not args.skip_output:
+        with open(constants.OUTPUT_MANIFEST_FILE, "w") as fout:
+            writer = csv.writer(fout)
+            writer.writerows(reducer_results)
 
 
 # ------------------------------------------------------------
@@ -520,18 +488,25 @@ def _get_resources_args(args: Args):
     args.num_workers = int(resources["worker"])
     head_addr = ray.util.get_node_ip_address()
     if not args.ray_address:
-        args.node_resources = [head_addr] * args.num_workers
+        args.node_ips = [head_addr] * args.num_workers
         args.num_nodes = 1
     else:
-        args.node_resources = [
+        args.node_ips = [
             r.split(":")[1] for r in resources
             if r.startswith("node:") and r != f"node:{head_addr}"
         ]
         args.num_nodes = args.num_workers + 1
-        assert args.num_workers == len(args.node_resources), args
+        assert args.num_workers == len(args.node_ips), args
     args.mount_points = _get_mount_points()
     args.node_workmem = resources["memory"] / args.num_nodes
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
+
+
+def _round_up_power_of_two(x: int) -> int:
+    ret = 1
+    while ret <= x:
+        ret <<= 1
+    return ret
 
 
 def _get_app_args(args: Args):
@@ -549,7 +524,8 @@ def _get_app_args(args: Args):
     args.num_rounds = int(
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism))
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
-    args.num_reducers_per_worker = 2  # TODO: deduce this
+    args.num_reducers_per_worker = _round_up_power_of_two(
+        args.num_mergers_per_worker)
 
 
 def init(args: Args):
