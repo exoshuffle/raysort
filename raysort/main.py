@@ -306,7 +306,7 @@ def merge_mapper_blocks(
 
 
 # TODO: Find out optimal reduce concurrency
-@ray.remote(resources={"worker": 1 / 2})
+@ray.remote(num_cpus=4)
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
@@ -319,9 +319,9 @@ def final_merge(
     def get_block(i: int, d: int) -> np.ndarray:
         if i >= M or d > 0:
             return None
-        part = ray.get(parts[i])
+        part = parts[i]
         if args.use_object_store:
-            return part
+            return ray.get(part)
         if part is None:
             return None
         with open(part.path, "rb", buffering=args.io_size) as fin:

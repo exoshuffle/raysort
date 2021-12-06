@@ -3,4 +3,4 @@ Cython
 IPython
 numpy
 pandas
-ray[all]==1.9.0rc2
+ray[all]==1.9.0
