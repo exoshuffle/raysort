@@ -9,7 +9,7 @@ from absl import logging
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "inventory_file",
-    "raysort-vmss.yml",
+    "vmss.yml",
     "path to the inventory file",
 )
 flags.DEFINE_string(
@@ -19,7 +19,7 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string(
     "resource_group",
-    "lsf-aa",
+    "raysort-ncus-rg",
     "Resource group name",
 )
 flags.DEFINE_string(

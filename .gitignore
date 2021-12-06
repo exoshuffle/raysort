@@ -1,6 +1,8 @@
+*.backup
 *.egg-info
 *.log
 *.so
+*.tfstate
 .gdb_history
 .vscode
 __pycache__
@@ -9,3 +11,5 @@ cython_debug
 
 bin
 data
+
+.terraform*
