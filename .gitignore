@@ -11,5 +11,6 @@ cython_debug
 
 bin
 data
+wandb
 
 .terraform*

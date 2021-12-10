@@ -3,4 +3,5 @@ azure-cli
 jinja2
 memory_profiler
 pyyaml
+wandb
 yapf

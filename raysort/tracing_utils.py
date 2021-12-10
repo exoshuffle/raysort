@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+import wandb
 
 import pandas as pd
 import ray
@@ -23,6 +24,7 @@ def timeit(
     report_time=False,
     report_in_progress=True,
     report_completed=True,
+    log_to_wandb=False,
 ):
     def decorator(f):
         @functools.wraps(f)
@@ -44,6 +46,7 @@ def timeit(
                 tracker.inc.remote(
                     f"{event}_completed",
                     echo=report_completed,
+                    log_to_wandb=log_to_wandb,
                 )
                 return ret
             finally:
@@ -102,12 +105,14 @@ class ProgressTracker:
         self.reset_gauges()
         logging_utils.init()
         logging.info(args)
+        wandb.init()
+        wandb.config.update(args)
 
     def reset_gauges(self):
         for g in self.gauges.values():
             g.set(0)
 
-    def inc(self, metric_name, value=1, echo=False):
+    def inc(self, metric_name, value=1, echo=False, log_to_wandb=False):
         gauge = self.gauges.get(metric_name)
         if gauge is None:
             logging.warning(f"No such Gauge: {metric_name}")
@@ -116,14 +121,18 @@ class ProgressTracker:
         gauge.set(self.counts[metric_name])
         if echo:
             logging.info(f"{metric_name} {self.counts[metric_name]}")
+        if log_to_wandb:
+            wandb.log({metric_name: self.counts[metric_name]})
 
     def dec(self, metric_name, value=1, echo=False):
         return self.inc(metric_name, -value, echo)
 
-    def record_value(self, metric_name, value, echo=False):
+    def record_value(self, metric_name, value, echo=False, log_to_wandb=False):
         self.series[metric_name].append(value)
         if echo:
             logging.info(f"{metric_name} {value}")
+        if log_to_wandb:
+            wandb.log({metric_name: value})
 
     def record_span(self, span: Span, record_value=True, echo=False):
         self.spans.append(span)
@@ -146,7 +155,18 @@ class ProgressTracker:
             ])
         df = pd.DataFrame(
             ret, columns=["task", "mean", "std", "max", "min", "count"])
+        wandb.log({"performance_summary": wandb.Table(dataframe=df)})
+        self.save_trace()
+        wandb.finish()
         return df
+
+    def save_trace(self):
+        self.spans.sort(key=lambda span: span.time)
+        ret = [_make_trace_event(span) for span in self.spans]
+        filename = f"/tmp/raysort-{self.run_args.run_id}.json"
+        with open(filename, "w") as fout:
+            json.dump(ret, fout)
+        wandb.save(filename, base_path="/tmp")
 
 
 def performance_report(tracker: ray.actor.ActorHandle):
