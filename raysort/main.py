@@ -7,7 +7,7 @@ import random
 import subprocess
 import tempfile
 import time
-from typing import Callable, Dict, Iterable, List, Tuple
+from typing import Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import ray
@@ -37,14 +37,14 @@ def get_args(*args, **kwargs):
         help="if set to None, will launch a local Ray cluster",
     )
     parser.add_argument(
-        "--total_data_size",
-        default=1 * 1000 * 1024 * 1024 * 1024,
-        type=ByteCount,
-        help="total data size in bytes",
+        "--total_tb",
+        default=1,
+        type=float,
+        help="total data size in TiB",
     )
     parser.add_argument(
         "--input_part_size",
-        default=2500 * 1024 * 1024,
+        default=2500 * 1000 * 1000,
         type=ByteCount,
         help="size in bytes of each map partition",
     )
@@ -278,10 +278,10 @@ def merge_mapper_blocks(
     *blocks: List[np.ndarray],
 ) -> PartInfo:
     M = len(blocks)
+    # blocks = ray.get(list(blocks))
+
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
-
-    # blocks = ray.get(list(blocks))
 
     def get_block(i, d):
         if i >= M or d > 0:
@@ -306,13 +306,13 @@ def merge_mapper_blocks(
 
 
 # TODO: Find out optimal reduce concurrency
-@ray.remote(num_cpus=4)
+@ray.remote(num_cpus=2)
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
     worker_id: PartId,
     reducer_id: PartId,
-    *parts: List[PartInfo],
+    *parts: Union[List[PartInfo], List[ray.ObjectRef]],
 ) -> PartInfo:
     M = len(parts)
 
@@ -396,7 +396,7 @@ def sort_main(args: Args):
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         ray.wait(map_results[:, 0].tolist(), fetch_local=False)
-        map_results = None
+        del map_results
 
     if args.skip_final_merge:
         tasks = [t for t in merge_results.flatten() if t is not None]
@@ -414,6 +414,7 @@ def sort_main(args: Args):
                 args, w, r, *merge_results[w, :, r].tolist())
             for w in range(args.num_workers)
         ]
+    del merge_results
 
     reducer_results = reducer_results.flatten().tolist()
     reducer_results = ray.get(reducer_results)
@@ -517,6 +518,7 @@ def _get_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
+    args.total_data_size = args.total_tb * 10**12
     args.num_mappers = int(np.ceil(args.total_data_size /
                                    args.input_part_size))
     assert args.map_parallelism % args.merge_factor == 0, args
@@ -525,29 +527,36 @@ def _get_app_args(args: Args):
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism))
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
     args.num_reducers_per_worker = _round_up_power_of_two(
-        args.num_mergers_per_worker)
+        args.num_mergers_per_worker * args.merge_factor)
 
 
-def init(args: Args):
+def init(args: Args) -> ray.actor.ActorHandle:
     if not args.ray_address:
-        total_mem = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
         ray.init(
-            resources={"worker": os.cpu_count() // 2},
-            object_store_memory=total_mem * 0.4,
-        )
+            resources={
+                "head": 1,
+                "worker": os.cpu_count() // 2,
+            },
+            _system_config={
+                "max_io_workers":
+                8,
+                "object_spilling_threshold":
+                1,
+                "object_spilling_config":
+                "{\"type\":\"filesystem\",\"params\":{\"directory_path\":[\"/mnt/nvme0/tmp/ray\"]}}",
+            })
     else:
         ray.init(address=args.ray_address)
     logging_utils.init()
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_resources_args(args)
     _get_app_args(args)
-    logging.info(args)
     progress_tracker = tracing_utils.create_progress_tracker(args)
     return progress_tracker
 
 
 def main(args: Args):
-    agent = init(args)
+    tracker = init(args)
 
     if args.generate_input:
         generate_input(args)
@@ -558,7 +567,7 @@ def main(args: Args):
     if args.validate_output:
         validate_output(args)
 
-    tracing_utils.performance_report(args.run_id, agent)
+    tracing_utils.performance_report(tracker)
 
 
 if __name__ == "__main__":
