@@ -27,10 +27,10 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
     cdef cppclass ConstArray[T]:
         const T* ptr
         size_t size
-    cdef vector[Key] GetBoundaries(size_t num_partitions)
-    cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries, bool skip_sorting) nogil
+    cdef vector[Key] GetBoundaries(size_t num_partitions) nogil
+    cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries) nogil
     cdef cppclass Merger:
-        Merger(const vector[ConstArray[Record]]& parts) nogil
+        Merger(const vector[ConstArray[Record]]& parts, bool ask_for_refills, const vector[Key]& boundaries) nogil
         pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
         void Refill(const ConstArray[Record]& part, int part_id) nogil
 
@@ -65,15 +65,19 @@ cdef ConstArray[Record] _to_const_record_array(buf):
     return ret
 
 
-def sort_and_partition(part: np.ndarray, boundaries: List[int], skip_sorting: bool = False) -> List[BlockInfo]:
+def sort_and_partition(part: np.ndarray, boundaries: List[int]) -> List[BlockInfo]:
     arr = _to_record_array(part)
-    blocks = SortAndPartition(arr, boundaries, skip_sorting)
+    blocks = SortAndPartition(arr, boundaries)
     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in blocks]
 
 
 def merge_partitions(
-        num_blocks: int, get_block: Callable[[int, int], np.ndarray],
-        batch_num_records: int = 10 * 1024 * 1024) -> Iterable[np.ndarray]:
+    num_blocks: int,
+    get_block: Callable[[int, int], np.ndarray],
+    batch_num_records: int = 10 * 1024 * 1024,
+    ask_for_refills: bool = True,
+    boundaries: List[int] = [],
+) -> Iterable[np.ndarray]:
     """
     An iterator that returns merged blocks for upload.
     """
@@ -86,7 +90,7 @@ def merge_partitions(
     for block in blocks:
         record_arrays.push_back(_to_const_record_array(block))
 
-    merger = new Merger(record_arrays)
+    merger = new Merger(record_arrays, ask_for_refills, boundaries)
     buffer = np.empty(batch_num_records * RECORD_SIZE, dtype=np.uint8)
     cdef uint8_t[:] mv = buffer
     cdef Record* ptr = <Record*>&mv[0]
