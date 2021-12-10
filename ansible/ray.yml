@@ -5,36 +5,36 @@
     workdir: /home/azureuser/raysort
     pythondir: /home/azureuser/miniconda3/envs/raysort/bin
   tasks:
-  - name: Clear nvme temp directory
-    become: yes
-    file:
-      path: '{{mnt_path}}/tmp'
-      state: absent
+    # - name: Clear nvme temp directory
+    #   become: yes
+    #   file:
+    #     path: "{{mnt_path}}/tmp"
+    #     state: absent
 
-  - name: Create nvme temp directory
-    become: yes
-    file:
-      path: '{{mnt_path}}/tmp'
-      state: directory
-      mode: '777'
+    # - name: Create nvme temp directory
+    #   become: yes
+    #   file:
+    #     path: "{{mnt_path}}/tmp"
+    #     state: directory
+    #     mode: "777"
 
-  - name: Stop Ray
-    shell: '{{pythondir}}/ray stop -f'
-    args:
-      executable: /bin/bash
+    - name: Stop Ray
+      shell: "{{pythondir}}/ray stop -f"
+      args:
+        executable: /bin/bash
 
-  - name: Start Ray
-    shell: >
-      nohup
-      {{pythondir}}/ray start
-      --address=10.10.0.4:6379
-      --object-manager-port=8076
-      --metrics-export-port=8090
-      --resources='{"worker":1}'
-      --object-store-memory=30064771072
+    - name: Start Ray
+      shell: >
+        nohup
+        {{pythondir}}/ray start
+        --address=10.10.0.4:6379
+        --object-manager-port=8076
+        --metrics-export-port=8090
+        --resources='{"worker":1}'
+        --object-store-memory=30064771072
 
-  - name: Start Node Exporter
-    shell: >
-      nohup
-      {{workdir}}/raysort/bin/node_exporter/node_exporter
-      --web.listen-address 0.0.0.0:8091 &
+    - name: Start Node Exporter
+      shell: >
+        nohup
+        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        --web.listen-address 0.0.0.0:8091 &
