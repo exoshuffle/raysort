@@ -37,6 +37,12 @@
         fstype: ext4
         state: mounted
 
+    - name: Clear nvme temp directory
+      become: yes
+      file:
+        path: "{{mnt_path}}/tmp"
+        state: absent
+
     - name: Create nvme temp directory
       become: yes
       file:
