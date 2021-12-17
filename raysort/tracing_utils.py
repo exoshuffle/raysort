@@ -155,10 +155,10 @@ class ProgressTracker:
             ])
         df = pd.DataFrame(
             ret, columns=["task", "mean", "std", "max", "min", "count"])
+        print(df.set_index("task"))
+        print(self.run_args)
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
-        self.save_trace()
         wandb.finish()
-        return df
 
     def save_trace(self):
         self.spans.sort(key=lambda span: span.time)
@@ -168,10 +168,10 @@ class ProgressTracker:
             json.dump(ret, fout)
         wandb.save(filename, base_path="/tmp")
 
+    def performance_report(self):
+        memory_summary = ray.internal.internal_api.memory_summary(
+            stats_only=True)
+        print(memory_summary)
 
-def performance_report(tracker: ray.actor.ActorHandle):
-    memory_summary = ray.internal.internal_api.memory_summary(stats_only=True)
-    print(memory_summary)
-
-    report = ray.get(tracker.report.remote())
-    print(report.set_index("task"))
+        self.save_trace()
+        self.report()
