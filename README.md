@@ -15,11 +15,15 @@ scripts/install_binaries.sh
 
 ## Running Locally
 
-```
-# Full end-to-end sanity check
-python raysort/main.py --total_tb=0.01 --input_part_size=100_000_000 --ray_address= 2>&1 | tee local.log
+A full end-to-end smoke run:
 
-# A quicker run, skipping input
+```bash
+python raysort/main.py --total_tb=0.01 --input_part_size=100_000_000 --ray_address= 2>&1 | tee local.log
+```
+
+A quicker run, skipping input:
+
+```bash
 python raysort/main.py --total_tb=0.01 --input_part_size=100_000_000 --use_object_store --skip_input --sort --ray_address= 2>&1 | tee local.log
 ```
 
