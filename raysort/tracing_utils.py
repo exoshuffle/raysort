@@ -105,7 +105,7 @@ class ProgressTracker:
         self.reset_gauges()
         logging_utils.init()
         logging.info(args)
-        wandb.init()
+        wandb.init(project="raysort")
         wandb.config.update(args)
 
     def reset_gauges(self):
