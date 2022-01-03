@@ -16,8 +16,7 @@ from raysort import constants
 from raysort import logging_utils
 from raysort import sortlib
 from raysort import tracing_utils
-from raysort.types import \
-    BlockInfo, ByteCount, RecordCount, PartId, PartInfo, Path
+from raysort.types import BlockInfo, ByteCount, RecordCount, PartId, PartInfo, Path
 
 Args = argparse.Namespace
 
@@ -104,7 +103,8 @@ def get_args(*args, **kwargs):
     )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
-        "steps to run", "if no  is specified, will run all steps")
+        "steps to run", "if no  is specified, will run all steps"
+    )
     for step in STEPS:
         steps_grp.add_argument(f"--{step}", action="store_true")
     return parser.parse_args(*args, **kwargs)
@@ -134,13 +134,14 @@ def _get_part_path(mnt: Path, part_id: PartId, kind="input") -> Path:
 
 
 @ray.remote
-def generate_part(args: Args, part_id: PartId, size: RecordCount,
-                  offset: RecordCount) -> PartInfo:
+def generate_part(
+    args: Args, part_id: PartId, size: RecordCount, offset: RecordCount
+) -> PartInfo:
     logging_utils.init()
     pinfo = _part_info(args, part_id)
     subprocess.run(
-        [constants.GENSORT_PATH, f"-b{offset}", f"{size}", pinfo.path],
-        check=True)
+        [constants.GENSORT_PATH, f"-b{offset}", f"{size}", pinfo.path], check=True
+    )
     logging.info(f"Generated input {pinfo}")
     return pinfo, size
 
@@ -156,7 +157,9 @@ def generate_input(args: Args):
         node = args.node_ips[part_id % args.num_workers]
         tasks.append(
             generate_part.options(**_node_res(node)).remote(
-                args, part_id, min(size, total_size - offset), offset))
+                args, part_id, min(size, total_size - offset), offset
+            )
+        )
         offset += size
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
@@ -179,18 +182,15 @@ def _load_manifest(args: Args, path: Path) -> List[PartInfo]:
         ]
     with open(path) as fin:
         reader = csv.reader(fin)
-        return [
-            PartInfo(int(part_id), node, path)
-            for part_id, node, path in reader
-        ]
+        return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
 
 
 def _generate_partition(part_size: int) -> np.ndarray:
     num_records = part_size // 100
     mat = np.empty((num_records, 100), dtype=np.uint8)
-    mat[:, :10] = np.frombuffer(np.random.default_rng().bytes(num_records *
-                                                              10),
-                                dtype=np.uint8).reshape((num_records, -1))
+    mat[:, :10] = np.frombuffer(
+        np.random.default_rng().bytes(num_records * 10), dtype=np.uint8
+    ).reshape((num_records, -1))
     return mat.flatten()
 
 
@@ -200,8 +200,7 @@ def _load_partition(args: Args, path: Path) -> np.ndarray:
     return np.fromfile(path, dtype=np.uint8)
 
 
-def _dummy_sort_and_partition(part: np.ndarray,
-                              bounds: List[int]) -> List[BlockInfo]:
+def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
     N = len(bounds)
     offset = 0
     size = int(np.ceil(part.size / N))
@@ -224,10 +223,11 @@ def mapper(
     part = _load_partition(args, path)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_disk_time", load_duration)
-    sort_fn = _dummy_sort_and_partition \
-        if args.skip_sorting else sortlib.sort_and_partition
+    sort_fn = (
+        _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
+    )
     blocks = sort_fn(part, bounds)
-    return [part[offset:offset + size] for offset, size in blocks]
+    return [part[offset : offset + size] for offset, size in blocks]
     # return [ray.put(part[offset:offset + size]) for offset, size in blocks]
 
 
@@ -294,7 +294,8 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            ret.append(ray.put(datachunk))
+            # ret.append(ray.put(datachunk))
+            ret.append(datachunk)
         else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = _part_info(args, part_id, kind="temp")
@@ -302,6 +303,8 @@ def merge_mapper_blocks(
                 datachunk.tofile(fout)
             ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
+    del merger
+    del blocks
     return ret
 
 
@@ -312,7 +315,7 @@ def final_merge(
     args: Args,
     worker_id: PartId,
     reducer_id: PartId,
-    *parts: Union[List[PartInfo], List[ray.ObjectRef]],
+    *parts: Union[List[PartInfo], List[np.ndarray]],
 ) -> PartInfo:
     M = len(parts)
 
@@ -321,7 +324,8 @@ def final_merge(
             return None
         part = parts[i]
         if args.use_object_store:
-            return ray.get(part)
+            # return ray.get(part)
+            return part
         if part is None:
             return None
         with open(part.path, "rb", buffering=args.io_size) as fin:
@@ -340,10 +344,14 @@ def _node_res(node: str) -> Dict[str, float]:
 
 
 def get_boundaries(args: Args) -> Tuple[List[int], List[List[int]]]:
-    merge_bounds_flat = sortlib.get_boundaries(args.num_workers *
-                                               args.num_reducers_per_worker)
-    merge_bounds = np.array(merge_bounds_flat, dtype=np.uint64).reshape(
-        args.num_workers, args.num_reducers_per_worker).tolist()
+    merge_bounds_flat = sortlib.get_boundaries(
+        args.num_workers * args.num_reducers_per_worker
+    )
+    merge_bounds = (
+        np.array(merge_bounds_flat, dtype=np.uint64)
+        .reshape(args.num_workers, args.num_reducers_per_worker)
+        .tolist()
+    )
     map_bounds = [b[0] for b in merge_bounds]
     return map_bounds, merge_bounds
 
@@ -356,32 +364,35 @@ def sort_main(args: Args):
 
     mapper_opt = {"num_returns": args.num_workers}
     merger_opt = {"num_returns": args.num_reducers_per_worker}
-    merge_results = np.empty((args.num_workers, args.num_mergers_per_worker,
-                              args.num_reducers_per_worker),
-                             dtype=object)
+    merge_results = np.empty(
+        (args.num_workers, args.num_mergers_per_worker, args.num_reducers_per_worker),
+        dtype=object,
+    )
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
     worker_res = [_node_res(node) for node in args.node_ips]
 
     part_id = 0
     for round in range(args.num_rounds):
         # Submit map tasks.
-        num_map_tasks = min(num_map_tasks_per_round,
-                            args.num_mappers - part_id)
+        num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
             _, node, path = parts[part_id]
             opt = dict(**mapper_opt, **_node_res(node))
             m = part_id % num_map_tasks_per_round
             map_results[m, :] = mapper.options(**opt).remote(
-                args, part_id, map_bounds, path)
+                args, part_id, map_bounds, path
+            )
             part_id += 1
 
         # Make sure previous rounds finish before scheduling merge tasks.
         num_extra_rounds = round - args.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            ray.wait([t for t in merge_results[0, :, 0] if t is not None],
-                     num_returns=num_extra_rounds * args.merge_parallelism,
-                     fetch_local=False)
+            ray.wait(
+                [t for t in merge_results[0, :, 0] if t is not None],
+                num_returns=num_extra_rounds * args.merge_parallelism,
+                fetch_local=False,
+            )
 
         # Submit merge tasks.
         for j in range(args.merge_parallelism):
@@ -389,9 +400,14 @@ def sort_main(args: Args):
             f = int(np.ceil(num_map_tasks / args.merge_parallelism))
             for w in range(args.num_workers):
                 merge_results[w, m, :] = merge_mapper_blocks.options(
-                    **merger_opt, **worker_res[w]).remote(
-                        args, w, m, merge_bounds[w],
-                        *map_results[j * f:(j + 1) * f, w].flatten().tolist())
+                    **merger_opt, **worker_res[w]
+                ).remote(
+                    args,
+                    w,
+                    m,
+                    merge_bounds[w],
+                    *map_results[j * f : (j + 1) * f, w].flatten().tolist(),
+                )
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
@@ -403,15 +419,15 @@ def sort_main(args: Args):
         ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
         return
 
-    # print(ray.internal.internal_api.memory_summary())
-
     # Submit second-stage reduce tasks.
     reducer_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object)
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
     for r in range(args.num_reducers_per_worker):
         reducer_results[:, r] = [
             final_merge.options(**worker_res[w]).remote(
-                args, w, r, *merge_results[w, :, r].tolist())
+                args, w, r, *merge_results[w, :, r].tolist()
+            )
             for w in range(args.num_workers)
         ]
     del merge_results
@@ -474,10 +490,7 @@ def validate_output(args: Args):
 def _get_mount_points():
     mnt = "/mnt"
     if os.path.exists(mnt):
-        ret = [
-            os.path.join(mnt, d) for d in os.listdir(mnt)
-            if d.startswith("nvme")
-        ]
+        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("nvme")]
         if len(ret) > 0:
             return ret
     return [tempfile.gettempdir()]
@@ -493,7 +506,8 @@ def _get_resources_args(args: Args):
         args.num_nodes = 1
     else:
         args.node_ips = [
-            r.split(":")[1] for r in resources
+            r.split(":")[1]
+            for r in resources
             if r.startswith("node:") and r != f"node:{head_addr}"
         ]
         args.num_nodes = args.num_workers + 1
@@ -518,16 +532,17 @@ def _get_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
-    args.total_data_size = args.total_tb * 10**12
-    args.num_mappers = int(np.ceil(args.total_data_size /
-                                   args.input_part_size))
+    args.total_data_size = args.total_tb * 10 ** 12
+    args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.map_parallelism % args.merge_factor == 0, args
     args.merge_parallelism = args.map_parallelism // args.merge_factor
     args.num_rounds = int(
-        np.ceil(args.num_mappers / args.num_workers / args.map_parallelism))
+        np.ceil(args.num_mappers / args.num_workers / args.map_parallelism)
+    )
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
     args.num_reducers_per_worker = _round_up_power_of_two(
-        args.num_mergers_per_worker * args.merge_factor)
+        args.num_mergers_per_worker * args.merge_factor
+    )
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
@@ -537,22 +552,20 @@ def init(args: Args) -> ray.actor.ActorHandle:
                 "head": 1,
                 "worker": os.cpu_count() // 2,
             },
+            object_store_memory=4 * 1024 * 1024 * 1024,
             _system_config={
-                "max_io_workers":
-                8,
-                "object_spilling_threshold":
-                1,
-                "object_spilling_config":
-                "{\"type\":\"filesystem\",\"params\":{\"directory_path\":[\"/mnt/nvme0/tmp/ray\"]}}",
-            })
+                "max_io_workers": 8,
+                "object_spilling_threshold": 1,
+                "object_spilling_config": '{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}',
+            },
+        )
     else:
         ray.init(address=args.ray_address)
     logging_utils.init()
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_resources_args(args)
     _get_app_args(args)
-    progress_tracker = tracing_utils.create_progress_tracker(args)
-    return progress_tracker
+    return tracing_utils.create_progress_tracker(args)
 
 
 def main(args: Args):
@@ -567,7 +580,7 @@ def main(args: Args):
     if args.validate_output:
         validate_output(args)
 
-    tracing_utils.performance_report(tracker)
+    ray.get(tracker.performance_report.remote())
 
 
 if __name__ == "__main__":
