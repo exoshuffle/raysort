@@ -14,22 +14,25 @@ def get_sd_content(expected_num_nodes: int) -> str:
 
     def get_addrs(port=None):
         return [
-            "{}:{}".format(node["NodeManagerAddress"],
-                           port if port else node["MetricsExportPort"])
-            for node in nodes if node["alive"] is True
+            "{}:{}".format(
+                node["NodeManagerAddress"], port if port else node["MetricsExportPort"]
+            )
+            for node in nodes
+            if node["alive"] is True
         ]
 
-    return json.dumps([{
-        "labels": {
-            "job": "ray"
-        },
-        "targets": get_addrs(),
-    }, {
-        "labels": {
-            "job": "node"
-        },
-        "targets": get_addrs(PROM_NODE_EXPORTER_PORT),
-    }])
+    return json.dumps(
+        [
+            {
+                "labels": {"job": "ray"},
+                "targets": get_addrs(),
+            },
+            {
+                "labels": {"job": "node"},
+                "targets": get_addrs(PROM_NODE_EXPORTER_PORT),
+            },
+        ]
+    )
 
 
 def create_sd_file(expected_num_nodes: int = 0):

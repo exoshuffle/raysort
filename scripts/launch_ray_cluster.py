@@ -77,12 +77,14 @@ def get_run_id():
 
 
 def ord_to_letter(i):
-    return chr(ord('a') + i)
+    return chr(ord("a") + i)
 
 
 def get_worker_ebs_device_variables():
-    device_mounts = [(f"/dev/xvdb{ord_to_letter(d)}", f"/mnt/ebs{d}")
-                     for d in range(FLAGS.worker_ebs_device_count)]
+    device_mounts = [
+        (f"/dev/xvdb{ord_to_letter(d)}", f"/mnt/ebs{d}")
+        for d in range(FLAGS.worker_ebs_device_count)
+    ]
     return {
         "WORKER_EBS_DEVICE_MOUNTS": device_mounts,
     }
@@ -165,8 +167,7 @@ def launch_ray_cluster(cluster_config_file):
 
 def wait_until_ready(cluster_config_file):
     while True:
-        proc = run(f"ray exec {cluster_config_file} 'ray status'",
-                   capture_output=True)
+        proc = run(f"ray exec {cluster_config_file} 'ray status'", capture_output=True)
         out = proc.stdout.decode("ascii")
         print(out)
         if f"{FLAGS.num_workers} ray.worker.default" in out:
@@ -175,8 +176,10 @@ def wait_until_ready(cluster_config_file):
 
 
 def write_prom_sd_file(cluster_config_file):
-    run(f"ray submit {cluster_config_file} raysort/create_prom_sd_file.py"
-        f" -- --expected_num_nodes={FLAGS.num_workers}")
+    run(
+        f"ray submit {cluster_config_file} raysort/create_prom_sd_file.py"
+        f" -- --expected_num_nodes={FLAGS.num_workers}"
+    )
 
 
 def main(argv):

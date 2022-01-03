@@ -32,9 +32,13 @@ def upload_s3(region, bucket, object_key, object_size):
 def main():
     ray.init()
     tasks = [
-        upload_s3.remote(args.region, args.bucket,
-                         os.path.join(args.prefix, f"object-{i:04}"),
-                         args.object_size) for i in range(args.num_objects)
+        upload_s3.remote(
+            args.region,
+            args.bucket,
+            os.path.join(args.prefix, f"object-{i:04}"),
+            args.object_size,
+        )
+        for i in range(args.num_objects)
     ]
     bytes_count = sum(ray.get(tasks))
     print(f"Uploaded {bytes_count} bytes to {args.bucket}")

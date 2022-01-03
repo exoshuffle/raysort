@@ -69,16 +69,12 @@ def get_inventory_content(node_ips):
 
     ret = {
         "all": {
-            "hosts": {k: v
-                      for k, v in items},
+            "hosts": {k: v for k, v in items},
             "vars": {
-                "ansible_host_key_checking":
-                False,
-                "ansible_user":
-                "azureuser",
-                "ansible_ssh_private_key_file":
-                "/home/azureuser/.ssh/lsf-azure-aa.pem",
-            }
+                "ansible_host_key_checking": False,
+                "ansible_user": "azureuser",
+                "ansible_ssh_private_key_file": "/home/azureuser/.ssh/lsf-azure-aa.pem",
+            },
         }
     }
     return yaml.dump(ret)

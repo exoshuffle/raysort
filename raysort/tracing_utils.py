@@ -39,8 +39,13 @@ def timeit(
                 ret = f(*args, **kwargs)
                 duration = time.time() - begin
                 tracker.record_span.remote(
-                    Span(begin, duration, event,
-                         ray.util.get_node_ip_address(), os.getpid()),
+                    Span(
+                        begin,
+                        duration,
+                        event,
+                        ray.util.get_node_ip_address(),
+                        os.getpid(),
+                    ),
                     echo=report_time,
                 )
                 tracker.inc.remote(
@@ -67,8 +72,7 @@ def get_progress_tracker():
 
 
 def create_progress_tracker(args):
-    return ProgressTracker.options(
-        name=constants.PROGRESS_TRACKER_ACTOR).remote(args)
+    return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(args)
 
 
 def _make_trace_event(span: Span):
@@ -105,7 +109,7 @@ class ProgressTracker:
         self.reset_gauges()
         logging_utils.init()
         logging.info(args)
-        wandb.init(project="raysort")
+        wandb.init(entity="raysort", project="raysort")
         wandb.config.update(args)
 
     def reset_gauges(self):
@@ -145,16 +149,17 @@ class ProgressTracker:
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)
-            ret.append([
-                key,
-                ss.mean(),
-                ss.std(),
-                ss.max(),
-                ss.min(),
-                ss.count(),
-            ])
-        df = pd.DataFrame(
-            ret, columns=["task", "mean", "std", "max", "min", "count"])
+            ret.append(
+                [
+                    key,
+                    ss.mean(),
+                    ss.std(),
+                    ss.max(),
+                    ss.min(),
+                    ss.count(),
+                ]
+            )
+        df = pd.DataFrame(ret, columns=["task", "mean", "std", "max", "min", "count"])
         print(df.set_index("task"))
         print(self.run_args)
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
@@ -169,8 +174,7 @@ class ProgressTracker:
         wandb.save(filename, base_path="/tmp")
 
     def performance_report(self):
-        memory_summary = ray.internal.internal_api.memory_summary(
-            stats_only=True)
+        memory_summary = ray.internal.internal_api.memory_summary(stats_only=True)
         print(memory_summary)
 
         self.save_trace()

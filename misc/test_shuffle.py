@@ -12,8 +12,7 @@ REDUCER_BYTES = 1024 * 1024 * 1024 * 6
 def mapper(m, reducers):
     n_bytes = int(REDUCER_BYTES / R)
     buffers = [
-        np.frombuffer(np.random.bytes(n_bytes), dtype=np.uint8)
-        for _ in reducers
+        np.frombuffer(np.random.bytes(n_bytes), dtype=np.uint8) for _ in reducers
     ]
     return [r.inc.remote(m, b) for r, b in zip(reducers, buffers)]
 
