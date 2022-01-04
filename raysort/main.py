@@ -489,7 +489,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     return ray.get(reducer_results)
 
 
-@tracing_utils.timeit("sort")
+@tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(args: Args):
     parts = _load_manifest(args, constants.INPUT_MANIFEST_FILE)
     assert len(parts) == args.num_mappers

@@ -174,7 +174,9 @@ class ProgressTracker:
         wandb.save(filename, base_path="/tmp")
 
     def performance_report(self):
-        memory_summary = ray.internal.internal_api.memory_summary(stats_only=True)
+        memory_summary = ray.internal.internal_api.memory_summary(
+            ray.worker._global_node.address, stats_only=True
+        )
         print(memory_summary)
 
         self.save_trace()
