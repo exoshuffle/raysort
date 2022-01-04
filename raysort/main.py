@@ -276,7 +276,7 @@ def merge_mapper_blocks(
     merge_id: PartId,
     bounds: List[int],
     *blocks: List[np.ndarray],
-) -> PartInfo:
+) -> Union[List[PartInfo], List[np.ndarray]]:
     M = len(blocks)
     # blocks = ray.get(list(blocks))
 
