@@ -153,7 +153,7 @@ def generate_part(
 
 
 def generate_input(args: Args):
-    if args.skip_input:
+    if args.skip_input or _load_manifest(args, constants.INPUT_MANIFEST_FILE):
         return
     total_size = constants.bytes_to_records(args.total_data_size)
     size = constants.bytes_to_records(args.input_part_size)
@@ -188,7 +188,11 @@ def _load_manifest(args: Args, path: Path) -> List[PartInfo]:
         ]
     with open(path) as fin:
         reader = csv.reader(fin)
-        return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
+        parts = [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
+        if len(parts) > args.num_mappers:
+            parts = parts[: args.num_mappers]
+        assert len(parts) == args.num_mappers, args
+        return parts
 
 
 def _generate_partition(part_size: int) -> np.ndarray:
@@ -492,7 +496,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 @tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(args: Args):
     parts = _load_manifest(args, constants.INPUT_MANIFEST_FILE)
-    assert len(parts) == args.num_mappers
 
     if args.simple_shuffle:
         results = sort_simple(args, parts)
