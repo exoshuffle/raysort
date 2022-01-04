@@ -101,6 +101,12 @@ def get_args(*args, **kwargs):
         action="store_true",
         help="if set, will use object store for 2nd-stage reduce",
     )
+    parser.add_argument(
+        "--simple_shuffle",
+        default=False,
+        action="store_true",
+        help="if set, will use the simple map-reduce version",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if no  is specified, will run all steps"
@@ -294,8 +300,8 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            # ret.append(ray.put(datachunk))
             ret.append(datachunk)
+            # ret.append(ray.put(datachunk))
         else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = _part_info(args, part_id, kind="temp")
@@ -323,9 +329,9 @@ def final_merge(
         if i >= M or d > 0:
             return None
         part = parts[i]
-        if args.use_object_store:
-            # return ray.get(part)
+        if isinstance(part, np.ndarray):
             return part
+            # return ray.get(part)
         if part is None:
             return None
         with open(part.path, "rb", buffering=args.io_size) as fin:
@@ -343,24 +349,71 @@ def _node_res(node: str) -> Dict[str, float]:
     return {"resources": {f"node:{node}": 1e-3}}
 
 
-def get_boundaries(args: Args) -> Tuple[List[int], List[List[int]]]:
-    merge_bounds_flat = sortlib.get_boundaries(
-        args.num_workers * args.num_reducers_per_worker
-    )
+def get_boundaries(
+    num_map_returns: int, num_merge_returns: int = -1
+) -> Tuple[List[int], List[List[int]]]:
+    if num_merge_returns == -1:
+        return sortlib.get_boundaries(num_map_returns), []
+    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
     merge_bounds = (
         np.array(merge_bounds_flat, dtype=np.uint64)
-        .reshape(args.num_workers, args.num_reducers_per_worker)
+        .reshape(num_map_returns, num_merge_returns)
         .tolist()
     )
     map_bounds = [b[0] for b in merge_bounds]
     return map_bounds, merge_bounds
 
 
-@tracing_utils.timeit("sort")
-def sort_main(args: Args):
-    parts = _load_manifest(args, constants.INPUT_MANIFEST_FILE)
-    assert len(parts) == args.num_mappers
-    map_bounds, merge_bounds = get_boundaries(args)
+def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    bounds, _ = get_boundaries(args.num_reducers)
+
+    mapper_opt = {"num_returns": args.num_reducers}
+    map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
+    num_map_tasks_per_round = args.num_workers * args.map_parallelism
+    worker_res = [_node_res(node) for node in args.node_ips]
+
+    part_id = 0
+    for round in range(args.num_rounds):
+        # Submit map tasks.
+        num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
+        for _ in range(num_map_tasks):
+            _, node, path = parts[part_id]
+            opt = dict(**mapper_opt, **_node_res(node))
+            map_results[part_id, :] = mapper.options(**opt).remote(
+                args, part_id, bounds, path
+            )
+            part_id += 1
+
+        # Wait for at least one map task from this round to finish before
+        # scheduling the next round.
+        tasks = map_results[round * num_map_tasks_per_round :, 0]
+        ray.wait([t for t in tasks if t is not None], fetch_local=False)
+
+    if args.skip_final_merge:
+        tasks = [t for t in map_results[:, 0] if t is not None]
+        ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
+        return []
+
+    # Submit reduce tasks.
+    reducer_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        reducer_results[:, r] = [
+            final_merge.options(**worker_res[w]).remote(
+                args, w, r, *map_results[:, r * args.num_workers + w].tolist()
+            )
+            for w in range(args.num_workers)
+        ]
+
+    reducer_results = reducer_results.flatten().tolist()
+    return ray.get(reducer_results)
+
+
+def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    map_bounds, merge_bounds = get_boundaries(
+        args.num_workers, args.num_reducers_per_worker
+    )
 
     mapper_opt = {"num_returns": args.num_workers}
     merger_opt = {"num_returns": args.num_reducers_per_worker}
@@ -417,7 +470,7 @@ def sort_main(args: Args):
     if args.skip_final_merge:
         tasks = [t for t in merge_results.flatten() if t is not None]
         ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
-        return
+        return []
 
     # Submit second-stage reduce tasks.
     reducer_results = np.empty(
@@ -433,12 +486,23 @@ def sort_main(args: Args):
     del merge_results
 
     reducer_results = reducer_results.flatten().tolist()
-    reducer_results = ray.get(reducer_results)
+    return ray.get(reducer_results)
+
+
+@tracing_utils.timeit("sort")
+def sort_main(args: Args):
+    parts = _load_manifest(args, constants.INPUT_MANIFEST_FILE)
+    assert len(parts) == args.num_mappers
+
+    if args.simple_shuffle:
+        results = sort_simple(args, parts)
+    else:
+        results = sort_two_stage(args, parts)
 
     if not args.skip_output:
         with open(constants.OUTPUT_MANIFEST_FILE, "w") as fout:
             writer = csv.writer(fout)
-            writer.writerows(reducer_results)
+            writer.writerows(results)
 
 
 # ------------------------------------------------------------
@@ -534,7 +598,9 @@ def _get_app_args(args: Args):
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism)
     )
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
-    args.num_reducers_per_worker = args.num_mappers // args.num_workers
+    args.num_reducers = args.num_mappers
+    assert args.num_reducers % args.num_workers == 0, args
+    args.num_reducers_per_worker = args.num_reducers // args.num_workers
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
