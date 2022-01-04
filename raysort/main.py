@@ -395,24 +395,14 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": args.num_reducers}
     map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
-    num_map_tasks_per_round = args.num_workers * args.map_parallelism
     worker_res = [_node_res(node) for node in args.node_ips]
 
-    part_id = 0
-    for round in range(args.num_rounds):
-        # Submit map tasks.
-        num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
-        for _ in range(num_map_tasks):
-            _, node, path = parts[part_id]
-            opt = dict(**mapper_opt, **_node_res(node))
-            map_results[part_id, :] = mapper.options(**opt).remote(
-                args, part_id, bounds, path
-            )
-            part_id += 1
-
-        # Wait for at least one map task from this round to finish before
-        # scheduling the next round.
-        _ray_wait(map_results[round * num_map_tasks_per_round :, 0])
+    for part_id in range(args.num_mappers):
+        _, node, path = parts[part_id]
+        opt = dict(**mapper_opt, **_node_res(node))
+        map_results[part_id, :] = mapper.options(**opt).remote(
+            args, part_id, bounds, path
+        )
 
     if args.skip_final_merge:
         _ray_wait(map_results[:, 0], wait_all=True)
@@ -424,7 +414,10 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for r in range(args.num_reducers_per_worker):
             reducer_results.append(
                 final_merge.options(**worker_res[w]).remote(
-                    args, w, r, *map_results[:, r * args.num_workers + w].tolist()
+                    args,
+                    w,
+                    r,
+                    *map_results[:, w * args.num_reducers_per_worker + r].tolist(),
                 )
             )
 
