@@ -517,13 +517,6 @@ def _get_resources_args(args: Args):
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
 
 
-def _round_up_power_of_two(x: int) -> int:
-    ret = 1
-    while ret <= x:
-        ret <<= 1
-    return ret
-
-
 def _get_app_args(args: Args):
     args.run_id = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     # If no steps are specified, run all steps.
@@ -534,15 +527,14 @@ def _get_app_args(args: Args):
 
     args.total_data_size = args.total_tb * 10 ** 12
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
+    assert args.num_mappers % args.num_workers == 0, args
     assert args.map_parallelism % args.merge_factor == 0, args
     args.merge_parallelism = args.map_parallelism // args.merge_factor
     args.num_rounds = int(
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism)
     )
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
-    args.num_reducers_per_worker = _round_up_power_of_two(
-        args.num_mergers_per_worker * args.merge_factor
-    )
+    args.num_reducers_per_worker = args.num_mappers // args.num_workers
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
