@@ -153,7 +153,17 @@ def generate_part(
 
 
 def generate_input(args: Args):
-    if args.skip_input or _load_manifest(args, constants.INPUT_MANIFEST_FILE):
+    def should_skip():
+        if args.skip_input:
+            return True
+        try:
+            _load_manifest(args, constants.INPUT_MANIFEST_FILE)
+        except (AssertionError, FileNotFoundError):
+            return False
+        else:
+            return True
+
+    if should_skip():
         return
     total_size = constants.bytes_to_records(args.total_data_size)
     size = constants.bytes_to_records(args.input_part_size)
@@ -353,6 +363,18 @@ def _node_res(node: str) -> Dict[str, float]:
     return {"resources": {f"node:{node}": 1e-3}}
 
 
+def _ray_wait(
+    futures, wait_all: bool = False, **kwargs
+) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
+    num_returns = len(futures) if wait_all else 1
+    return ray.wait(
+        [f for f in futures if f is not None],
+        num_returns=num_returns,
+        fetch_local=False,
+        **kwargs,
+    )
+
+
 def get_boundaries(
     num_map_returns: int, num_merge_returns: int = -1
 ) -> Tuple[List[int], List[List[int]]]:
@@ -390,27 +412,22 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
-        tasks = map_results[round * num_map_tasks_per_round :, 0]
-        ray.wait([t for t in tasks if t is not None], fetch_local=False)
+        _ray_wait(map_results[round * num_map_tasks_per_round :, 0])
 
     if args.skip_final_merge:
-        tasks = [t for t in map_results[:, 0] if t is not None]
-        ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
+        _ray_wait(map_results[:, 0], wait_all=True)
         return []
 
     # Submit reduce tasks.
-    reducer_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
-    )
-    for r in range(args.num_reducers_per_worker):
-        reducer_results[:, r] = [
-            final_merge.options(**worker_res[w]).remote(
-                args, w, r, *map_results[:, r * args.num_workers + w].tolist()
+    reducer_results = []
+    for w in range(args.num_workers):
+        for r in range(args.num_reducers_per_worker):
+            reducer_results.append(
+                final_merge.options(**worker_res[w]).remote(
+                    args, w, r, *map_results[:, r * args.num_workers + w].tolist()
+                )
             )
-            for w in range(args.num_workers)
-        ]
 
-    reducer_results = reducer_results.flatten().tolist()
     return ray.get(reducer_results)
 
 
@@ -445,10 +462,9 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # Make sure previous rounds finish before scheduling merge tasks.
         num_extra_rounds = round - args.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            ray.wait(
-                [t for t in merge_results[0, :, 0] if t is not None],
+            _ray_wait(
+                merge_results[0, :, 0],
                 num_returns=num_extra_rounds * args.merge_parallelism,
-                fetch_local=False,
             )
 
         # Submit merge tasks.
@@ -468,12 +484,11 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
-        ray.wait(map_results[:, 0].tolist(), fetch_local=False)
+        _ray_wait(map_results[:, 0])
         del map_results
 
     if args.skip_final_merge:
-        tasks = [t for t in merge_results.flatten() if t is not None]
-        ray.wait(tasks, num_returns=len(tasks), fetch_local=False)
+        _ray_wait(merge_results.flatten(), wait_all=True)
         return []
 
     # Submit second-stage reduce tasks.
@@ -539,9 +554,9 @@ def validate_output(args: Args):
         results.append(validate_part.options(**_node_res(node)).remote(path))
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
-    total = sum(s for s, _ in results)
+    total = sum(sz for sz, _ in results)
     assert total == args.total_data_size, total - args.total_data_size
-    all_checksum = b"".join(c for _, c in results)
+    all_checksum = b"".join(chksm for _, chksm in results)
     with tempfile.NamedTemporaryFile() as fout:
         fout.write(all_checksum)
         fout.flush()
