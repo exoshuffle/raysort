@@ -469,22 +469,27 @@ def _get_app_args(args: Args):
     args.num_reducers_per_worker = args.num_reducers // args.num_workers
 
 
-def init(args: Args) -> ray.actor.ActorHandle:
-    if not args.ray_address:
-        ray.init(
-            resources={
-                "head": 1,
-                "worker": os.cpu_count() // 2,
-            },
-            object_store_memory=4 * 1024 * 1024 * 1024,
-            _system_config={
-                "max_io_workers": 8,
-                "object_spilling_threshold": 1,
-                "object_spilling_config": '{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}',
-            },
+def _init_ray(addr: str):
+    if addr:
+        ray.init(address=addr)
+        return
+    system_config = {
+        "max_io_workers": 8,
+        "object_spilling_threshold": 1,
+    }
+    if os.path.exists("/mnt/nvme0/tmp"):
+        system_config.update(
+            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
-    else:
-        ray.init(address=args.ray_address)
+    ray.init(
+        resources={"head": 1, "worker": os.cpu_count() // 2},
+        object_store_memory=2 * 1024 * 1024 * 1024,
+        _system_config=system_config,
+    )
+
+
+def init(args: Args) -> ray.actor.ActorHandle:
+    _init_ray(args.ray_address)
     logging_utils.init()
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_resources_args(args)
