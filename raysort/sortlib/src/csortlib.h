@@ -52,6 +52,7 @@ inline bool operator==(const Partition &a, const Partition &b) {
 // Sort the data in-place, then return a list of partitions. A partition
 // is represented by an offset and a size. If the i-th partition is empty,
 // then ret[i].offset == ret[i + 1].offset, and ret[i].size == 0.
+// TODO: this seems to be not true when some range does not exist.
 //
 // Invariants:
 // - ret[0].offset === 0
