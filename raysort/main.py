@@ -65,6 +65,12 @@ def get_args(*args, **kwargs):
         help="each round has `map_parallelism / merge_factor` per node",
     )
     parser.add_argument(
+        "--reduce_parallelism",
+        default=4,
+        type=int,
+        help="number of reduce tasks to run in parallel per node",
+    )
+    parser.add_argument(
         "--io_size",
         default=256 * 1024,
         type=ByteCount,
@@ -234,8 +240,7 @@ def merge_mapper_blocks(
     return ret
 
 
-# TODO: Find out optimal reduce concurrency
-@ray.remote(num_cpus=2)
+@ray.remote
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
@@ -265,8 +270,12 @@ def final_merge(
     return _merge_impl(args, M, pinfo, get_block, args.skip_output)
 
 
-def _node_res(node: str) -> Dict[str, float]:
-    return {"resources": {f"node:{node}": 1e-3}}
+def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+
+
+def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+    return _node_res(args.node_ips[node_i], parallelism)
 
 
 def _ray_wait(
@@ -300,7 +309,6 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": args.num_reducers}
     map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
-    worker_res = [_node_res(node) for node in args.node_ips]
 
     for part_id in range(args.num_mappers):
         _, node, path = parts[part_id]
@@ -313,12 +321,11 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         _ray_wait(map_results[:, 0], wait_all=True)
         return []
 
-    # Submit reduce tasks.
     reducer_results = []
     for w in range(args.num_workers):
         for r in range(args.num_reducers_per_worker):
             reducer_results.append(
-                final_merge.options(**worker_res[w]).remote(
+                final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
                     args,
                     w,
                     r,
@@ -341,7 +348,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         dtype=object,
     )
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
-    worker_res = [_node_res(node) for node in args.node_ips]
 
     part_id = 0
     for round in range(args.num_rounds):
@@ -371,7 +377,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             f = int(np.ceil(num_map_tasks / args.merge_parallelism))
             for w in range(args.num_workers):
                 merge_results[w, m, :] = merge_mapper_blocks.options(
-                    **merger_opt, **worker_res[w]
+                    **merger_opt, **_node_i(args, w)
                 ).remote(
                     args,
                     w,
@@ -395,7 +401,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     for r in range(args.num_reducers_per_worker):
         reducer_results[:, r] = [
-            final_merge.options(**worker_res[w]).remote(
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
                 args, w, r, *merge_results[w, :, r].tolist()
             )
             for w in range(args.num_workers)
