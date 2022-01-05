@@ -64,7 +64,7 @@
           - --exclude=data
 
     - name: Setup Python
-      shell: "{{pythondir}}/pip install -r {{workdir}}/requirements/worker.txt"
+      shell: "{{pythondir}}/pip install -Ur {{workdir}}/requirements/worker.txt"
 
     - name: Install Python package
       shell: "cd {{workdir}} && {{pythondir}}/pip install -e ."
