@@ -1,8 +1,13 @@
 #!/bin/bash
 
-set -x
+set -ex
 
 BIN_DIR=raysort/bin
+
+prepare() {
+    rm -rf $BIN_DIR
+    mkdir -p $BIN_DIR
+}
 
 install_gensort() {
     DIR=$BIN_DIR/gensort
@@ -46,13 +51,14 @@ cleanup() {
     find . -type f -name '*.tar.gz' -delete
 }
 
-show_tree() {
-    tree $BIN_DIR
+show_files() {
+    find $BIN_DIR
 }
 
+prepare
 install_gensort
 install_prometheus
 install_node_exporter
 # install_jaeger
 cleanup
-show_tree
+show_files
