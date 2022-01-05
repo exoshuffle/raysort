@@ -4,8 +4,6 @@ import datetime
 import logging
 import os
 import random
-import subprocess
-import tempfile
 import time
 from typing import Callable, Dict, Iterable, List, Tuple, Union
 
@@ -15,8 +13,9 @@ import ray
 from raysort import constants
 from raysort import logging_utils
 from raysort import sortlib
+from raysort import sort_utils
 from raysort import tracing_utils
-from raysort.types import BlockInfo, ByteCount, RecordCount, PartId, PartInfo, Path
+from raysort.types import BlockInfo, ByteCount, PartId, PartInfo, Path
 
 Args = argparse.Namespace
 
@@ -117,106 +116,13 @@ def get_args(*args, **kwargs):
 
 
 # ------------------------------------------------------------
-#     Generate Input
-# ------------------------------------------------------------
-
-
-def _part_info(args: Args, part_id: PartId, kind="input") -> PartInfo:
-    node = ray.util.get_node_ip_address()
-    mnt = random.choice(args.mount_points)
-    filepath = _get_part_path(mnt, part_id, kind)
-    return PartInfo(part_id, node, filepath)
-
-
-def _get_part_path(mnt: Path, part_id: PartId, kind="input") -> Path:
-    assert kind in {"input", "output", "temp"}
-    dir_fmt = constants.DATA_DIR_FMT[kind]
-    dirpath = dir_fmt.format(mnt=mnt)
-    os.makedirs(dirpath, exist_ok=True)
-    filename_fmt = constants.FILENAME_FMT[kind]
-    filename = filename_fmt.format(part_id=part_id)
-    filepath = os.path.join(dirpath, filename)
-    return filepath
-
-
-@ray.remote
-def generate_part(
-    args: Args, part_id: PartId, size: RecordCount, offset: RecordCount
-) -> PartInfo:
-    logging_utils.init()
-    pinfo = _part_info(args, part_id)
-    subprocess.run(
-        [constants.GENSORT_PATH, f"-b{offset}", f"{size}", pinfo.path], check=True
-    )
-    logging.info(f"Generated input {pinfo}")
-    return pinfo, size
-
-
-def generate_input(args: Args):
-    def should_skip():
-        if args.skip_input:
-            return True
-        try:
-            _load_manifest(args, constants.INPUT_MANIFEST_FILE)
-        except (AssertionError, FileNotFoundError):
-            return False
-        else:
-            return True
-
-    if should_skip():
-        return
-    total_size = constants.bytes_to_records(args.total_data_size)
-    size = constants.bytes_to_records(args.input_part_size)
-    offset = 0
-    tasks = []
-    for part_id in range(args.num_mappers):
-        node = args.node_ips[part_id % args.num_workers]
-        tasks.append(
-            generate_part.options(**_node_res(node)).remote(
-                args, part_id, min(size, total_size - offset), offset
-            )
-        )
-        offset += size
-    logging.info(f"Generating {len(tasks)} partitions")
-    parts = ray.get(tasks)
-    assert sum([s for _, s in parts]) == total_size, (parts, args)
-    with open(constants.INPUT_MANIFEST_FILE, "w") as fout:
-        writer = csv.writer(fout)
-        writer.writerows([p for p, _ in parts])
-
-
-# ------------------------------------------------------------
 #     Sort
 # ------------------------------------------------------------
 
 
-def _load_manifest(args: Args, path: Path) -> List[PartInfo]:
-    if args.skip_input:
-        return [
-            PartInfo(i, args.node_ips[i % args.num_workers], None)
-            for i in range(args.num_mappers)
-        ]
-    with open(path) as fin:
-        reader = csv.reader(fin)
-        parts = [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
-        if len(parts) > args.num_mappers:
-            parts = parts[: args.num_mappers]
-        assert len(parts) == args.num_mappers, args
-        return parts
-
-
-def _generate_partition(part_size: int) -> np.ndarray:
-    num_records = part_size // 100
-    mat = np.empty((num_records, 100), dtype=np.uint8)
-    mat[:, :10] = np.frombuffer(
-        np.random.default_rng().bytes(num_records * 10), dtype=np.uint8
-    ).reshape((num_records, -1))
-    return mat.flatten()
-
-
 def _load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
-        return _generate_partition(args.input_part_size)
+        return sort_utils.generate_partition(args.input_part_size)
     return np.fromfile(path, dtype=np.uint8)
 
 
@@ -318,7 +224,7 @@ def merge_mapper_blocks(
             # ret.append(ray.put(datachunk))
         else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
-            pinfo = _part_info(args, part_id, kind="temp")
+            pinfo = sort_utils.part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
                 datachunk.tofile(fout)
             ret.append(pinfo)
@@ -355,7 +261,7 @@ def final_merge(
             return ret
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
-    pinfo = _part_info(args, part_id, "output")
+    pinfo = sort_utils.part_info(args, part_id, kind="output")
     return _merge_impl(args, M, pinfo, get_block, args.skip_output)
 
 
@@ -366,13 +272,12 @@ def _node_res(node: str) -> Dict[str, float]:
 def _ray_wait(
     futures, wait_all: bool = False, **kwargs
 ) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
-    num_returns = len(futures) if wait_all else 1
-    return ray.wait(
-        [f for f in futures if f is not None],
-        num_returns=num_returns,
-        fetch_local=False,
-        **kwargs,
-    )
+    to_wait = [f for f in futures if f is not None]
+    default_kwargs = dict(fetch_local=False)
+    if wait_all:
+        default_kwargs.update(num_returns=len(to_wait))
+    kwargs = dict(**default_kwargs, **kwargs)
+    return ray.wait(to_wait, **kwargs)
 
 
 def get_boundaries(
@@ -503,7 +408,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 @tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(args: Args):
-    parts = _load_manifest(args, constants.INPUT_MANIFEST_FILE)
+    parts = sort_utils.load_manifest(args, constants.INPUT_MANIFEST_FILE)
 
     if args.simple_shuffle:
         results = sort_simple(args, parts)
@@ -517,58 +422,8 @@ def sort_main(args: Args):
 
 
 # ------------------------------------------------------------
-#     Validate Output
-# ------------------------------------------------------------
-
-
-def _run_valsort(args: List[str]):
-    proc = subprocess.run([constants.VALSORT_PATH] + args, capture_output=True)
-    if proc.returncode != 0:
-        logging.critical("\n" + proc.stderr.decode("ascii"))
-        raise RuntimeError(f"Validation failed: {args}")
-
-
-@ray.remote
-def validate_part(path: Path):
-    logging_utils.init()
-    sum_path = path + ".sum"
-    _run_valsort(["-o", sum_path, path])
-    logging.info(f"Validated output {path}")
-    with open(sum_path, "rb") as fin:
-        return os.path.getsize(path), fin.read()
-
-
-def validate_output(args: Args):
-    if args.skip_sorting or args.skip_output:
-        return
-    partitions = _load_manifest(args, constants.OUTPUT_MANIFEST_FILE)
-    results = []
-    for _, node, path in partitions:
-        results.append(validate_part.options(**_node_res(node)).remote(path))
-    logging.info(f"Validating {len(results)} partitions")
-    results = ray.get(results)
-    total = sum(sz for sz, _ in results)
-    assert total == args.total_data_size, total - args.total_data_size
-    all_checksum = b"".join(chksm for _, chksm in results)
-    with tempfile.NamedTemporaryFile() as fout:
-        fout.write(all_checksum)
-        fout.flush()
-        _run_valsort(["-s", fout.name])
-    logging.info("All OK!")
-
-
-# ------------------------------------------------------------
 #     Main
 # ------------------------------------------------------------
-
-
-def _get_mount_points():
-    mnt = "/mnt"
-    if os.path.exists(mnt):
-        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("nvme")]
-        if len(ret) > 0:
-            return ret
-    return [tempfile.gettempdir()]
 
 
 def _get_resources_args(args: Args):
@@ -587,7 +442,7 @@ def _get_resources_args(args: Args):
         ]
         args.num_nodes = args.num_workers + 1
         assert args.num_workers == len(args.node_ips), args
-    args.mount_points = _get_mount_points()
+    args.mount_points = sort_utils.get_mount_points()
     args.node_workmem = resources["memory"] / args.num_nodes
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
 
@@ -641,13 +496,13 @@ def main(args: Args):
     tracker = init(args)
 
     if args.generate_input:
-        generate_input(args)
+        sort_utils.generate_input(args)
 
     if args.sort:
         sort_main(args)
 
     if args.validate_output:
-        validate_output(args)
+        sort_utils.validate_output(args)
 
     ray.get(tracker.performance_report.remote())
 
