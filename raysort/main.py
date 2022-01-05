@@ -212,6 +212,7 @@ def merge_mapper_blocks(
     M = len(blocks)
     # blocks = ray.get(list(blocks))
 
+    print(len(blocks))
     print(blocks[0])
     print(blocks[0].shape)
     total_bytes = sum(b.size for b in blocks)
@@ -374,10 +375,11 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             )
 
         # Submit merge tasks.
+        f = int(np.ceil(num_map_tasks / args.merge_parallelism))
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
-            f = int(np.ceil(num_map_tasks / args.merge_parallelism))
             for w in range(args.num_workers):
+                print(map_results[j * f : (j + 1) * f, w].shape)
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
                 ).remote(
@@ -385,7 +387,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     w,
                     m,
                     merge_bounds[w],
-                    *map_results[j * f : (j + 1) * f, w].flatten().tolist(),
+                    *map_results[j * f : (j + 1) * f, w].tolist(),
                 )
 
         # Wait for at least one map task from this round to finish before
