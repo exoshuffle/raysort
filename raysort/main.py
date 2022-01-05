@@ -159,8 +159,9 @@ def mapper(
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
-    return [part[offset : offset + size] for offset, size in blocks]
-    # return [ray.put(part[offset:offset + size]) for offset, size in blocks]
+    ret = [part[offset : offset + size] for offset, size in blocks]
+    # ret = [ray.put(part[offset:offset + size]) for offset, size in blocks]
+    return ret if len(ret) > 1 else ret[0]
 
 
 def _dummy_merge(
@@ -210,11 +211,6 @@ def merge_mapper_blocks(
     *blocks: List[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     M = len(blocks)
-    # blocks = ray.get(list(blocks))
-
-    print(len(blocks))
-    print(blocks[0])
-    print(blocks[0].shape)
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
 
@@ -332,7 +328,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     args,
                     w,
                     r,
-                    *map_results[:, w * args.num_reducers_per_worker + r].tolist(),
+                    *map_results[:, w * args.num_reducers_per_worker + r],
                 )
             )
 
@@ -379,7 +375,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
-                print(map_results[j * f : (j + 1) * f, w].shape)
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
                 ).remote(
@@ -387,7 +382,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     w,
                     m,
                     merge_bounds[w],
-                    *map_results[j * f : (j + 1) * f, w].tolist(),
+                    *map_results[j * f : (j + 1) * f, w],
                 )
 
         # Wait for at least one map task from this round to finish before
@@ -406,7 +401,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     for r in range(args.num_reducers_per_worker):
         reducer_results[:, r] = [
             final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                args, w, r, *merge_results[w, :, r].tolist()
+                args, w, r, *merge_results[w, :, r]
             )
             for w in range(args.num_workers)
         ]
