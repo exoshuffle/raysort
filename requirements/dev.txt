@@ -1,7 +1,6 @@
 ansible
 azure-cli
+black
+IPython
 jinja2
 memory_profiler
-pyyaml
-wandb
-yapf
