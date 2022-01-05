@@ -1,0 +1,41 @@
+name: Single Node Tests
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      WANDB_MODE: offline
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Python 3
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/dev.txt
+          pip install -r requirements/worker.txt
+
+      - name: Install project package
+        run: |
+          pip install -e .
+          pushd raysort/sortlib && python setup.py build_ext --inplace && popd
+
+      - name: 1GB simple shuffle
+        run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --simple_shuffle --skip_input --sort --ray_address=
+
+      - name: 1GB two stage shuffle
+        run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --skip_input --sort --ray_address=
+
+      - name: 1GB Ray native shuffle
+        run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --use_object_store --skip_input --sort --ray_address=

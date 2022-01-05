@@ -65,6 +65,12 @@ def get_args(*args, **kwargs):
         help="each round has `map_parallelism / merge_factor` per node",
     )
     parser.add_argument(
+        "--reduce_parallelism",
+        default=4,
+        type=int,
+        help="number of reduce tasks to run in parallel per node",
+    )
+    parser.add_argument(
         "--io_size",
         default=256 * 1024,
         type=ByteCount,
@@ -153,8 +159,9 @@ def mapper(
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
-    return [part[offset : offset + size] for offset, size in blocks]
-    # return [ray.put(part[offset:offset + size]) for offset, size in blocks]
+    ret = [part[offset : offset + size] for offset, size in blocks]
+    # ret = [ray.put(part[offset:offset + size]) for offset, size in blocks]
+    return ret if len(ret) > 1 else ret[0]
 
 
 def _dummy_merge(
@@ -234,8 +241,7 @@ def merge_mapper_blocks(
     return ret
 
 
-# TODO: Find out optimal reduce concurrency
-@ray.remote(num_cpus=2)
+@ray.remote
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
@@ -265,8 +271,12 @@ def final_merge(
     return _merge_impl(args, M, pinfo, get_block, args.skip_output)
 
 
-def _node_res(node: str) -> Dict[str, float]:
-    return {"resources": {f"node:{node}": 1e-3}}
+def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+
+
+def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+    return _node_res(args.node_ips[node_i], parallelism)
 
 
 def _ray_wait(
@@ -300,7 +310,6 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": args.num_reducers}
     map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
-    worker_res = [_node_res(node) for node in args.node_ips]
 
     for part_id in range(args.num_mappers):
         _, node, path = parts[part_id]
@@ -313,16 +322,15 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         _ray_wait(map_results[:, 0], wait_all=True)
         return []
 
-    # Submit reduce tasks.
     reducer_results = []
     for w in range(args.num_workers):
         for r in range(args.num_reducers_per_worker):
             reducer_results.append(
-                final_merge.options(**worker_res[w]).remote(
+                final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
                     args,
                     w,
                     r,
-                    *map_results[:, w * args.num_reducers_per_worker + r].tolist(),
+                    *map_results[:, w * args.num_reducers_per_worker + r],
                 )
             )
 
@@ -341,7 +349,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         dtype=object,
     )
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
-    worker_res = [_node_res(node) for node in args.node_ips]
 
     part_id = 0
     for round in range(args.num_rounds):
@@ -366,18 +373,18 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             )
 
         # Submit merge tasks.
+        f = int(np.ceil(num_map_tasks / args.merge_parallelism))
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
-            f = int(np.ceil(num_map_tasks / args.merge_parallelism))
             for w in range(args.num_workers):
                 merge_results[w, m, :] = merge_mapper_blocks.options(
-                    **merger_opt, **worker_res[w]
+                    **merger_opt, **_node_i(args, w)
                 ).remote(
                     args,
                     w,
                     m,
                     merge_bounds[w],
-                    *map_results[j * f : (j + 1) * f, w].flatten().tolist(),
+                    *map_results[j * f : (j + 1) * f, w],
                 )
 
         # Wait for at least one map task from this round to finish before
@@ -395,8 +402,8 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     for r in range(args.num_reducers_per_worker):
         reducer_results[:, r] = [
-            final_merge.options(**worker_res[w]).remote(
-                args, w, r, *merge_results[w, :, r].tolist()
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+                args, w, r, *merge_results[w, :, r]
             )
             for w in range(args.num_workers)
         ]
@@ -469,22 +476,27 @@ def _get_app_args(args: Args):
     args.num_reducers_per_worker = args.num_reducers // args.num_workers
 
 
-def init(args: Args) -> ray.actor.ActorHandle:
-    if not args.ray_address:
-        ray.init(
-            resources={
-                "head": 1,
-                "worker": os.cpu_count() // 2,
-            },
-            object_store_memory=4 * 1024 * 1024 * 1024,
-            _system_config={
-                "max_io_workers": 8,
-                "object_spilling_threshold": 1,
-                "object_spilling_config": '{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}',
-            },
+def _init_ray(addr: str):
+    if addr:
+        ray.init(address=addr)
+        return
+    system_config = {
+        "max_io_workers": 8,
+        "object_spilling_threshold": 1,
+    }
+    if os.path.exists("/mnt/nvme0/tmp"):
+        system_config.update(
+            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
-    else:
-        ray.init(address=args.ray_address)
+    ray.init(
+        resources={"head": 1, "worker": os.cpu_count() // 2},
+        object_store_memory=2 * 1024 * 1024 * 1024,
+        _system_config=system_config,
+    )
+
+
+def init(args: Args) -> ray.actor.ActorHandle:
+    _init_ray(args.ray_address)
     logging_utils.init()
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_resources_args(args)

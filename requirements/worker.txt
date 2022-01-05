@@ -1,6 +1,6 @@
 absl-py
 Cython
-IPython
 numpy
 pandas
-ray[all]==1.9.1
+ray[default]==1.9.1
+wandb
