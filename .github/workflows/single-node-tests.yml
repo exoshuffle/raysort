@@ -31,8 +31,8 @@ jobs:
           pip install -e .
           pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 
-      - name: 1GB simple shuffle
-        run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --simple_shuffle --skip_input --sort --ray_address=
+      # - name: 1GB simple shuffle
+      #   run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --simple_shuffle --skip_input --sort --ray_address=
 
       - name: 1GB two stage shuffle
         run: python raysort/main.py --total_tb=0.001 --input_part_size=10_000_000 --skip_input --sort --ray_address=

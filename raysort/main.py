@@ -212,6 +212,8 @@ def merge_mapper_blocks(
     M = len(blocks)
     # blocks = ray.get(list(blocks))
 
+    print(blocks[0])
+    print(blocks[0].shape)
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
 
