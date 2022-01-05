@@ -1,4 +1,4 @@
-name: Single Node Sort Tests
+name: Single Node Tests
 on:
   push:
     branches:
