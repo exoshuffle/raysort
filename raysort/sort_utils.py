@@ -26,9 +26,7 @@ def load_manifest(args: Args, path: Path) -> List[PartInfo]:
         ]
     with open(path) as fin:
         reader = csv.reader(fin)
-        return [
-            PartInfo(int(part_id), node, path) for part_id, node, path in reader
-        ]
+        return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
 
 
 def get_mount_points():
