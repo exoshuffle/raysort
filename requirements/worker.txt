@@ -2,5 +2,5 @@ absl-py
 Cython
 numpy
 pandas
-ray[all]==1.9.1
+ray[default]==1.9.1
 wandb
