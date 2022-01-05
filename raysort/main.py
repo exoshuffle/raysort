@@ -211,6 +211,8 @@ def merge_mapper_blocks(
     *blocks: List[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     M = len(blocks)
+    # blocks = ray.get(list(blocks))
+
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
 
