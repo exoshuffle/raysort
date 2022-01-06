@@ -109,7 +109,13 @@ class ProgressTracker:
         self.reset_gauges()
         logging_utils.init()
         logging.info(args)
-        wandb.init(entity="raysort", project="raysort")
+        try:
+            wandb.init(entity="raysort", project="raysort")
+        except wandb.errors.UsageError as e:
+            if "call wandb.login" in e.message:
+                wandb.init(mode="offline")
+            else:
+                raise e
         wandb.config.update(args)
 
     def reset_gauges(self):
