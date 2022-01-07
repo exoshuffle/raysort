@@ -6,18 +6,18 @@
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
-    # - name: Clear nvme temp directory
-    #   become: yes
-    #   file:
-    #     path: "{{mnt_path}}/tmp"
-    #     state: absent
+    - name: Clear nvme temp directory
+      become: yes
+      file:
+        path: "{{mnt_path}}/tmp"
+        state: absent
 
-    # - name: Create nvme temp directory
-    #   become: yes
-    #   file:
-    #     path: "{{mnt_path}}/tmp"
-    #     state: directory
-    #     mode: "777"
+    - name: Create nvme temp directory
+      become: yes
+      file:
+        path: "{{mnt_path}}/tmp"
+        state: directory
+        mode: "777"
 
     - name: Stop Ray
       shell: "{{pythondir}}/ray stop -f"

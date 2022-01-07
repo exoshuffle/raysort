@@ -17,7 +17,7 @@ ray start --head --port=6379 \
 
 ansible-playbook -i "$DIR/_$CLOUD.yml" "$DIR/ray.yml"
 
-pkill -9 prometheus
+pkill -9 prometheus || true
 python ~/raysort/raysort/create_prom_sd_file.py
 ~/raysort/raysort/bin/prometheus/prometheus --config.file=$HOME/raysort/config/prometheus.yml &
 
