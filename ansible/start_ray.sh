@@ -19,6 +19,6 @@ ansible-playbook -i "$DIR/_$CLOUD.yml" "$DIR/ray.yml"
 
 pkill -9 prometheus
 python ~/raysort/raysort/create_prom_sd_file.py
-~/raysort/raysort/bin/prometheus/prometheus --config.file=/home/azureuser/raysort/config/prometheus.yml &
+~/raysort/raysort/bin/prometheus/prometheus --config.file=$HOME/raysort/config/prometheus.yml &
 
 ray status
