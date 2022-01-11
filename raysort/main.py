@@ -121,7 +121,7 @@ def get_args(*args, **kwargs):
     )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
-        "steps to run", "if no  is specified, will run all steps"
+        "steps to run", "if none is specified, will run all steps"
     )
     for step in STEPS:
         steps_grp.add_argument(f"--{step}", action="store_true")
@@ -317,6 +317,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": args.num_reducers}
     map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
+    num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
     for part_id in range(args.num_mappers):
         _, node, path = parts[part_id]
@@ -324,6 +325,12 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results[part_id, :] = mapper.options(**opt).remote(
             args, part_id, bounds, path
         )
+        if part_id > 0 and part_id % num_map_tasks_per_round == 0:
+            # Wait for at least one map task from this round to finish before
+            # scheduling the next round.
+            _ray_wait(
+                map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
+            )
 
     if args.skip_final_merge:
         _ray_wait(map_results[:, 0], wait_all=True)
@@ -483,22 +490,24 @@ def _get_app_args(args: Args):
     args.num_reducers_per_worker = args.num_reducers // args.num_workers
 
 
-def _build_cluster(system_config, num_nodes=2, num_cpus=4, object_store_memory=1 * 1024 * 1024 * 1024):
+def _build_cluster(
+    system_config, num_nodes=2, num_cpus=4, object_store_memory=1 * 1024 * 1024 * 1024
+):
     cluster = Cluster()
     cluster.add_node(
-         resources={"head": 1},
-         object_store_memory=2 * 1024 * 1024 * 1024,
-         _system_config=system_config,
+        resources={"head": 1},
+        object_store_memory=2 * 1024 * 1024 * 1024,
+        _system_config=system_config,
     )
     cluster.add_node(
         resources={"node_1": 1, "worker": 1},
         object_store_memory=object_store_memory,
-        num_cpus=num_cpus//2,
+        num_cpus=num_cpus // 2,
     )
     cluster.add_node(
         resources={"node_2": 1, "worker": 1},
         object_store_memory=object_store_memory,
-        num_cpus=num_cpus//2,
+        num_cpus=num_cpus // 2,
     )
     cluster.wait_for_nodes()
     return cluster
