@@ -150,7 +150,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
     return blocks
 
 
-@ray.remote
+@ray.remote(max_retries=0)
 @tracing_utils.timeit("map")
 def mapper(
     args: Args,
@@ -158,6 +158,8 @@ def mapper(
     bounds: List[int],
     path: Path,
 ) -> List[np.ndarray]:
+    task_id = ray.get_runtime_context().task_id
+    print(f"mapper task {task_id} (map_id: {mapper_id})")
     start_time = time.time()
     part = _load_partition(args, path)
     load_duration = time.time() - start_time
@@ -208,7 +210,7 @@ def _merge_impl(
     return pinfo
 
 
-@ray.remote
+@ray.remote(max_retries=0)
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
     args: Args,
@@ -219,6 +221,8 @@ def merge_mapper_blocks(
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     M = len(blocks)
     # blocks = ray.get(list(blocks))
+    task_id = ray.get_runtime_context().task_id
+    print(f"merge task {task_id} (merge_id: {merge_id}, {worker_id})")
 
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
@@ -248,7 +252,7 @@ def merge_mapper_blocks(
     return ret
 
 
-@ray.remote
+@ray.remote(max_retries=0)
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
@@ -366,6 +370,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             _, node, path = parts[part_id]
             opt = dict(**mapper_opt, **_node_res(node))
             m = part_id % num_map_tasks_per_round
+            logging.info(f"map task (map_id: {part_id}) input: {map_bounds}")
             map_results[m, :] = mapper.options(**opt).remote(
                 args, part_id, map_bounds, path
             )
@@ -384,6 +389,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
+                logging.info(f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}")
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
                 ).remote(
@@ -397,6 +403,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         _ray_wait(map_results[:, 0])
+        logging.info(f"map task results: {map_results}")
         del map_results
 
     if args.skip_final_merge:
@@ -477,6 +484,7 @@ def _get_app_args(args: Args):
     args.num_rounds = int(
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism)
     )
+    logging.info(f"Num mappers: {args.num_mappers}; workers: {args.num_workers}; map parallelism: {args.map_parallelism}; num rounds: {args.num_rounds}")   
     args.num_mergers_per_worker = args.num_rounds * args.merge_parallelism
     args.num_reducers = args.num_mappers
     assert args.num_reducers % args.num_workers == 0, args
@@ -487,19 +495,15 @@ def _build_cluster(system_config, num_nodes=2, num_cpus=4, object_store_memory=1
     cluster = Cluster()
     cluster.add_node(
          resources={"head": 1},
-         object_store_memory=2 * 1024 * 1024 * 1024,
+         object_store_memory=object_store_memory,
          _system_config=system_config,
     )
-    cluster.add_node(
-        resources={"node_1": 1, "worker": 1},
-        object_store_memory=object_store_memory,
-        num_cpus=num_cpus//2,
-    )
-    cluster.add_node(
-        resources={"node_2": 1, "worker": 1},
-        object_store_memory=object_store_memory,
-        num_cpus=num_cpus//2,
-    )
+    for i in range(num_nodes):
+        cluster.add_node(
+            resources={f"node_{i}": 1, "worker": 1},
+            object_store_memory=object_store_memory,
+            num_cpus=num_cpus//num_nodes,
+        )
     cluster.wait_for_nodes()
     return cluster
 
@@ -517,7 +521,7 @@ def _init_ray(addr: str, sim_cluster: bool):
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
     if sim_cluster:
-        cluster = _build_cluster(system_config)
+        cluster = _build_cluster(system_config, num_nodes=4, num_cpus=4, object_store_memory=100 * 1024 * 1024) # 100 MB mem 
         cluster.connect()
     else:
         ray.init(
