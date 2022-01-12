@@ -12,7 +12,7 @@ import ray
 
 from raysort import constants
 from raysort import logging_utils
-from raysort.types import ByteCount, PartId, PartInfo, Path, RecordCount
+from raysort.types import PartId, PartInfo, Path, RecordCount
 
 
 Args = argparse.Namespace
@@ -56,6 +56,8 @@ def _validate_input_manifest(args: Args) -> bool:
     if len(parts) < args.num_mappers:
         return False
     for _, _, path in parts:
+        if not os.path.exists(path):
+            return False
         if os.path.getsize(path) != args.input_part_size:
             return False
     logging.info("Found existing input manifest, skipping generating input.")

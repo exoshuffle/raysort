@@ -1,11 +1,11 @@
 ---
 - hosts: all
   vars:
-    data_disk: /dev/disk/azure/scsi1/lun0
-    ssd_device: /dev/disk/azure/scsi1/lun0-part1
+    data_disk: /dev/nvme1n1
+    ssd_device: /dev/nvme1n1p1
     mnt_path: /mnt/nvme0
-    workdir: /home/azureuser/raysort
-    pythondir: /home/azureuser/miniconda3/envs/raysort/bin
+    workdir: /home/ubuntu/raysort
+    pythondir: /home/ubuntu/miniconda3/envs/raysort/bin
   tasks:
     - name: Create a new ext4 partition
       become: yes
@@ -57,7 +57,7 @@
 
     - name: Sync workdir
       synchronize:
-        src: /home/azureuser/raysort/
+        src: "{{workdir}}/"
         dest: "{{workdir}}"
         rsync_opts:
           - --exclude=.git

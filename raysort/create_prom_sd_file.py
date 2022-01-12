@@ -36,6 +36,8 @@ def get_sd_content(expected_num_nodes: int) -> str:
 
 
 def create_sd_file(expected_num_nodes: int = 0):
+    dirname = os.path.dirname(SERVICE_DISCOVERY_FILE_PATH)
+    os.makedirs(dirname, exist_ok=True)
     tmp_filename = f"{SERVICE_DISCOVERY_FILE_PATH}.swp"
     content = get_sd_content(expected_num_nodes)
     with open(tmp_filename, "w") as json_file:

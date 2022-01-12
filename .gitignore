@@ -11,7 +11,8 @@ cython_debug
 
 bin
 data
+scripts/data
 wandb
 
 .terraform*
-scripts/data
+ansible/_*.yml

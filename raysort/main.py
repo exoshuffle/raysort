@@ -113,9 +113,15 @@ def get_args(*args, **kwargs):
         action="store_true",
         help="if set, will use the simple map-reduce version",
     )
+    parser.add_argument(
+        "--repeat_sort",
+        default=1,
+        type=int,
+        help="how many times to run the sort for benchmarking",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
-        "steps to run", "if no  is specified, will run all steps"
+        "steps to run", "if none is specified, will run all steps"
     )
     for step in STEPS:
         steps_grp.add_argument(f"--{step}", action="store_true")
@@ -315,6 +321,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": args.num_reducers}
     map_results = np.empty((args.num_mappers, args.num_reducers), dtype=object)
+    num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
     for part_id in range(args.num_mappers):
         _, node, path = parts[part_id]
@@ -322,6 +329,13 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results[part_id, :] = mapper.options(**opt).remote(
             args, part_id, bounds, path
         )
+        # TODO: try memory-aware scheduling
+        if part_id > 0 and part_id % num_map_tasks_per_round == 0:
+            # Wait for at least one map task from this round to finish before
+            # scheduling the next round.
+            _ray_wait(
+                map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
+            )
 
     if args.skip_final_merge:
         _ray_wait(map_results[:, 0], wait_all=True)
@@ -505,7 +519,8 @@ def main(args: Args):
         sort_utils.generate_input(args)
 
     if args.sort:
-        sort_main(args)
+        for _ in range(args.repeat_sort):
+            sort_main(args)
 
     if args.validate_output:
         sort_utils.validate_output(args)
