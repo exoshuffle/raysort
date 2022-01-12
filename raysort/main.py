@@ -376,8 +376,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
             part = parts[part_id]
-            # opt = dict(**mapper_opt, **_node_res(part.node))
-            opt = mapper_opt
+            opt = dict(**mapper_opt, **_node_res(part.node))
             m = part_id % num_map_tasks_per_round
             logging.info(f"map task (map_id: {part_id}) input: {map_bounds}")
             map_results[m, :] = mapper.options(**opt).remote(
