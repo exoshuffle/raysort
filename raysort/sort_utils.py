@@ -21,7 +21,7 @@ Args = argparse.Namespace
 def load_manifest(args: Args, path: Path) -> List[PartInfo]:
     if args.skip_input:
         return [
-            PartInfo(i, args.node_ips[i % args.num_workers], None)
+            PartInfo(i, args.worker_ips[i % args.num_workers], None)
             for i in range(args.num_mappers)
         ]
     with open(path) as fin:
@@ -103,7 +103,7 @@ def generate_input(args: Args):
     offset = 0
     tasks = []
     for part_id in range(args.num_mappers):
-        node = args.node_ips[part_id % args.num_workers]
+        node = args.worker_ips[part_id % args.num_workers]
         tasks.append(
             generate_part.options(**_node_res(node)).remote(
                 args, part_id, min(size, total_size - offset), offset

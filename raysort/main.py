@@ -287,7 +287,7 @@ def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
 
 
 def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
-    return _node_res(args.node_ips[node_i], parallelism)
+    return _node_res(args.worker_ips[node_i], parallelism)
 
 
 def _ray_wait(
@@ -324,10 +324,10 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
     for part_id in range(args.num_mappers):
-        _, node, path = parts[part_id]
-        opt = dict(**mapper_opt, **_node_res(node))
+        part = parts[part_id]
+        opt = dict(**mapper_opt, **_node_res(part.node))
         map_results[part_id, :] = mapper.options(**opt).remote(
-            args, part_id, bounds, path
+            args, part_id, bounds, part.path
         )
         # TODO: try memory-aware scheduling
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
@@ -375,12 +375,13 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
-            _, node, path = parts[part_id]
-            opt = dict(**mapper_opt, **_node_res(node))
+            part = parts[part_id]
+            # opt = dict(**mapper_opt, **_node_res(part.node))
+            opt = mapper_opt
             m = part_id % num_map_tasks_per_round
             logging.info(f"map task (map_id: {part_id}) input: {map_bounds}")
             map_results[m, :] = mapper.options(**opt).remote(
-                args, part_id, map_bounds, path
+                args, part_id, map_bounds, part.path
             )
             part_id += 1
 
@@ -461,18 +462,14 @@ def _get_resources_args(args: Args):
     resources = ray.cluster_resources()
     logging.info(f"Cluster resources: {resources}")
     args.num_workers = int(resources["worker"])
-    head_addr = ray.util.get_node_ip_address()
-    if not args.ray_address:
-        args.node_ips = [head_addr] * args.num_workers
-        args.num_nodes = 1
-    else:
-        args.node_ips = [
-            r.split(":")[1]
-            for r in resources
-            if r.startswith("node:") and r != f"node:{head_addr}"
-        ]
-        args.num_nodes = args.num_workers + 1
-        assert args.num_workers == len(args.node_ips), args
+    head_node_str = "node:" + ray.util.get_node_ip_address()
+    args.worker_ips = [
+        r.split(":")[1]
+        for r in resources
+        if r.startswith("node:") and r != head_node_str
+    ]
+    args.num_nodes = args.num_workers + 1
+    assert args.num_workers == len(args.worker_ips), args
     args.mount_points = sort_utils.get_mount_points()
     args.node_workmem = resources["memory"] / args.num_nodes
     args.node_objmem = resources["object_store_memory"] / args.num_nodes

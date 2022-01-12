@@ -1,6 +1,7 @@
 import os
 
 import ray
+from ray import cluster_utils
 
 
 def _build_cluster(
@@ -9,7 +10,7 @@ def _build_cluster(
     num_cpus_per_node=1,
     object_store_memory=1 * 1024 * 1024 * 1024,
 ):
-    cluster = ray.cluster_utils.Cluster()
+    cluster = cluster_utils.Cluster()
     cluster.add_node(
         resources={"head": 1},
         object_store_memory=object_store_memory,
@@ -18,8 +19,8 @@ def _build_cluster(
     for i in range(num_nodes):
         cluster.add_node(
             resources={
-                f"node_{i}": 1,
                 "worker": 1,
+                f"node:10.0.0.{i + 1}": 1,
             },
             object_store_memory=object_store_memory,
             num_cpus=num_cpus_per_node,
@@ -42,6 +43,6 @@ def init(addr: str):
         )
     cluster = _build_cluster(
         system_config,
-        object_store_memory=100 * 1024 * 1024,  # 100 MB memory
+        object_store_memory=100 * 1024 * 1024,  # 100MB
     )
     cluster.connect()
