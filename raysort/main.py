@@ -114,6 +114,12 @@ def get_args(*args, **kwargs):
         help="if set, will use the simple map-reduce version",
     )
     parser.add_argument(
+        "--repeat_sort",
+        default=1,
+        type=int,
+        help="how many times to run the sort for benchmarking",
+    )
+    parser.add_argument(
         "--sim_cluster",
         default=False,
         action="store_true",
@@ -325,6 +331,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results[part_id, :] = mapper.options(**opt).remote(
             args, part_id, bounds, path
         )
+        # TODO: try memory-aware scheduling
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
             # Wait for at least one map task from this round to finish before
             # scheduling the next round.
@@ -552,7 +559,8 @@ def main(args: Args):
         sort_utils.generate_input(args)
 
     if args.sort:
-        sort_main(args)
+        for _ in range(args.repeat_sort):
+            sort_main(args)
 
     if args.validate_output:
         sort_utils.validate_output(args)
