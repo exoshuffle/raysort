@@ -2,7 +2,7 @@
 
 set -ex
 
-CLOUD=aws
+CLOUD=aws_spark
 
 DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
