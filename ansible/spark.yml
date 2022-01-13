@@ -1,0 +1,10 @@
+
+---
+- hosts: all
+  vars:
+    dfs_data_dir: /mnt/nvme0/tmp/hadoop/dfs/data
+  tasks:
+    - name: Remove any existing data directory
+      file:
+        state: absent
+        path: "{{dfs_data_dir}}"
