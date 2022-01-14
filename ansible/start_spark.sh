@@ -17,3 +17,5 @@ ansible-playbook -i "$DIR/_$CLOUD.yml" "$DIR/spark.yml"
 
 $HADOOP_HOME/sbin/start-dfs.sh
 $HADOOP_HOME/sbin/start-yarn.sh
+
+$HADOOP_HOME/bin/hdfs dfs -mkdir /eventlog
