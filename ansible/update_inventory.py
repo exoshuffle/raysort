@@ -13,7 +13,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_enum(
     "cloud",
     "aws",
-    ["aws", "azure"],
+    ["aws", "azure", "aws_spark"],
     "which cloud is the cluster on",
 )
 flags.DEFINE_string(
