@@ -9,10 +9,10 @@ from typing import Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import ray
-from ray.cluster_utils import Cluster
 
 from raysort import constants
 from raysort import logging_utils
+from raysort import ray_utils
 from raysort import sortlib
 from raysort import sort_utils
 from raysort import tracing_utils
@@ -118,12 +118,6 @@ def get_args(*args, **kwargs):
         default=1,
         type=int,
         help="how many times to run the sort for benchmarking",
-    )
-    parser.add_argument(
-        "--sim_cluster",
-        default=False,
-        action="store_true",
-        help="if set, will simulate a cluster rather than one node when run locally",
     )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
@@ -289,7 +283,7 @@ def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
 
 
 def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
-    return _node_res(args.node_ips[node_i], parallelism)
+    return _node_res(args.worker_ips[node_i], parallelism)
 
 
 def _ray_wait(
@@ -458,18 +452,14 @@ def _get_resources_args(args: Args):
     resources = ray.cluster_resources()
     logging.info(f"Cluster resources: {resources}")
     args.num_workers = int(resources["worker"])
-    head_addr = ray.util.get_node_ip_address()
-    if not args.ray_address:
-        args.node_ips = [head_addr] * args.num_workers
-        args.num_nodes = 1
-    else:
-        args.node_ips = [
-            r.split(":")[1]
-            for r in resources
-            if r.startswith("node:") and r != f"node:{head_addr}"
-        ]
-        args.num_nodes = args.num_workers + 1
-        assert args.num_workers == len(args.node_ips), args
+    head_node_str = "node:" + ray.util.get_node_ip_address()
+    args.worker_ips = [
+        r.split(":")[1]
+        for r in resources
+        if r.startswith("node:") and r != head_node_str
+    ]
+    args.num_nodes = args.num_workers + 1
+    assert args.num_workers == len(args.worker_ips), args
     args.mount_points = sort_utils.get_mount_points()
     args.node_workmem = resources["memory"] / args.num_nodes
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
@@ -497,54 +487,8 @@ def _get_app_args(args: Args):
     args.num_reducers_per_worker = args.num_reducers // args.num_workers
 
 
-def _build_cluster(
-    system_config, num_nodes=2, num_cpus=4, object_store_memory=1 * 1024 * 1024 * 1024
-):
-    cluster = Cluster()
-    cluster.add_node(
-        resources={"head": 1},
-        object_store_memory=2 * 1024 * 1024 * 1024,
-        _system_config=system_config,
-    )
-    cluster.add_node(
-        resources={"node_1": 1, "worker": 1},
-        object_store_memory=object_store_memory,
-        num_cpus=num_cpus // 2,
-    )
-    cluster.add_node(
-        resources={"node_2": 1, "worker": 1},
-        object_store_memory=object_store_memory,
-        num_cpus=num_cpus // 2,
-    )
-    cluster.wait_for_nodes()
-    return cluster
-
-
-def _init_ray(addr: str, sim_cluster: bool):
-    if addr:
-        ray.init(address=addr)
-        return
-    system_config = {
-        "max_io_workers": 8,
-        "object_spilling_threshold": 1,
-    }
-    if os.path.exists("/mnt/nvme0/tmp"):
-        system_config.update(
-            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
-        )
-    if sim_cluster:
-        cluster = _build_cluster(system_config)
-        cluster.connect()
-    else:
-        ray.init(
-            resources={"head": 1, "worker": os.cpu_count() // 2},
-            object_store_memory=2 * 1024 * 1024 * 1024,
-            _system_config=system_config,
-        )
-
-
 def init(args: Args) -> ray.actor.ActorHandle:
-    _init_ray(args.ray_address, args.sim_cluster)
+    ray_utils.init(args.ray_address)
     logging_utils.init()
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_resources_args(args)
