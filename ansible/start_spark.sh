@@ -5,6 +5,8 @@ set -ex
 CLOUD=aws_spark
 
 DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+ 
+$SPARK_HOME/sbin/stop-history-server.sh
 
 $HADOOP_HOME/sbin/stop-yarn.sh
 $HADOOP_HOME/sbin/stop-dfs.sh
@@ -19,3 +21,5 @@ $HADOOP_HOME/sbin/start-dfs.sh
 $HADOOP_HOME/sbin/start-yarn.sh
 
 $HADOOP_HOME/bin/hdfs dfs -mkdir /eventlog
+
+$SPARK_HOME/sbin/start-history-server.sh
