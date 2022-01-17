@@ -1,15 +1,16 @@
 import os
+from typing import Dict
 
 import ray
 from ray import cluster_utils
 
 
 def _build_cluster(
-    system_config,
-    num_nodes=4,
-    num_cpus_per_node=1,
-    object_store_memory=1 * 1024 * 1024 * 1024,
-):
+    system_config: Dict,
+    num_nodes: int,
+    num_cpus_per_node: int = 1,
+    object_store_memory: int = 1 * 1024 * 1024 * 1024,
+) -> cluster_utils.Cluster:
     cluster = cluster_utils.Cluster()
     cluster.add_node(
         resources={"head": 1},
@@ -41,5 +42,6 @@ def init(addr: str):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
-    cluster = _build_cluster(system_config)
+    num_nodes = os.cpu_count() // 2
+    cluster = _build_cluster(system_config, num_nodes)
     cluster.connect()
