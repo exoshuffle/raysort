@@ -34,12 +34,13 @@ Notes:
 
 ## Starting up a Cluster
 
-1. Install Terraform: `$RAYSORT_ROOT/terraform/setup.sh`.
+1. Install Terraform: `$RAYSORT_ROOT/terraform/setup.sh`
 2. Go to `$RAYSORT_ROOT/terraform/aws`. If you don't have [direnv](https://direnv.net/), manually run the content of `.envrc`.
 3. In `$RAYSORT_ROOT/terraform/aws`, run `terraform apply` to launch a cluster of AWS instances.
-4. Run Ansible to set up the worker nodes: `$RAYSORT_ROOT/ansible/setup.py`.
-5. Start Ray: `$RAYSORT_ROOT/ansible/start_ray.sh`.
-6. Run a test run on the cluster: `python raysort/main.py --total_tb=0.1 --use_object_store 2>&1 | tee main.log`
+4. Make sure you can ssh into one of the worker nodes using `ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null <worker_ip>`. If you cannot, it's likely because your current VM is not in the same security group as the worker nodes (which are in the `default` security group). The easiest solution is to find your instance on the AWS EC2 UI, right click "Security -> Change Security Groups", and add your instance to the `default` security group. TODO: this might be possible to automate in Terraform.
+5. Run Ansible to set up the worker nodes: `$RAYSORT_ROOT/ansible/setup.py`
+6. Start Ray: `$RAYSORT_ROOT/ansible/start_ray.sh`
+7. Run a test run on the cluster: `python raysort/main.py --total_tb=0.1 --use_object_store 2>&1 | tee main.log`
 
 
 ## Misc
