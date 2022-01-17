@@ -1,4 +1,4 @@
-name: Single Node Tests
+name: Single Node Sort Tests
 on:
   push:
     branches:
@@ -23,7 +23,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements/dev.txt
           pip install -r requirements/worker.txt
 
       - name: Install project package

@@ -55,10 +55,23 @@ show_files() {
     find $BIN_DIR
 }
 
+show_help() {
+    set +x
+    echo "Usage: $0 [binary1] [binary2]..."
+    echo "  where [binary#] can be {gensort,prometheus,node_exporter,jaeger}."
+    echo "  If no argument is supplied, will install all binaries."
+    set -x
+}
+
+args="$@"
+if [ -z "$args" ]; then
+    args="gensort prometheus node_exporter"
+fi
+
 prepare
-install_gensort
-install_prometheus
-install_node_exporter
-# install_jaeger
+for arg in $args
+do
+    "install_$arg"
+done
 cleanup
 show_files
