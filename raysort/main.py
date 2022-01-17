@@ -234,7 +234,7 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            ret.append(datachunk)
+            ret.append(np.copy(datachunk))
             # ret.append(ray.put(datachunk))
         else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
@@ -254,7 +254,7 @@ def final_merge(
     args: Args,
     worker_id: PartId,
     reducer_id: PartId,
-    *parts: Union[List[PartInfo], List[np.ndarray]],
+    *parts: List,
 ) -> PartInfo:
     M = len(parts)
 
@@ -262,16 +262,18 @@ def final_merge(
         if i >= M or d > 0:
             return None
         part = parts[i]
-        if isinstance(part, np.ndarray):
-            return part
-            # return ray.get(part)
         if part is None:
             return None
+        if isinstance(part, np.ndarray):
+            return None if part.size == 0 else part
+        if isinstance(part, ray.ObjectRef):
+            ret = ray.get(part)
+            assert ret is None or isinstance(ret, np.ndarray), type(ret)
+            return ret
+        assert isinstance(part, PartInfo), part
         with open(part.path, "rb", buffering=args.io_size) as fin:
             ret = np.fromfile(fin, dtype=np.uint8)
-            if ret.size == 0:
-                return None
-            return ret
+            return None if ret.size == 0 else ret
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(args, part_id, kind="output")
