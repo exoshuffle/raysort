@@ -41,8 +41,5 @@ def init(addr: str):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
-    cluster = _build_cluster(
-        system_config,
-        object_store_memory=100 * 1024 * 1024,  # 100MB
-    )
+    cluster = _build_cluster(system_config)
     cluster.connect()
