@@ -1,7 +1,7 @@
 ---
 - hosts: all
   vars:
-    head_ip: 172.31.27.175
+    head_ip: 0.0.0.0
     mnt_path: /mnt/nvme0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
