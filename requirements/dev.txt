@@ -4,3 +4,4 @@ black
 IPython
 jinja2
 memory_profiler
+pytest
