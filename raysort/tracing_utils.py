@@ -3,8 +3,10 @@ import functools
 import json
 import logging
 import os
+import re
 import time
 import wandb
+from typing import Dict
 
 import pandas as pd
 import ray
@@ -21,7 +23,6 @@ Span = collections.namedtuple(
 
 def timeit(
     event: str,
-    report_time=False,
     report_in_progress=True,
     report_completed=True,
     log_to_wandb=False,
@@ -46,12 +47,11 @@ def timeit(
                         ray.util.get_node_ip_address(),
                         os.getpid(),
                     ),
-                    echo=report_time,
+                    log_to_wandb=log_to_wandb,
                 )
                 tracker.inc.remote(
                     f"{event}_completed",
                     echo=report_completed,
-                    log_to_wandb=log_to_wandb,
                 )
                 return ret
             finally:
@@ -88,6 +88,23 @@ def _make_trace_event(span: Span):
     }
 
 
+def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
+    summary = ray.internal.internal_api.memory_summary(
+        ray.worker._global_node.address, stats_only=True
+    )
+    if print_ray_stats:
+        print(summary)
+
+    def extract_gb(regex: str) -> float:
+        matches = re.findall(regex, summary)
+        return float(matches[0]) / 1024 if len(matches) > 0 else 0
+
+    return {
+        "spilled_gb": extract_gb(r"Spilled (\d+) MiB"),
+        "restored_gb": extract_gb(r"Restored (\d+) MiB"),
+    }
+
+
 @ray.remote(resources={"head": 1e-3})
 class ProgressTracker:
     def __init__(self, args):
@@ -107,6 +124,7 @@ class ProgressTracker:
         self.series = collections.defaultdict(list)
         self.spans = []
         self.reset_gauges()
+        self.initial_spilling_stats = _get_spilling_stats()
         logging_utils.init()
         logging.info(args)
         try:
@@ -144,14 +162,13 @@ class ProgressTracker:
         if log_to_wandb:
             wandb.log({metric_name: value})
 
-    def record_span(self, span: Span, record_value=True, echo=False):
+    def record_span(self, span: Span, record_value=True, log_to_wandb=False):
         self.spans.append(span)
-        if echo:
-            logging.info(f"{span}")
         if record_value:
-            self.record_value(span.event, span.duration, echo=False)
+            self.record_value(span.event, span.duration, log_to_wandb=log_to_wandb)
 
     def report(self):
+        self.report_spilling()
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)
@@ -171,6 +188,12 @@ class ProgressTracker:
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
         wandb.finish()
 
+    def report_spilling(self):
+        stats = _get_spilling_stats(print_ray_stats=True)
+        for k, v in stats.items():
+            v0 = self.initial_spilling_stats.get(k, 0)
+            wandb.log({k: v - v0})
+
     def save_trace(self):
         self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
@@ -180,10 +203,5 @@ class ProgressTracker:
         wandb.save(filename, base_path="/tmp")
 
     def performance_report(self):
-        memory_summary = ray.internal.internal_api.memory_summary(
-            ray.worker._global_node.address, stats_only=True
-        )
-        print(memory_summary)
-
         self.save_trace()
         self.report()
