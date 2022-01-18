@@ -1,8 +1,14 @@
+import argparse
+import logging
 import os
+import tempfile
 from typing import Dict
 
 import ray
 from ray import cluster_utils
+
+
+Args = argparse.Namespace
 
 
 def _build_cluster(
@@ -30,10 +36,33 @@ def _build_cluster(
     return cluster
 
 
-def init(addr: str):
-    if addr:
-        ray.init(address=addr)
-        return
+def _get_mount_points():
+    mnt = "/mnt"
+    if os.path.exists(mnt):
+        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("nvme")]
+        if len(ret) > 0:
+            return ret
+    return [tempfile.gettempdir()]
+
+
+def _get_resources_args(args: Args):
+    resources = ray.cluster_resources()
+    logging.info(f"Cluster resources: {resources}")
+    args.num_workers = int(resources["worker"])
+    head_node_str = "node:" + ray.util.get_node_ip_address()
+    args.worker_ips = [
+        r.split(":")[1]
+        for r in resources
+        if r.startswith("node:") and r != head_node_str
+    ]
+    args.num_nodes = args.num_workers + 1
+    assert args.num_workers == len(args.worker_ips), args
+    args.mount_points = _get_mount_points()
+    args.node_workmem = resources["memory"] / args.num_nodes
+    args.node_objmem = resources["object_store_memory"] / args.num_nodes
+
+
+def _init_local_cluster():
     system_config = {
         "fetch_fail_timeout_milliseconds": 10000,
         "max_io_workers": 1,
@@ -46,3 +75,11 @@ def init(addr: str):
     num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
     cluster.connect()
+
+
+def init(args: Args):
+    if args.ray_address:
+        ray.init(address=args.ray_address)
+    else:
+        _init_local_cluster()
+    _get_resources_args(args)

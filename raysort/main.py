@@ -1,7 +1,5 @@
 import argparse
 import csv
-import datetime
-import logging
 import os
 import random
 import time
@@ -451,23 +449,6 @@ def sort_main(args: Args):
 # ------------------------------------------------------------
 
 
-def _get_resources_args(args: Args):
-    resources = ray.cluster_resources()
-    logging.info(f"Cluster resources: {resources}")
-    args.num_workers = int(resources["worker"])
-    head_node_str = "node:" + ray.util.get_node_ip_address()
-    args.worker_ips = [
-        r.split(":")[1]
-        for r in resources
-        if r.startswith("node:") and r != head_node_str
-    ]
-    args.num_nodes = args.num_workers + 1
-    assert args.num_workers == len(args.worker_ips), args
-    args.mount_points = sort_utils.get_mount_points()
-    args.node_workmem = resources["memory"] / args.num_nodes
-    args.node_objmem = resources["object_store_memory"] / args.num_nodes
-
-
 def _get_app_args(args: Args):
     # If no steps are specified, run all steps.
     args_dict = vars(args)
@@ -490,10 +471,9 @@ def _get_app_args(args: Args):
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
-    ray_utils.init(args.ray_address)
     logging_utils.init()
+    ray_utils.init(args)
     os.makedirs(constants.WORK_DIR, exist_ok=True)
-    _get_resources_args(args)
     _get_app_args(args)
     return tracing_utils.create_progress_tracker(args)
 
