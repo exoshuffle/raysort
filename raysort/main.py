@@ -199,6 +199,7 @@ def _merge_impl(
     merger = merge_fn(M, get_block)
     if skip_output:
         for datachunk in merger:
+            # TODO(@lsf): consume datachunk and report time to tracker
             del datachunk
         return pinfo
 
@@ -468,7 +469,6 @@ def _get_resources_args(args: Args):
 
 
 def _get_app_args(args: Args):
-    args.run_id = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     # If no steps are specified, run all steps.
     args_dict = vars(args)
     if not any(args_dict[step] for step in STEPS):
