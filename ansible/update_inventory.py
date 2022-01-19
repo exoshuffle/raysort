@@ -1,6 +1,5 @@
 import ast
 import json
-import os
 import pathlib
 import subprocess
 import yaml
@@ -32,8 +31,6 @@ flags.DEFINE_string(
     "raysort-vmss",
     "VMSS name",
 )
-
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def run(cmd, **kwargs):
@@ -120,7 +117,7 @@ def get_inventory_content(node_ips):
 
 
 def write_inventory_file(content):
-    path = f"{SCRIPT_DIR}/_{FLAGS.cloud}.yml"
+    path = f"_{FLAGS.cloud}.yml"
     with open(path, "w") as fout:
         fout.write(content)
 
