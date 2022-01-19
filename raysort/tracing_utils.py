@@ -35,8 +35,6 @@ def timeit(
                 f"{event}_in_progress",
                 echo=report_in_progress,
             )
-            if event == "sort":
-                tracker.record_sort_start_time.remote()
             try:
                 begin = time.time()
                 ret = f(*args, **kwargs)
@@ -127,7 +125,6 @@ class ProgressTracker:
         self.spans = []
         self.reset_gauges()
         self.initial_spilling_stats = _get_spilling_stats()
-        self.sort_start_time = None
         logging_utils.init()
         logging.info(args)
         try:
@@ -170,9 +167,6 @@ class ProgressTracker:
         if record_value:
             self.record_value(span.event, span.duration, log_to_wandb=log_to_wandb)
 
-    def record_sort_start_time(self):
-        self.sort_start_time = time.time()
-
     def report(self):
         self.report_spilling()
         ret = []
@@ -203,7 +197,7 @@ class ProgressTracker:
     def save_trace(self):
         self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
-        filename = f"/tmp/raysort-{self.sort_start_time}.json"
+        filename = f"/tmp/raysort-{self.run_args.run_id}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
         wandb.save(filename, base_path="/tmp")
