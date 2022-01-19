@@ -41,14 +41,11 @@
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
-        state: absent
-
-    - name: Create nvme temp directory
-      become: yes
-      file:
-        path: "{{mnt_path}}/tmp"
-        state: directory
+        state: "{{ item }}"
         mode: "777"
+      with_items:
+        - absent
+        - directory
 
     - name: Remove workdir
       file:

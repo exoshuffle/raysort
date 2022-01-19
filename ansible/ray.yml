@@ -10,14 +10,11 @@
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
-        state: absent
-
-    - name: Create nvme temp directory
-      become: yes
-      file:
-        path: "{{mnt_path}}/tmp"
-        state: directory
+        state: "{{ item }}"
         mode: "777"
+      with_items:
+        - absent
+        - directory
 
     - name: Stop Ray
       shell: "{{pythondir}}/ray stop -f"
@@ -32,7 +29,7 @@
         --object-manager-port=8076
         --metrics-export-port=8090
         --resources='{"worker":1}'
-        --object-store-memory={{28 * 1024 * 1024 * 1024}}
+        --object-store-memory={{14 * 1024 * 1024 * 1024}}
 
     - name: Start Node Exporter
       shell: >

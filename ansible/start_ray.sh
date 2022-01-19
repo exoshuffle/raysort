@@ -4,7 +4,11 @@ set -ex
 
 CLOUD=aws
 
-DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+TMP_DIR=/mnt/nvme0/tmp
+sudo mkdir -p $TMP_DIR
+sudo chmod 777 $TMP_DIR
 
 ray stop
 
@@ -16,7 +20,7 @@ ray start --head --port=6379 \
     --object-store-memory=30064771072
 
 HEAD_IP=$(ec2metadata --local-ipv4)
-ansible-playbook "$DIR/ray.yml" -i "$DIR/_$CLOUD.yml" --extra-vars "{\"head_ip\":\"$HEAD_IP\"}"
+ansible-playbook "$SCRIPT_DIR/ray.yml" -i "$SCRIPT_DIR/_$CLOUD.yml" --extra-vars "{\"head_ip\":\"$HEAD_IP\"}"
 
 pkill -9 prometheus || true
 python ~/raysort/raysort/create_prom_sd_file.py

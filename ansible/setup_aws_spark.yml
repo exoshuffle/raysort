@@ -43,26 +43,23 @@
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
-        state: absent
-
-    - name: Create nvme temp directory
-      become: yes
-      file:
-        path: "{{mnt_path}}/tmp"
-        state: directory
+        state: "{{ item }}"
         mode: "777"
+      with_items:
+        - absent
+        - directory
 
     - name: Sync hosts
       become: yes
       copy:
         src: "{{hosts_path}}"
         dest: "{{hosts_path}}"
-    
+
     - name: Copy Hadoop core-site.xml
       copy:
         src: "{{hadoop_config_path}}/core-site.xml"
         dest: "{{hadoop_config_path}}/core-site.xml"
-    
+
     - name: Copy Hadoop yarn-site.xml
       copy:
         src: "{{hadoop_config_path}}/yarn-site.xml"
