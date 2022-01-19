@@ -2,7 +2,9 @@
 
 set -ex
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 CLOUD=aws
 
-python update_inventory.py
-ansible-playbook setup_$CLOUD.yml -i _$CLOUD.yml
+python $SCRIPT_DIR/update_inventory.py
+ansible-playbook $SCRIPT_DIR/setup_$CLOUD.yml -i $SCRIPT_DIR/_$CLOUD.yml
