@@ -35,7 +35,6 @@ def init(addr: str):
         ray.init(address=addr)
         return
     system_config = {
-        "fetch_fail_timeout_milliseconds": 10000,
         "max_io_workers": 1,
         "object_spilling_threshold": 1,
     }
