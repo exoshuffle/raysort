@@ -29,6 +29,15 @@ def load_manifest(args: Args, path: Path) -> List[PartInfo]:
         return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
 
 
+def get_mount_points():
+    mnt = "/mnt"
+    if os.path.exists(mnt):
+        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("nvme")]
+        if len(ret) > 0:
+            return ret
+    return [tempfile.gettempdir()]
+
+
 # ------------------------------------------------------------
 #     Generate Input
 # ------------------------------------------------------------
