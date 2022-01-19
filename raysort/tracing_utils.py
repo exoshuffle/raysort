@@ -97,12 +97,9 @@ def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
     if print_ray_stats:
         print(summary)
 
-    def mib_to_gb(x: float) -> float:
-        return x * 1024 * 1024 / 1000 ** 3
-
     def extract_gb(regex: str) -> float:
         matches = re.findall(regex, summary)
-        return mib_to_gb(float(matches[0])) if len(matches) > 0 else 0
+        return float(matches[0]) / 1024 if len(matches) > 0 else 0
 
     return {
         "spilled_gb": extract_gb(r"Spilled (\d+) MiB"),
