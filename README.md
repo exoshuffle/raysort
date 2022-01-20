@@ -18,13 +18,13 @@ scripts/install_binaries.sh
 A full end-to-end smoke run:
 
 ```bash
-python raysort/main.py --total_tb=0.01 --input_part_size=100_000_000 --ray_address= 2>&1 | tee local.log
+python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --ray_address= 2>&1 | tee local.log
 ```
 
 A quicker run, skipping input:
 
 ```bash
-python raysort/main.py --total_tb=0.01 --input_part_size=100_000_000 --use_object_store --skip_input --sort --ray_address= 2>&1 | tee local.log
+python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --use_object_store --skip_input --sort --ray_address= 2>&1 | tee local.log
 ```
 
 Notes:
@@ -40,7 +40,7 @@ Notes:
 4. Make sure you can ssh into one of the worker nodes using `ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null <worker_ip>`. If you cannot, it's likely because your current VM is not in the same security group as the worker nodes (which are in the `default` security group). The easiest solution is to find your instance on the AWS EC2 UI, right click "Security -> Change Security Groups", and add your instance to the `default` security group. TODO: this might be possible to automate in Terraform.
 5. Run Ansible to set up the worker nodes: `$RAYSORT_ROOT/ansible/setup.py`
 6. Start Ray: `$RAYSORT_ROOT/ansible/start_ray.sh`
-7. Run a test run on the cluster: `python raysort/main.py --total_tb=0.1 --use_object_store 2>&1 | tee main.log`
+7. Run a test run on the cluster: `python raysort/main.py --total_gb=256 --use_object_store 2>&1 | tee main.log`
 
 
 ## Misc

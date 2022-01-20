@@ -35,10 +35,10 @@ jobs:
           scripts/install_binaries.sh gensort
 
       - name: 1GB simple shuffle
-        run: python raysort/main.py --total_tb=0.00128 --input_part_size=10_000_000 --simple_shuffle --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --simple_shuffle --ray_address=
 
       - name: 1GB two stage shuffle
-        run: python raysort/main.py --total_tb=0.00128 --input_part_size=10_000_000 --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --ray_address=
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_tb=0.00128 --input_part_size=10_000_000 --use_object_store --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_object_store --ray_address=

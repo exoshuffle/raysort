@@ -34,10 +34,10 @@ def get_args(*args, **kwargs):
         help="if set to None, will launch a local Ray cluster",
     )
     parser.add_argument(
-        "--total_tb",
+        "--total_gb",
         default=1,
         type=float,
-        help="total data size in TiB",
+        help="total data size in GB (10^9 bytes)",
     )
     parser.add_argument(
         "--input_part_size",
@@ -468,7 +468,7 @@ def _get_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
-    args.total_data_size = args.total_tb * 10 ** 12
+    args.total_data_size = args.total_gb * 10 ** 9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
     assert args.map_parallelism % args.merge_factor == 0, args
@@ -498,6 +498,7 @@ def main(args: Args):
 
     if args.sort:
         for _ in range(args.repeat_sort):
+            tracker.reset_gauges.remote()
             sort_main(args)
 
     if args.validate_output:
