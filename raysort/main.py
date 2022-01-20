@@ -41,7 +41,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--input_part_size",
-        default=2500 * 1000 * 1000,
+        default=2000 * 1000 * 1000,
         type=ByteCount,
         help="size in bytes of each map partition",
     )
@@ -65,7 +65,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--reduce_parallelism",
-        default=4,
+        default=2,
         type=int,
         help="number of reduce tasks to run in parallel per node",
     )
@@ -148,6 +148,8 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
     return blocks
 
 
+# Memory usage: input_part_size = 2GB
+# Plasma usage: input_part_size = 2GB
 @ray.remote
 @tracing_utils.timeit("map")
 def mapper(
@@ -164,8 +166,8 @@ def mapper(
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
-    ret = [part[offset : offset + size] for offset, size in blocks]
-    # ret = [ray.put(part[offset:offset + size]) for offset, size in blocks]
+    # ret = [part[offset : offset + size] for offset, size in blocks]
+    ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
     return ret if len(ret) > 1 else ret[0]
 
 
@@ -207,6 +209,8 @@ def _merge_impl(
     return pinfo
 
 
+# Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
+# Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
@@ -216,9 +220,10 @@ def merge_mapper_blocks(
     bounds: List[int],
     *blocks: List[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    M = len(blocks)
-    # blocks = ray.get(list(blocks))
+    if isinstance(blocks[0], ray.ObjectRef):
+        blocks = ray.get(list(blocks))
 
+    M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
     num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
 
@@ -233,8 +238,13 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            ret.append(np.copy(datachunk))
-            # ret.append(ray.put(datachunk))
+            # ret.append(np.copy(datachunk))
+            ret.append(ray.put(datachunk))
+            # TODO(@lsf): this function is using more memory in this branch
+            # than in the else branch. `del datachunk` helped a little but
+            # memory usage is still high. This does not make sense since
+            # ray.put() should only use shared memory. Need to investigate.
+            del datachunk
         else:
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = sort_utils.part_info(args, part_id, kind="temp")
@@ -247,6 +257,8 @@ def merge_mapper_blocks(
     return ret
 
 
+# Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 1GB
+# Plasma usage: input_part_size = 2GB
 @ray.remote
 @tracing_utils.timeit("reduce")
 def final_merge(
