@@ -10,7 +10,7 @@ TMP_DIR=/mnt/nvme0/tmp
 sudo mkdir -p $TMP_DIR
 sudo chmod 777 $TMP_DIR
 
-ray stop
+ray stop -f
 
 ray start --head --port=6379 \
     --object-manager-port=8076 \
