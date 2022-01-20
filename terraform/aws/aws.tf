@@ -15,16 +15,16 @@ provider "aws" {
 }
 
 resource "aws_instance" "raysort_worker" {
-  count = 8
+  count = 32
 
   ami           = "ami-02ccbf3107d9174a7" # ubuntu2004-gcc-conda-py39-raysort
-  instance_type = "m6i.4xlarge"
+  instance_type = "r6i.2xlarge"
   key_name      = "login-us-west-2"
 
   ebs_block_device {
     device_name = "sdb"
     iops        = 3000
-    throughput  = 500
+    throughput  = 300
     volume_size = 1000
     volume_type = "gp3"
   }
