@@ -1,11 +1,20 @@
-import argparse
 import json
 import os
 
+from absl import app
+from absl import flags
 import ray
 
 SERVICE_DISCOVERY_FILE_PATH = "/tmp/raysort/prom_service_discovery.json"
 PROM_NODE_EXPORTER_PORT = 8091
+
+
+FLAGS = flags.FLAGS
+flags.DEFINE_integer(
+    "expected_num_nodes",
+    0,
+    "expected number of nodes",
+)
 
 
 def get_sd_content(expected_num_nodes: int) -> str:
@@ -49,13 +58,11 @@ def create_sd_file(expected_num_nodes: int = 0):
     print(f"Created {SERVICE_DISCOVERY_FILE_PATH}")
 
 
-def get_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--expected_num_nodes", type=int, default=0)
-    return parser.parse_args()
+def main(argv):
+    del argv  # Unused.
+    ray.init("auto")
+    create_sd_file(FLAGS.expected_num_nodes)
 
 
 if __name__ == "__main__":
-    args = get_args()
-    ray.init("auto")
-    create_sd_file(args.expected_num_nodes)
+    app.run(main)

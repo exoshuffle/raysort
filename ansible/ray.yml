@@ -29,7 +29,7 @@
         --object-manager-port=8076
         --metrics-export-port=8090
         --resources='{"worker":1}'
-        --object-store-memory={{14 * 1024 * 1024 * 1024}}
+        --object-store-memory={{28 * 1024 * 1024 * 1024}}
 
     - name: Start Node Exporter
       shell: >

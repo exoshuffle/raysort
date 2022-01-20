@@ -22,7 +22,7 @@ HEAD_IP=$(ec2metadata --local-ipv4)
 ansible-playbook "$SCRIPT_DIR/ray.yml" -i "$SCRIPT_DIR/_$CLOUD.yml" --extra-vars "{\"head_ip\":\"$HEAD_IP\"}"
 
 pkill -9 prometheus || true
-python ~/raysort/raysort/create_prom_sd_file.py
+python $SCRIPT_DIR/create_prom_sd_file.py
 ~/raysort/raysort/bin/prometheus/prometheus --config.file=$HOME/raysort/config/prometheus.yml &
 
 ray status
