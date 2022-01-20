@@ -47,15 +47,12 @@
         - absent
         - directory
 
-    - name: Remove workdir
-      file:
-        path: "{{workdir}}"
-        state: absent
-
     - name: Sync workdir
       synchronize:
         src: "{{workdir}}/"
         dest: "{{workdir}}"
+        delete: yes
+        recursive: yes
         rsync_opts:
           - --exclude=.git
           - --exclude=data
