@@ -284,7 +284,8 @@ def final_merge(
         assert isinstance(part, PartInfo), part
         with open(part.path, "rb", buffering=args.io_size) as fin:
             ret = np.fromfile(fin, dtype=np.uint8)
-            return None if ret.size == 0 else ret
+        os.remove(part.path)
+        return None if ret.size == 0 else ret
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(args, part_id, kind="output")
