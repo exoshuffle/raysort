@@ -102,6 +102,12 @@ def get_args(*args, **kwargs):
         help="if set, will skip the second stage reduce tasks",
     )
     parser.add_argument(
+        "--output_consume_time",
+        default=0,
+        type=float,
+        help="output will be consumed instead of being written to disk",
+    )
+    parser.add_argument(
         "--use_object_store",
         default=False,
         action="store_true",
@@ -140,9 +146,11 @@ def kill_and_restart_node():
         resource_spec = worker_node.get_resource_spec()
         print("Killing worker node", worker_node, resource_spec)
         cluster.remove_node(worker_node)
-        cluster.add_node(resources=resource_spec.resources,
-                object_store_memory=resource_spec.object_store_memory,
-                num_cpus=resource_spec.num_cpus)
+        cluster.add_node(
+            resources=resource_spec.resources,
+            object_store_memory=resource_spec.object_store_memory,
+            num_cpus=resource_spec.num_cpus,
+        )
 
 
 # ------------------------------------------------------------
@@ -185,8 +193,9 @@ def mapper(
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
-    # ret = [part[offset : offset + size] for offset, size in blocks]
-    return [part[offset : offset + size] for offset, size in blocks]
+    ret = [part[offset : offset + size] for offset, size in blocks]
+    # ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
+    return ret if len(ret) > 1 else ret[0]
 
 
 def _dummy_merge(
@@ -204,27 +213,6 @@ def _dummy_merge(
         if block is None:
             continue
         blocks.append(((m, d_), block))
-
-
-def _merge_impl(
-    args: Args,
-    M: int,
-    pinfo: PartInfo,
-    get_block: Callable[[int, int], np.ndarray],
-    skip_output=False,
-) -> PartInfo:
-    merge_fn = _dummy_merge if args.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block)
-    if skip_output:
-        for datachunk in merger:
-            # TODO(@lsf): consume datachunk and report time to tracker
-            del datachunk
-        return pinfo
-
-    with open(pinfo.path, "wb", buffering=args.io_size) as fout:
-        for datachunk in merger:
-            fout.write(datachunk)
-    return pinfo
 
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
@@ -257,7 +245,7 @@ def merge_mapper_blocks(
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
             ret.append(np.copy(datachunk))
-            #ret.append(ray.put(datachunk))
+            # ret.append(ray.put(datachunk))
             # TODO(@lsf): this function is using more memory in this branch
             # than in the else branch. `del datachunk` helped a little but
             # memory usage is still high. This does not make sense since
@@ -307,7 +295,23 @@ def final_merge(
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(args, part_id, kind="output")
-    return _merge_impl(args, M, pinfo, get_block, args.skip_output)
+    merge_fn = _dummy_merge if args.skip_sorting else sortlib.merge_partitions
+    merger = merge_fn(M, get_block)
+    if args.skip_output or args.output_consume_time > 0:
+        first = True
+        for datachunk in merger:
+            del datachunk
+            if first:
+                first = False
+                if args.output_consume_time > 0:
+                    tracing_utils.record_value("output_time", time.time())
+        time.sleep(args.output_consume_time)
+        return pinfo
+
+    with open(pinfo.path, "wb", buffering=args.io_size) as fout:
+        for datachunk in merger:
+            fout.write(datachunk)
+    return pinfo
 
 
 def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:

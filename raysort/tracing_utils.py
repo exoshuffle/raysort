@@ -177,7 +177,10 @@ class ProgressTracker:
         self.sort_start_time = time.time()
 
     def report(self):
-        self.report_spilling()
+        if "output_time" in self.series:
+            self.series["output_time"] = [
+                x - self.sort_start_time for x in self.series["output_time"]
+            ]
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)
@@ -213,4 +216,5 @@ class ProgressTracker:
 
     def performance_report(self):
         self.save_trace()
+        self.report_spilling()
         self.report()
