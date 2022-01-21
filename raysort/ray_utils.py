@@ -23,6 +23,7 @@ def _build_cluster(
         object_store_memory=object_store_memory,
         _system_config=system_config,
     )
+    cluster.connect()
     for i in range(num_nodes):
         cluster.add_node(
             resources={
@@ -73,12 +74,14 @@ def _init_local_cluster():
         )
     num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
-    cluster.connect()
+    return cluster
 
 
 def init(args: Args):
     if args.ray_address:
         ray.init(address=args.ray_address)
+        cluster = None
     else:
-        _init_local_cluster()
+        cluster = _init_local_cluster()
     _get_resources_args(args)
+    return cluster

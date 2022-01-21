@@ -24,6 +24,8 @@ Args = argparse.Namespace
 
 STEPS = ["generate_input", "sort", "validate_output"]
 
+cluster = None
+
 
 def get_args(*args, **kwargs):
     parser = argparse.ArgumentParser()
@@ -117,6 +119,12 @@ def get_args(*args, **kwargs):
         type=int,
         help="how many times to run the sort for benchmarking",
     )
+    parser.add_argument(
+        "--test_failure",
+        default=False,
+        action="store_true",
+        help="if set, will simulate node failure mid-execution",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if none is specified, will run all steps"
@@ -124,6 +132,17 @@ def get_args(*args, **kwargs):
     for step in STEPS:
         steps_grp.add_argument(f"--{step}", action="store_true")
     return parser.parse_args(*args, **kwargs)
+
+
+def kill_and_restart_node():
+    if cluster is not None:
+        worker_node = list(cluster.worker_nodes)[0]
+        resource_spec = worker_node.get_resource_spec()
+        print("Killing worker node", worker_node, resource_spec)
+        cluster.remove_node(worker_node)
+        cluster.add_node(resources=resource_spec.resources,
+                object_store_memory=resource_spec.object_store_memory,
+                num_cpus=resource_spec.num_cpus)
 
 
 # ------------------------------------------------------------
@@ -167,8 +186,7 @@ def mapper(
     )
     blocks = sort_fn(part, bounds)
     # ret = [part[offset : offset + size] for offset, size in blocks]
-    ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
-    return ret if len(ret) > 1 else ret[0]
+    return [part[offset : offset + size] for offset, size in blocks]
 
 
 def _dummy_merge(
@@ -238,8 +256,8 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            # ret.append(np.copy(datachunk))
-            ret.append(ray.put(datachunk))
+            ret.append(np.copy(datachunk))
+            #ret.append(ray.put(datachunk))
             # TODO(@lsf): this function is using more memory in this branch
             # than in the else branch. `del datachunk` helped a little but
             # memory usage is still high. This does not make sense since
@@ -347,6 +365,9 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
             )
 
+    if args.test_failure:
+        kill_and_restart_node()
+
     if args.skip_final_merge:
         _ray_wait(map_results[:, 0], wait_all=True)
         return []
@@ -421,6 +442,9 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         _ray_wait(map_results[:, 0])
         del map_results
 
+    if args.test_failure:
+        kill_and_restart_node()
+
     if args.skip_final_merge:
         _ray_wait(merge_results.flatten(), wait_all=True)
         return []
@@ -484,8 +508,9 @@ def _get_app_args(args: Args):
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
+    global cluster
     logging_utils.init()
-    ray_utils.init(args)
+    cluster = ray_utils.init(args)
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_app_args(args)
     return tracing_utils.create_progress_tracker(args)
