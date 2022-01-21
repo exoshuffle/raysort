@@ -66,18 +66,13 @@
     - name: Install Cython package
       shell: "cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace"
 
-    - name: Set soft ulimit
+    - name: Set soft and hard ulimit
       become: yes
       community.general.pam_limits:
         domain: "*"
-        limit_type: soft
+        limit_type: "{{ item }}"
         limit_item: nofile
         value: 65535
-
-    - name: Set hard ulimit
-      become: yes
-      community.general.pam_limits:
-        domain: "*"
-        limit_type: hard
-        limit_item: nofile
-        value: 65535
+      with_items:
+        - hard
+        - soft
