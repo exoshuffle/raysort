@@ -1,11 +1,12 @@
 ---
 - hosts: all
+  strategy: free
   vars:
     data_disk: /dev/nvme1n1
     ssd_device: /dev/nvme1n1p1
     mnt_path: /mnt/nvme0
-    workdir: /home/ubuntu/raysort
-    pythondir: /home/ubuntu/miniconda3/envs/raysort/bin
+    workdir: ~/raysort
+    pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
     - name: Create a new ext4 partition
       become: yes
@@ -57,14 +58,13 @@
           - --exclude=.git
           - --exclude=data
 
-    - name: Setup Python
+    - name: Install Python dependencies
       shell: "{{pythondir}}/pip install -Ur {{workdir}}/requirements/worker.txt"
 
-    - name: Install Python package
-      shell: "cd {{workdir}} && {{pythondir}}/pip install -e ."
-
-    - name: Install Cython package
-      shell: "cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace"
+    - name: Install project packages
+      shell: |
+        cd {{workdir}} && {{pythondir}}/pip install -e .
+        cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
 
     - name: Set soft and hard ulimit
       become: yes
@@ -76,3 +76,9 @@
       with_items:
         - hard
         - soft
+
+    - name: Start Node Exporter
+      shell: >
+        nohup
+        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        --web.listen-address 0.0.0.0:8091 &
