@@ -70,3 +70,19 @@
       copy:
         src: "{{spark_config_path}}/spark-defaults.conf"
         dest: "{{spark_config_path}}/spark-defaults.conf"
+
+    - name: Sync workdir
+      synchronize:
+        src: "{{workdir}}/"
+        dest: "{{workdir}}"
+        delete: yes
+        recursive: yes
+        rsync_opts:
+          - --exclude=.git
+          - --exclude=data
+    
+    - name: Start Node Exporter
+      shell: >
+        nohup
+        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        --web.listen-address 0.0.0.0:8091 &
