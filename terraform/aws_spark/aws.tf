@@ -12,7 +12,7 @@ terraform {
 
 variable "num_workers" {
   type        = number
-  description = "Number of workers to spawn"
+  description = "Number of workers to launch"
 }
 
 provider "aws" {
