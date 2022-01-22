@@ -8,6 +8,7 @@
     pythondir: /home/ubuntu/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
     hadoop_config_path: /opt/hadoop/etc/hadoop
+    spark_config_path: /opt/spark/conf
   tasks:
     - name: Create a new ext4 partition
       become: yes
@@ -64,3 +65,8 @@
       copy:
         src: "{{hadoop_config_path}}/yarn-site.xml"
         dest: "{{hadoop_config_path}}/yarn-site.xml"
+
+    - name: Copy Spark spark-defaults.conf
+      copy:
+        src: "{{spark_config_path}}/spark-defaults.conf"
+        dest: "{{spark_config_path}}/spark-defaults.conf"
