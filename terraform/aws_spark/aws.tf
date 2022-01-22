@@ -10,12 +10,17 @@ terraform {
   required_version = ">= 0.14"
 }
 
+variable "num_workers" {
+  type        = number
+  description = "Number of workers to spawn"
+}
+
 provider "aws" {
   region = "us-west-2"
 }
 
 resource "aws_instance" "raysort_spark_worker" {
-  count = 8
+  count = var.num_workers
 
   ami           = "ami-04760daecb68807d3" # raysort-spark-worker
   instance_type = "r6i.2xlarge"
@@ -30,6 +35,6 @@ resource "aws_instance" "raysort_spark_worker" {
   }
 
   tags = {
-    Name = "raysort-spark-worker-${format("%02d", count.index)}"
+    Name = "raysort-spark-worker-${format("${var.num_workers}-%02d", count.index)}"
   }
 }
