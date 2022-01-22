@@ -15,9 +15,10 @@ provider "aws" {
 }
 
 resource "aws_instance" "raysort_worker" {
-  count = 32
+  count = 8
 
-  ami           = "ami-02ccbf3107d9174a7" # ubuntu2004-gcc-conda-py39-raysort
+#  ami           = "ami-02ccbf3107d9174a7" # ubuntu2004-gcc-conda-py39-raysort
+  ami           = "ami-077156789b614cd3c"
   instance_type = "r6i.2xlarge"
   key_name      = "login-us-west-2"
 
