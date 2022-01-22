@@ -18,13 +18,13 @@ resource "aws_instance" "raysort_spark_worker" {
   count = 8
 
   ami           = "ami-04760daecb68807d3" # raysort-spark-worker
-  instance_type = "m6i.4xlarge"
+  instance_type = "r6i.2xlarge"
   key_name      = "login-us-west-2"
 
   ebs_block_device {
     device_name = "sdb"
     iops        = 3000
-    throughput  = 500
+    throughput  = 300
     volume_size = 1000
     volume_type = "gp3"
   }
