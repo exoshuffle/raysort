@@ -38,6 +38,6 @@ resource "aws_instance" "raysort_spark_worker" {
   }
 
   tags = {
-    Name = "raysort-spark-worker-${format("${var.num_workers}-%02d", count.index)}"
+    Name = "raysort-spark-worker-${format("${var.num_workers}-%03d", count.index)}"
   }
 }
