@@ -10,9 +10,12 @@ terraform {
   required_version = ">= 0.14"
 }
 
+# Use when applying terraform: terraform apply -var="num_workers=8"
+
 variable "num_workers" {
   type        = number
   description = "Number of workers to launch"
+  default     = 8
 }
 
 provider "aws" {
