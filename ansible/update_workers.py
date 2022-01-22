@@ -1,5 +1,8 @@
 from update_inventory import get_aws_vmss_ips, run
 
+# TODO: only overwrite existing lines
+# See https://github.com/franklsf95/raysort/pull/13#discussion_r790120763
+
 # What the machine starts off with in its original /etc/hosts
 existing_lines = """
 127.0.0.1 localhost
