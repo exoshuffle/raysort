@@ -58,7 +58,7 @@ def get_vmss_ips() -> List[str]:
     assert False, FLAGS
 
 
-def get_aws_vmss_ips(cloud) -> List[str]:
+def get_aws_vmss_ips(cloud: str) -> List[str]:
     terraform_cwd = pathlib.Path(__file__).parent.parent / "terraform" / cloud
     out = run_output("terraform output", cwd=terraform_cwd)
     out = out.split(" = ")[1]
