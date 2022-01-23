@@ -51,15 +51,15 @@ def run_json(cmd, **kwargs):
 
 
 def get_vmss_ips() -> List[str]:
-    if FLAGS.cloud == "aws":
-        return get_aws_vmss_ips()
+    if FLAGS.cloud == "aws" or FLAGS.cloud == "aws_spark":
+        return get_aws_vmss_ips(FLAGS.cloud)
     elif FLAGS.cloud == "azure":
         return get_azure_vmss_ips()
     assert False, FLAGS
 
 
-def get_aws_vmss_ips() -> List[str]:
-    terraform_cwd = pathlib.Path(__file__).parent.parent / "terraform" / "aws"
+def get_aws_vmss_ips(cloud: str) -> List[str]:
+    terraform_cwd = pathlib.Path(__file__).parent.parent / "terraform" / cloud
     out = run_output("terraform output", cwd=terraform_cwd)
     out = out.split(" = ")[1]
     ret = ast.literal_eval(out)
@@ -84,7 +84,7 @@ def get_azure_vmss_ips() -> List[str]:
 
 
 def get_ansible_vars() -> Dict[str, str]:
-    if FLAGS.cloud == "aws":
+    if FLAGS.cloud == "aws" or FLAGS.cloud == "aws_spark":
         return {
             "ansible_user": "ubuntu",
             "ansible_ssh_private_key_file": "/home/ubuntu/.aws/login-us-west-2.pem",
