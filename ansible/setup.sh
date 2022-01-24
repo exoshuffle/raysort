@@ -8,4 +8,4 @@ CLOUD=aws
 
 python $SCRIPT_DIR/update_inventory.py --cloud=$CLOUD
 python $SCRIPT_DIR/update_workers.py
-ansible-playbook $SCRIPT_DIR/setup_$CLOUD.yml -i $SCRIPT_DIR/_$CLOUD.yml
+ansible-playbook -f $(nproc) $SCRIPT_DIR/setup_$CLOUD.yml -i $SCRIPT_DIR/_$CLOUD.yml

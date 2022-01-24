@@ -1,5 +1,6 @@
 ---
 - hosts: all
+  strategy: free
   vars:
     data_disk: /dev/nvme1n1
     ssd_device: /dev/nvme1n1p1
@@ -50,7 +51,7 @@
         - absent
         - directory
 
-    - name: Sync hosts
+    - name: Sync hosts file
       become: yes
       copy:
         src: "{{hosts_path}}"
