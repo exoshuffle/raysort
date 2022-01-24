@@ -2,6 +2,8 @@ import argparse
 import csv
 import os
 import random
+import socket
+import subprocess
 import time
 from typing import Callable, Dict, Iterable, List, Tuple, Union
 
@@ -151,7 +153,31 @@ def kill_and_restart_node():
             object_store_memory=resource_spec.object_store_memory,
             num_cpus=resource_spec.num_cpus,
         )
-
+    else:
+        # Use subprocess to ssh and stop/start a worker.
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        object_store = 28 * 1024 * 1024 * 1024
+        worker_ip = "172.31.57.219" 
+        python_dir = "~/miniconda3/envs/raysort/bin"
+        start_cmd = """{python_dir}/ray start --address={local_ip}:6379
+            --object-manager-port=8076
+            --metrics-export-port=8090
+            --resources={{\"node:{worker_ip}\": 1}}
+            --object-store-memory={obj_st_mem}""".format(python_dir=python_dir, local_ip=local_ip, worker_ip=worker_ip, obj_st_mem=str(object_store))
+        stop_cmd ="{python_dir}/ray stop -f".format(python_dir=python_dir)
+        ssh = "ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+        print("Killing worker node", worker_ip)
+        outs, errs = subprocess.Popen("{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip), shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        print("Raylets before kill:", outs)
+        subprocess.Popen("{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),  
+                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        outs, errs = subprocess.Popen("{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip), shell=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+        print("Raylets after kill:", outs)
+        subprocess.Popen("{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=start_cmd), 
+                shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 
 # ------------------------------------------------------------
 #     Sort
@@ -392,6 +418,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    
     map_bounds, merge_bounds = get_boundaries(
         args.num_workers, args.num_reducers_per_worker
     )
@@ -413,6 +440,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             _, node, path = parts[part_id]
             opt = dict(**mapper_opt, **_node_res(node))
             m = part_id % num_map_tasks_per_round
+#            print(f"map task (map_id: {part_id}) input: {map_bounds}")
             map_results[m, :] = mapper.options(**opt).remote(
                 args, part_id, map_bounds, path
             )
@@ -431,6 +459,9 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
+#                print(
+#                    f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}"
+#                )
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
                 ).remote(

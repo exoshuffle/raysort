@@ -2,5 +2,6 @@ absl-py
 Cython
 numpy
 pandas
+#ray[default]==1.9.2
 ray[default] @ https://ray-ci-artifact-pr-public.s3.amazonaws.com/5623bf441618f3b757657ba4ef18febf14af5d09/tmp/artifacts/.whl/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
 wandb
