@@ -68,7 +68,7 @@ def _init_local_cluster():
         "max_io_workers": 1,
         "object_spilling_threshold": 1,
     }
-    if os.path.exists("/mnt/nvme0/tmp"):
+    if os.path.exists("/mnt/nvme0/tmp") and (os.stat("/mnt/nvme0/tmp").st_mode & 0o777 == 0o777):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )

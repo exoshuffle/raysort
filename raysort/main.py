@@ -131,7 +131,13 @@ def get_args(*args, **kwargs):
         "--test_failure",
         default=False,
         action="store_true",
-        help="if set, will simulate node failure mid-execution",
+        help="if set, will simulate node failure mid-execution on node with IP specified by fail_node; if local run, no IP need be specified.",
+    )
+    parser.add_argument(
+        "--fail_node",
+        default="",
+        type=str,
+        help="IP address of local node to fail during test_failure",
     )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
@@ -142,7 +148,7 @@ def get_args(*args, **kwargs):
     return parser.parse_args(*args, **kwargs)
 
 
-def kill_and_restart_node():
+def kill_and_restart_node(worker_ip=""):
     if cluster is not None:
         worker_node = list(cluster.worker_nodes)[0]
         resource_spec = worker_node.get_resource_spec()
@@ -154,11 +160,12 @@ def kill_and_restart_node():
             num_cpus=resource_spec.num_cpus,
         )
     else:
+        # Expect a specific worker IP in this case
+        assert worker_ip != ""
         # Use subprocess to ssh and stop/start a worker.
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
         object_store = 28 * 1024 * 1024 * 1024
-        worker_ip = "172.31.57.219" 
         python_dir = "~/miniconda3/envs/raysort/bin"
         start_cmd = """{python_dir}/ray start --address={local_ip}:6379
             --object-manager-port=8076
@@ -418,7 +425,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
-    
+    start_time = time.time()
     map_bounds, merge_bounds = get_boundaries(
         args.num_workers, args.num_reducers_per_worker
     )
@@ -432,9 +439,13 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
     part_id = 0
+    killed = False
+    # Magnet: Have an array to hold map_results; instead of deleting, append to list for each round.
+    all_map_results = []
     for round in range(args.num_rounds):
         # Submit map tasks.
         num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
+        # Each map task has num_workers outputs
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
             _, node, path = parts[part_id]
@@ -445,7 +456,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 args, part_id, map_bounds, path
             )
             part_id += 1
-
+       
         # Make sure previous rounds finish before scheduling merge tasks.
         num_extra_rounds = round - args.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
@@ -459,6 +470,9 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
+                if (time.time() - start_time) > 30 and not killed and args.test_failure:
+                    kill_and_restart_node(args.fail_node)
+                    killed = True
 #                print(
 #                    f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}"
 #                )
@@ -475,9 +489,10 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         _ray_wait(map_results[:, 0])
-        del map_results
+        # Magnet: Keep map results from each round to prevent going out-of-scope
+        all_map_results.append(map_results) 
 
-    if args.test_failure:
+    if args.test_failure and not killed:
         kill_and_restart_node()
 
     if args.skip_final_merge:
