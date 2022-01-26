@@ -14,7 +14,7 @@ flags.DEFINE_string(
 flags.DEFINE_enum(
     "action",
     "stop",
-    ["start", "stop"],
+    ["reboot", "start", "stop"],
     "action to perform on the instances",
 )
 
@@ -37,6 +37,7 @@ def perform_action(action: str, instances: List[Dict]):
     ids = [inst["InstanceId"] for inst in instances]
     ec2 = boto3.client("ec2")
     action_to_fn = {
+        "reboot": ec2.reboot_instances,
         "start": ec2.start_instances,
         "stop": ec2.stop_instances,
     }
@@ -49,6 +50,7 @@ def main(argv):
     del argv  # Unused.
     instances = get_instances(FLAGS.instance_name_pattern)
     perform_action(FLAGS.action, instances)
+    logging.info(len(instances))
 
 
 if __name__ == "__main__":
