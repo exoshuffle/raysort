@@ -2,13 +2,24 @@ import argparse
 import logging
 import os
 import tempfile
-from typing import Dict
+from typing import Dict, List, Tuple
 
 import ray
 from ray import cluster_utils
 
 
 Args = argparse.Namespace
+
+
+def wait(
+    futures, wait_all: bool = False, **kwargs
+) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
+    to_wait = [f for f in futures if f is not None]
+    default_kwargs = dict(fetch_local=False)
+    if wait_all:
+        default_kwargs.update(num_returns=len(to_wait))
+    kwargs = dict(**default_kwargs, **kwargs)
+    return ray.wait(to_wait, **kwargs)
 
 
 def _build_cluster(
@@ -67,6 +78,7 @@ def _init_local_cluster():
     system_config = {
         "max_io_workers": 1,
         "object_spilling_threshold": 1,
+        # "send_unpin": True,
     }
     if os.path.exists("/mnt/nvme0/tmp"):
         system_config.update(
