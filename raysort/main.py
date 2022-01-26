@@ -139,6 +139,12 @@ def get_args(*args, **kwargs):
         type=str,
         help="IP address of local node to fail during test_failure",
     )
+    parser.add_argument(
+        "--magnet",
+        default=False,
+        action="store_true",
+        help="if set, will keep intermediate map results in scope until all reduce tasks are scheduled.",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if none is specified, will run all steps"
@@ -441,7 +447,8 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     part_id = 0
     killed = False
     # Magnet: Have an array to hold map_results; instead of deleting, append to list for each round.
-    all_map_results = []
+    if args.magnet:
+        all_map_results = []
     for round in range(args.num_rounds):
         # Submit map tasks.
         num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
@@ -470,7 +477,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
-                if (time.time() - start_time) > 30 and not killed and args.test_failure:
+                if (time.time() - start_time) > 45 and not killed and args.test_failure:
                     kill_and_restart_node(args.fail_node)
                     killed = True
 #                print(
@@ -490,7 +497,10 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # scheduling the next round.
         _ray_wait(map_results[:, 0])
         # Magnet: Keep map results from each round to prevent going out-of-scope
-        all_map_results.append(map_results) 
+        if args.magnet:
+            all_map_results.append(map_results)
+        else:
+            del map_results
 
     if args.test_failure and not killed:
         kill_and_restart_node()
@@ -511,6 +521,8 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(args.num_workers)
         ]
     del merge_results
+    if args.magnet:
+        del all_map_results[:]
 
     reducer_results = reducer_results.flatten().tolist()
     return ray.get(reducer_results)
