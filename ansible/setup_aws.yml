@@ -7,6 +7,9 @@
     mnt_path: /mnt/nvme0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
+    hosts_path: /etc/hosts
+    hadoop_config_path: /opt/hadoop/etc/hadoop
+    spark_config_path: /opt/spark/conf
   tasks:
     - name: Create a new ext4 partition
       become: yes
@@ -42,11 +45,27 @@
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
-        state: "{{ item }}"
+        state: "{{item}}"
         mode: "777"
       with_items:
         - absent
         - directory
+
+    - name: Sync hosts file
+      become: yes
+      copy:
+        src: "{{hosts_path}}"
+        dest: "{{hosts_path}}"
+
+    - name: Copy Hadoop core-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/core-site.xml"
+        dest: "{{hadoop_config_path}}/core-site.xml"
+
+    - name: Copy Hadoop yarn-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/yarn-site.xml"
+        dest: "{{hadoop_config_path}}/yarn-site.xml"
 
     - name: Sync workdir
       synchronize:
@@ -70,7 +89,7 @@
       become: yes
       community.general.pam_limits:
         domain: "*"
-        limit_type: "{{ item }}"
+        limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
       with_items:

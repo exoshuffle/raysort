@@ -42,7 +42,7 @@
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
-        state: "{{ item }}"
+        state: "{{item}}"
         mode: "777"
       with_items:
         - absent
@@ -70,7 +70,7 @@
       become: yes
       community.general.pam_limits:
         domain: "*"
-        limit_type: "{{ item }}"
+        limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
       with_items:
