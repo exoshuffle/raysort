@@ -21,16 +21,18 @@ flags.DEFINE_enum(
 
 def get_instances(pattern: str) -> List[Dict]:
     ec2 = boto3.client("ec2")
-    resp = ec2.describe_instances(
+    paginator = ec2.get_paginator("describe_instances")
+    ret = []
+    for page in paginator.paginate(
         Filters=[
             {
                 "Name": "tag:Name",
                 "Values": [pattern],
             },
         ],
-        MaxResults=1000,
-    )
-    return [item["Instances"][0] for item in resp["Reservations"]]
+    ):
+        ret.extend(page["Reservations"])
+    return [item["Instances"][0] for item in ret]
 
 
 def perform_action(action: str, instances: List[Dict]):
