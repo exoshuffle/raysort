@@ -2408,7 +2408,7 @@ static PyObject *__pyx_tp_new_memoryview(PyTypeObject *t, PyObject *a, PyObject 
 static PyObject *__pyx_tp_new__memoryviewslice(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_int_0;
 static PyObject *__pyx_int_1;
-static PyObject *__pyx_int_10485760;
+static PyObject *__pyx_int_1000000;
 static PyObject *__pyx_int_184977713;
 static PyObject *__pyx_int_neg_1;
 static PyObject *__pyx_k_;
@@ -2950,7 +2950,7 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
   {
     static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_num_blocks,&__pyx_n_s_get_block,&__pyx_n_s_batch_num_records,&__pyx_n_s_ask_for_refills,&__pyx_n_s_boundaries,0};
     PyObject* values[5] = {0,0,0,0,0};
-    values[2] = ((PyObject *)__pyx_int_10485760);
+    values[2] = ((PyObject *)__pyx_int_1000000);
     values[4] = __pyx_k_;
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
@@ -3025,7 +3025,7 @@ static PyObject *__pyx_pw_7sortlib_5merge_partitions(PyObject *__pyx_self, PyObj
 
       /* "sortlib.pyx":78
  *     get_block: Callable[[int, int], np.ndarray],
- *     batch_num_records: int = 10 * 1024 * 1024,
+ *     batch_num_records: int = 1_000_000,
  *     ask_for_refills: bool = True,             # <<<<<<<<<<<<<<
  *     boundaries: List[int] = [],
  * ) -> Iterable[np.ndarray]:
@@ -18456,7 +18456,7 @@ static CYTHON_SMALL_CODE int __Pyx_InitGlobals(void) {
   if (__Pyx_InitStrings(__pyx_string_tab) < 0) __PYX_ERR(0, 1, __pyx_L1_error);
   __pyx_int_0 = PyInt_FromLong(0); if (unlikely(!__pyx_int_0)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_1 = PyInt_FromLong(1); if (unlikely(!__pyx_int_1)) __PYX_ERR(0, 1, __pyx_L1_error)
-  __pyx_int_10485760 = PyInt_FromLong(10485760L); if (unlikely(!__pyx_int_10485760)) __PYX_ERR(0, 1, __pyx_L1_error)
+  __pyx_int_1000000 = PyInt_FromLong(1000000L); if (unlikely(!__pyx_int_1000000)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_184977713 = PyInt_FromLong(184977713L); if (unlikely(!__pyx_int_184977713)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_int_neg_1 = PyInt_FromLong(-1); if (unlikely(!__pyx_int_neg_1)) __PYX_ERR(0, 1, __pyx_L1_error)
   return 0;
@@ -19039,7 +19039,7 @@ if (!__Pyx_RefNanny) {
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
 
   /* "sortlib.pyx":79
- *     batch_num_records: int = 10 * 1024 * 1024,
+ *     batch_num_records: int = 1_000_000,
  *     ask_for_refills: bool = True,
  *     boundaries: List[int] = [],             # <<<<<<<<<<<<<<
  * ) -> Iterable[np.ndarray]:
