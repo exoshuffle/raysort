@@ -145,6 +145,12 @@ def get_args(*args, **kwargs):
         action="store_true",
         help="if set, will keep intermediate map results in scope until all reduce tasks are scheduled.",
     )
+    parser.add_argument(
+        "--riffle",
+        default=False,
+        action="store_true",
+        help="if set, will run riffle-on-ray",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if none is specified, will run all steps"
@@ -296,6 +302,7 @@ def merge_mapper_blocks(
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
                 datachunk.tofile(fout)
             ret.append(pinfo)
+    print("Merge mapper blocks: received, expected bounds", len(ret), len(bounds))
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
     del blocks
@@ -310,8 +317,18 @@ def final_merge(
     args: Args,
     worker_id: PartId,
     reducer_id: PartId,
+    merge_bounds: List[float],
     *parts: List,
 ) -> PartInfo:
+    # For every part in parts, check that all vals in part are w/i merge bounds
+    idx = reducer_id*args.num_workers + worker_id
+    lb = merge_bounds[idx]
+    ub = merge_bounds[idx + 1] if idx < len(merge_bounds) else None
+    for part in parts:
+        ret = part < lb
+        if ub is not None:
+            ret |= part > ub
+        assert not np.any(ret), (worker_id, reducer_id)
     M = len(parts)
 
     def get_block(i: int, d: int) -> np.ndarray:
@@ -430,6 +447,128 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     return ray.get(reducer_results)
 
 
+def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    print("RIFFLE: rounds", args.num_rounds)
+    start_time = time.time()
+#    map_bounds, _ = get_boundaries(args.num_workers)
+    map_bounds, _ = get_boundaries(1)
+    merge_bounds, _ = get_boundaries(args.num_reducers)
+#    map_bounds, merge_bounds = get_boundaries(
+#        args.num_workers, args.num_reducers_per_worker
+#    )
+
+#    mapper_opt = {"num_returns": args.num_workers}
+    mapper_opt = {"num_returns": 1}
+    merger_opt = {"num_returns": args.num_reducers}
+    merge_results = np.empty(
+        (args.num_mergers_per_worker*args.num_workers, args.num_reducers),
+        dtype=object,
+    )
+    num_map_tasks_per_round = args.num_workers * args.map_parallelism
+
+    part_id = 0
+    killed = False
+    all_map_results = []
+    for round in range(args.num_rounds):
+        # Submit map tasks.
+        num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
+        print("num_map in this round", num_map_tasks)
+        # Each map task has num_workers outputs
+        map_results = np.empty(num_map_tasks, dtype=object)
+#        map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
+        for _ in range(num_map_tasks):
+            _, node, path = parts[part_id]
+            opt = dict(**mapper_opt, **_node_res(node))
+            m = part_id % num_map_tasks_per_round
+            print("partid, m:", part_id, m)
+#            print(f"map task (map_id: {part_id}) input: {map_bounds}")
+#            map_results[m, :] = mapper.options(**opt).remote(
+            map_results[m] = mapper.options(**opt).remote(
+               args, part_id, map_bounds, path
+            )
+            part_id += 1
+       
+        # Make sure previous rounds finish before scheduling merge tasks.
+        num_extra_rounds = round - args.num_concurrent_rounds + 1
+        if num_extra_rounds > 0:
+            _ray_wait(
+                merge_results[:, 0],
+                num_returns=num_extra_rounds * args.merge_parallelism,
+            )
+
+        # Submit merge tasks.
+#        f = int(np.ceil(num_map_tasks / args.merge_parallelism))
+#        print("Num_map_tasks", num_map_tasks_per_round)
+#        print("# workers", args.num_workers)
+#        print("map results", map_results)
+        for j in range(args.merge_parallelism):
+            m = round * args.merge_parallelism + j
+            for w in range(args.num_workers):
+                ##### Naive index calculation (not performance-optimized)
+                # Find all part_ids on this worker (p % num_workers == w)
+                # Keep outputs from those part_ids intended for this worker (row ids p % n_maps_per_round for all p from above).
+                rows = []
+                for p in range(part_id - num_map_tasks, part_id):
+                    if p % args.num_workers == w:
+                        print("worker,id,row", w, p, p % num_map_tasks_per_round)
+                        rows.append(p % num_map_tasks_per_round)
+                f = int(np.ceil(args.num_workers / args.merge_parallelism))
+#                print(rows)
+#                print(rows[j * f : (j + 1) * f])
+#                print("merge input shape", np.shape(map_results[rows, j * f : (j + 1) * f].flatten()))
+                #####
+                if (time.time() - start_time) > 45 and not killed and args.test_failure:
+                    kill_and_restart_node(args.fail_node)
+                    killed = True
+#                print(
+#                    f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}"
+#                )
+#                print("Merge bounds for worker", w, merge_bounds[w])
+                print("merge inp blocks", len(rows)*f)
+                merge_results[m*args.num_workers + w, :] = merge_mapper_blocks.options(
+                    **merger_opt, **_node_i(args, w)
+                ).remote(
+                    args,
+                    w,
+                    m,
+                    merge_bounds,
+                    *map_results[rows],
+#                    *map_results[rows, j * f : (j + 1) * f].flatten(),
+                )
+
+        # Wait for at least one map task from this round to finish before
+        # scheduling the next round.
+#        _ray_wait(map_results[:, 0])
+        _ray_wait(map_results[:])
+        # Keep map results from each round to prevent going out-of-scope
+        all_map_results.append(map_results)
+
+
+    if args.test_failure and not killed:
+        kill_and_restart_node()
+
+    if args.skip_final_merge:
+        _ray_wait(merge_results.flatten(), wait_all=True)
+        return []
+
+    # Submit second-stage reduce tasks.
+    reducer_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        reducer_results[:, r] = [
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+                args, w, r, merge_bounds, *merge_results[:, r*args.num_workers + w]
+            )
+            for w in range(args.num_workers)
+        ]
+    del merge_results
+    del all_map_results[:]
+
+    reducer_results = reducer_results.flatten().tolist()
+    return ray.get(reducer_results)
+
+
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     start_time = time.time()
     map_bounds, merge_bounds = get_boundaries(
@@ -483,6 +622,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 #                print(
 #                    f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}"
 #                )
+                print("merge input shape", np.shape(map_results[j * f : (j + 1) * f, w]))
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
                 ).remote(
@@ -534,6 +674,8 @@ def sort_main(args: Args):
 
     if args.simple_shuffle:
         results = sort_simple(args, parts)
+    elif args.riffle:
+        results = sort_riffle(args, parts)
     else:
         results = sort_two_stage(args, parts)
 

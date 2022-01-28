@@ -150,6 +150,8 @@ def validate_output(args: Args):
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
     total = sum(sz for sz, _ in results)
+    print("total", total)
+    print("total expected", args.total_data_size)
     assert total == args.total_data_size, total - args.total_data_size
     all_checksum = b"".join(chksm for _, chksm in results)
     with tempfile.NamedTemporaryFile() as fout:
