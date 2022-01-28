@@ -417,12 +417,14 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             )
             part_id += 1
 
-        # Make sure previous rounds finish before scheduling merge tasks.
+        # Make sure all merge tasks previous rounds finish.
         num_extra_rounds = round - args.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
             ray_utils.wait(
-                merge_results[0, :, 0],
-                num_returns=num_extra_rounds * args.merge_parallelism,
+                merge_results[:, :, 0],
+                num_returns=num_extra_rounds
+                * args.merge_parallelism
+                * args.num_workers,
             )
 
         # Submit merge tasks.
@@ -448,20 +450,30 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         return []
 
     # Submit second-stage reduce tasks.
-    reducer_results = np.empty(
+    reduce_results = np.empty(
         (args.num_workers, args.num_reducers_per_worker), dtype=object
     )
     for r in range(args.num_reducers_per_worker):
-        reducer_results[:, r] = [
+        # Avoid queueing too many reduce tasks.
+        if r > args.reduce_parallelism:
+            num_extra_rounds = r - args.reduce_parallelism
+            ray_utils.wait(
+                reduce_results.flatten(),
+                num_returns=num_extra_rounds
+                * args.reduce_parallelism
+                * args.num_workers,
+            )
+        reduce_results[:, r] = [
             final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
                 args, w, r, *merge_results[w, :, r]
             )
             for w in range(args.num_workers)
         ]
+        merge_results[:, :, r] = None
     del merge_results
 
-    reducer_results = reducer_results.flatten().tolist()
-    return ray.get(reducer_results)
+    reduce_results = reduce_results.flatten().tolist()
+    return ray.get(reduce_results)
 
 
 @tracing_utils.timeit("sort", log_to_wandb=True)
