@@ -74,7 +74,7 @@ def sort_and_partition(part: np.ndarray, boundaries: List[int]) -> List[BlockInf
 def merge_partitions(
     num_blocks: int,
     get_block: Callable[[int, int], np.ndarray],
-    batch_num_records: int = 10 * 1024 * 1024,
+    batch_num_records: int = 1_000_000,
     ask_for_refills: bool = True,
     boundaries: List[int] = [],
 ) -> Iterable[np.ndarray]:

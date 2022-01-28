@@ -69,7 +69,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--reduce_parallelism",
-        default=2,
+        default=4,
         type=int,
         help="number of reduce tasks to run in parallel per node",
     )
@@ -114,6 +114,12 @@ def get_args(*args, **kwargs):
         default=False,
         action="store_true",
         help="if set, will use object store for 2nd-stage reduce",
+    )
+    parser.add_argument(
+        "--use_put",
+        default=False,
+        action="store_true",
+        help="if set, will return ray.put() references instead of objects directly",
     )
     parser.add_argument(
         "--simple_shuffle",
@@ -238,8 +244,10 @@ def mapper(
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
-    ret = [part[offset : offset + size] for offset, size in blocks]
-    # ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
+    if args.use_put:
+        ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
+    else:
+        ret = [part[offset : offset + size] for offset, size in blocks]
     return ret if len(ret) > 1 else ret[0]
 
 
@@ -289,8 +297,10 @@ def merge_mapper_blocks(
     ret = []
     for i, datachunk in enumerate(merger):
         if args.use_object_store:
-            ret.append(np.copy(datachunk))
-            # ret.append(ray.put(datachunk))
+            if args.use_put:
+                ret.append(ray.put(datachunk))
+            else:
+                ret.append(np.copy(datachunk))
             # TODO(@lsf): this function is using more memory in this branch
             # than in the else branch. `del datachunk` helped a little but
             # memory usage is still high. This does not make sense since
@@ -378,17 +388,6 @@ def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float
     return _node_res(args.worker_ips[node_i], parallelism)
 
 
-def _ray_wait(
-    futures, wait_all: bool = False, **kwargs
-) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
-    to_wait = [f for f in futures if f is not None]
-    default_kwargs = dict(fetch_local=False)
-    if wait_all:
-        default_kwargs.update(num_returns=len(to_wait))
-    kwargs = dict(**default_kwargs, **kwargs)
-    return ray.wait(to_wait, **kwargs)
-
-
 def get_boundaries(
     num_map_returns: int, num_merge_returns: int = -1
 ) -> Tuple[List[int], List[List[int]]]:
@@ -421,7 +420,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
             # Wait for at least one map task from this round to finish before
             # scheduling the next round.
-            _ray_wait(
+            ray_utils.wait(
                 map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
             )
 
@@ -429,7 +428,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         kill_and_restart_node()
 
     if args.skip_final_merge:
-        _ray_wait(map_results[:, 0], wait_all=True)
+        ray_utils.wait(map_results[:, 0], wait_all=True)
         return []
 
     reducer_results = []
@@ -602,13 +601,14 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 args, part_id, map_bounds, path
             )
             part_id += 1
-       
-        # Make sure previous rounds finish before scheduling merge tasks.
+        # Make sure all merge tasks previous rounds finish.
         num_extra_rounds = round - args.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            _ray_wait(
-                merge_results[0, :, 0],
-                num_returns=num_extra_rounds * args.merge_parallelism,
+            ray_utils.wait(
+                merge_results[:, :, 0].flatten(),
+                num_returns=num_extra_rounds
+                * args.merge_parallelism
+                * args.num_workers,
             )
 
         # Submit merge tasks.
@@ -623,19 +623,14 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 #                    f"merge task (merge_id: {m}, {w}) input: {map_results[j*f : (j+1)*f, w]}"
 #                )
                 print("merge input shape", np.shape(map_results[j * f : (j + 1) * f, w]))
+                map_blocks = map_results[j * f : (j + 1) * f, w]
                 merge_results[w, m, :] = merge_mapper_blocks.options(
                     **merger_opt, **_node_i(args, w)
-                ).remote(
-                    args,
-                    w,
-                    m,
-                    merge_bounds[w],
-                    *map_results[j * f : (j + 1) * f, w],
-                )
+                ).remote(args, w, m, merge_bounds[w], *map_blocks)
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
-        _ray_wait(map_results[:, 0])
+        ray_utils.wait(map_results[:, 0])
         # Magnet: Keep map results from each round to prevent going out-of-scope
         if args.magnet:
             all_map_results.append(map_results)
@@ -646,26 +641,33 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         kill_and_restart_node()
 
     if args.skip_final_merge:
-        _ray_wait(merge_results.flatten(), wait_all=True)
+        ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
     # Submit second-stage reduce tasks.
-    reducer_results = np.empty(
+    reduce_results = np.empty(
         (args.num_workers, args.num_reducers_per_worker), dtype=object
     )
     for r in range(args.num_reducers_per_worker):
-        reducer_results[:, r] = [
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results.flatten(),
+                num_returns=(r - args.reduce_parallelism) * args.num_workers,
+            )
+        reduce_results[:, r] = [
             final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
                 args, w, r, *merge_results[w, :, r]
             )
             for w in range(args.num_workers)
         ]
+        merge_results[:, :, r] = None
     del merge_results
     if args.magnet:
         del all_map_results[:]
 
-    reducer_results = reducer_results.flatten().tolist()
-    return ray.get(reducer_results)
+    return ray.get(reduce_results.flatten().tolist())
 
 
 @tracing_utils.timeit("sort", log_to_wandb=True)

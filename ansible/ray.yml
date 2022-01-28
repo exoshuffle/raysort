@@ -16,13 +16,9 @@
         - absent
         - directory
 
-    - name: Stop Ray
-      shell: "{{pythondir}}/ray stop -f"
-      args:
-        executable: /bin/bash
-
-    - name: Start Ray
+    - name: Restart Ray
       shell: >
+        {{pythondir}}/ray stop -f &&
         nohup
         {{pythondir}}/ray start
         --address={{head_ip}}:6379
@@ -30,9 +26,3 @@
         --metrics-export-port=8090
         --resources='{"worker":1}'
         --object-store-memory={{28 * 1024 * 1024 * 1024}}
-
-    - name: Start Node Exporter
-      shell: >
-        nohup
-        {{workdir}}/raysort/bin/node_exporter/node_exporter
-        --web.listen-address 0.0.0.0:8091 &
