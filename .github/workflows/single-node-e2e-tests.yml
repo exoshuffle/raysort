@@ -48,3 +48,6 @@ jobs:
 
       - name: 1GB Ray native shuffle, Magnet version
         run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --ray_address=
+
+      - name: 1GB Ray native shuffle, Riffle version
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --ray_address=
