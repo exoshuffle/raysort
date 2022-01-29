@@ -479,14 +479,14 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             )
         reduce_results[:, r] = [
             final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                args, w, r, *merge_results[:, r * args.num_workers + w]
+                args, w, r, *merge_results[:, w * args.num_reducers_per_worker + r]
             )
             for w in range(args.num_workers)
         ]
     del all_map_results
     del merge_results
 
-    return ray.get(reduce_results.T.flatten().tolist())
+    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
