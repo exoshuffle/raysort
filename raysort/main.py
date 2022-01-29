@@ -132,6 +132,12 @@ def get_args(*args, **kwargs):
         help="if set, will keep map results in scope until all reduce tasks are scheduled",
     )
     parser.add_argument(
+        "--riffle",
+        default=False,
+        action="store_true",
+        help="if set, will run Riffle-style map-side merge",
+    )
+    parser.add_argument(
         "--repeat_sort",
         default=1,
         type=int,
@@ -396,6 +402,93 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     return ray.get(reducer_results)
 
 
+def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    map_bounds, _ = get_boundaries(1)
+    merge_bounds, _ = get_boundaries(args.num_reducers)
+
+    mapper_opt = {"num_returns": 1}
+    merger_opt = {"num_returns": args.num_reducers}
+    merge_results = np.empty(
+        (args.num_workers * args.num_mergers_per_worker, args.num_reducers),
+        dtype=object,
+    )
+    num_map_tasks_per_round = args.num_workers * args.map_parallelism
+
+    all_map_results = []
+    part_id = 0
+    for round in range(args.num_rounds):
+        # Submit map tasks.
+        num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
+        map_results = np.empty((args.num_workers, args.map_parallelism), dtype=object)
+        for i in range(num_map_tasks):
+            _, node, path = parts[part_id]
+            opt = dict(**mapper_opt, **_node_res(node))
+            m = part_id % num_map_tasks_per_round
+            map_results[i % args.num_workers, i // args.num_workers] = mapper.options(
+                **opt
+            ).remote(args, part_id, map_bounds, path)
+            part_id += 1
+
+        # Make sure all merge tasks previous rounds finish.
+        num_extra_rounds = round - args.num_concurrent_rounds + 1
+        if num_extra_rounds > 0:
+            ray_utils.wait(
+                merge_results[:, 0].flatten(),
+                num_returns=num_extra_rounds
+                * args.merge_parallelism
+                * args.num_workers,
+            )
+
+        # Submit merge tasks.
+        f = int(np.ceil(num_map_tasks / args.merge_parallelism))
+        for j in range(args.merge_parallelism):
+            m = round * args.merge_parallelism + j
+            for w in range(args.num_workers):
+                map_blocks = map_results[w, :]
+                merge_results[
+                    w + m * args.num_workers, :
+                ] = merge_mapper_blocks.options(
+                    **merger_opt, **_node_i(args, w)
+                ).remote(
+                    args, w, m, merge_bounds, *map_blocks
+                )
+
+        # Wait for at least one map task from this round to finish before
+        # scheduling the next round.
+        ray_utils.wait(map_results.flatten())
+        all_map_results.append(map_results)
+
+    if args.test_failure:
+        kill_and_restart_node()
+
+    if args.skip_final_merge:
+        ray_utils.wait(merge_results.flatten(), wait_all=True)
+        return []
+
+    # Submit second-stage reduce tasks.
+    reduce_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results.flatten(),
+                num_returns=(r - args.reduce_parallelism) * args.num_workers,
+            )
+        reduce_results[:, r] = [
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+                args, w, r, *merge_results[:, r * args.num_workers + w]
+            )
+            for w in range(args.num_workers)
+        ]
+    del all_map_results
+    del merge_results
+
+    return ray.get(reduce_results.T.flatten().tolist())
+
+
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     map_bounds, merge_bounds = get_boundaries(
         args.num_workers, args.num_reducers_per_worker
@@ -490,6 +583,8 @@ def sort_main(args: Args):
 
     if args.simple_shuffle:
         results = sort_simple(args, parts)
+    elif args.riffle:
+        results = sort_riffle(args, parts)
     else:
         results = sort_two_stage(args, parts)
 
