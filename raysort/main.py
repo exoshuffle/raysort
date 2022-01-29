@@ -108,10 +108,10 @@ def get_args(*args, **kwargs):
         help="output will be consumed instead of being written to disk",
     )
     parser.add_argument(
-        "--use_object_store",
+        "--manual_spilling",
         default=False,
         action="store_true",
-        help="if set, will use object store for 2nd-stage reduce",
+        help="if set, will not use object store for 2nd-stage reduce",
     )
     parser.add_argument(
         "--use_put",
@@ -124,6 +124,12 @@ def get_args(*args, **kwargs):
         default=False,
         action="store_true",
         help="if set, will use the simple map-reduce version",
+    )
+    parser.add_argument(
+        "--magnet",
+        default=False,
+        action="store_true",
+        help="if set, will keep map results in scope until all reduce tasks are scheduled",
     )
     parser.add_argument(
         "--repeat_sort",
@@ -251,7 +257,7 @@ def merge_mapper_blocks(
 
     ret = []
     for i, datachunk in enumerate(merger):
-        if args.use_object_store:
+        if not args.manual_spilling:
             if args.use_put:
                 ret.append(ray.put(datachunk))
             else:
@@ -403,6 +409,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
+    all_map_results = []  # For Magnet.
     part_id = 0
     for round in range(args.num_rounds):
         # Submit map tasks.
@@ -440,7 +447,10 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         ray_utils.wait(map_results[:, 0])
-        del map_results
+        if args.magnet:
+            all_map_results.append(map_results)
+        else:
+            del map_results
 
     if args.test_failure:
         kill_and_restart_node()
@@ -468,6 +478,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(args.num_workers)
         ]
         merge_results[:, :, r] = None
+    del all_map_results
     del merge_results
 
     return ray.get(reduce_results.flatten().tolist())

@@ -33,11 +33,14 @@ jobs:
       - name: 1GB simple shuffle
         run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --simple_shuffle --skip_input --sort --ray_address=
 
-      - name: 1GB two stage shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --skip_input --sort --ray_address=
+      - name: 1GB two stage shuffle with manual spilling
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --manual_spilling --skip_input --sort --ray_address=
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_object_store --skip_input --sort --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --skip_input --sort --ray_address=
 
       - name: 1GB Ray native shuffle with ray.put()
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_object_store --use_put --skip_input --sort --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_put --skip_input --sort --ray_address=
+
+      - name: 1GB Ray native shuffle, Magnet version
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --skip_input --sort --ray_address=
