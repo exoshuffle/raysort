@@ -168,9 +168,10 @@ def _init_local_cluster():
 
 
 def init(args: Args):
-    global local_cluster
     if args.ray_address:
         ray.init(address=args.ray_address)
+        cluster = None
     else:
-        local_cluster = _init_local_cluster()
+        cluster = _init_local_cluster()
     _get_resources_args(args)
+    return cluster

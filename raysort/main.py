@@ -142,6 +142,16 @@ def get_args(*args, **kwargs):
         help="how many times to run the sort for benchmarking",
     )
     parser.add_argument(
+        "--fail_node",
+        default="",
+        type="str",
+        help=(
+            "if not empty, will fail the specified node mid-execution to "
+            "test fault tolerance; for a multi-node cluster use the IP of the "
+            "node; for local cluster use an index between 0 and num_workers"
+        ),
+    )
+    parser.add_argument(
         "--fail_time",
         default=45,
         type=float,
@@ -443,8 +453,6 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         ray_utils.wait(map_results.flatten())
         all_map_results.append(map_results)
 
-    if args.test_failure:
-        kill_and_restart_node()
     ray_utils.fail_and_restart_node(args)
 
     if args.skip_final_merge:
@@ -609,8 +617,9 @@ def _get_app_args(args: Args):
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
+    global cluster
     logging_utils.init()
-    ray_utils.init(args)
+    cluster = ray_utils.init(args)
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_app_args(args)
     return tracing_utils.create_progress_tracker(args)

@@ -1,4 +1,4 @@
-name: Single Node Sort Tests
+name: Single Node Fault Tolerance Tests
 on:
   push:
     branches:
