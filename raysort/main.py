@@ -24,8 +24,6 @@ Args = argparse.Namespace
 
 STEPS = ["generate_input", "sort", "validate_output"]
 
-cluster = None
-
 
 def get_args(*args, **kwargs):
     parser = argparse.ArgumentParser()
@@ -144,10 +142,20 @@ def get_args(*args, **kwargs):
         help="how many times to run the sort for benchmarking",
     )
     parser.add_argument(
-        "--test_failure",
-        default=False,
-        action="store_true",
-        help="if set, will simulate node failure mid-execution",
+        "--fail_node",
+        default="",
+        type=str,
+        help=(
+            "if not empty, will fail the specified node mid-execution to "
+            "test fault tolerance; for a multi-node cluster use the IP of the "
+            "node; for local cluster use an index between 0 and num_workers"
+        ),
+    )
+    parser.add_argument(
+        "--fail_time",
+        default=45,
+        type=float,
+        help="fail a node this many seconds into execution",
     )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
@@ -156,19 +164,6 @@ def get_args(*args, **kwargs):
     for step in STEPS:
         steps_grp.add_argument(f"--{step}", action="store_true")
     return parser.parse_args(*args, **kwargs)
-
-
-def kill_and_restart_node():
-    if cluster is not None:
-        worker_node = list(cluster.worker_nodes)[0]
-        resource_spec = worker_node.get_resource_spec()
-        print("Killing worker node", worker_node, resource_spec)
-        cluster.remove_node(worker_node)
-        cluster.add_node(
-            resources=resource_spec.resources,
-            object_store_memory=resource_spec.object_store_memory,
-            num_cpus=resource_spec.num_cpus,
-        )
 
 
 # ------------------------------------------------------------
@@ -380,8 +375,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
             )
 
-    if args.test_failure:
-        kill_and_restart_node()
+    ray_utils.fail_and_restart_node(args)
 
     if args.skip_final_merge:
         ray_utils.wait(map_results[:, 0], wait_all=True)
@@ -444,6 +438,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         for j in range(args.merge_parallelism):
             m = round * args.merge_parallelism + j
             for w in range(args.num_workers):
+                # TODO(lsf): this does not respect merge_factor for now.
                 map_blocks = map_results[w, :]
                 merge_results[
                     w + m * args.num_workers, :
@@ -458,8 +453,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         ray_utils.wait(map_results.flatten())
         all_map_results.append(map_results)
 
-    if args.test_failure:
-        kill_and_restart_node()
+    ray_utils.fail_and_restart_node(args)
 
     if args.skip_final_merge:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
@@ -490,6 +484,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    start_time = time.time()
     map_bounds, merge_bounds = get_boundaries(
         args.num_workers, args.num_reducers_per_worker
     )
@@ -537,6 +532,10 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     **merger_opt, **_node_i(args, w)
                 ).remote(args, w, m, merge_bounds[w], *map_blocks)
 
+        if start_time > 0 and (time.time() - start_time) > args.fail_time:
+            ray_utils.fail_and_restart_node(args)
+            start_time = -1
+
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         ray_utils.wait(map_results[:, 0])
@@ -544,9 +543,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             all_map_results.append(map_results)
         else:
             del map_results
-
-    if args.test_failure:
-        kill_and_restart_node()
 
     if args.skip_final_merge:
         ray_utils.wait(merge_results.flatten(), wait_all=True)

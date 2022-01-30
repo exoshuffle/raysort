@@ -1,6 +1,8 @@
 import argparse
 import logging
 import os
+import socket
+import subprocess
 import tempfile
 from typing import Dict, List, Tuple
 
@@ -9,6 +11,82 @@ from ray import cluster_utils
 
 
 Args = argparse.Namespace
+
+local_cluster = None
+
+
+def _fail_and_restart_local_node(args: Args):
+    idx = int(args.fail_node)
+    worker_node = list(local_cluster.worker_nodes)[idx]
+    resource_spec = worker_node.get_resource_spec()
+    print("Killing worker node", worker_node, resource_spec)
+    local_cluster.remove_node(worker_node)
+    local_cluster.add_node(
+        resources=resource_spec.resources,
+        object_store_memory=resource_spec.object_store_memory,
+        num_cpus=resource_spec.num_cpus,
+    )
+
+
+def _fail_and_restart_remote_node(worker_ip: str):
+    # TODO(lsf): Can get a worker IP address directly from ray.node()
+    # without having to specify. Also might be able to make this more
+    # elegant using resource_spec.
+    # Expect a specific worker IP in this case
+    assert worker_ip != ""
+    # Use subprocess to ssh and stop/start a worker.
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+    object_store = 28 * 1024 * 1024 * 1024
+    python_dir = "~/miniconda3/envs/raysort/bin"
+    start_cmd = """{python_dir}/ray start --address={local_ip}:6379
+            --object-manager-port=8076
+            --metrics-export-port=8090
+            --resources={{\"node:{worker_ip}\": 1}}
+            --object-store-memory={obj_st_mem}""".format(
+        python_dir=python_dir,
+        local_ip=local_ip,
+        worker_ip=worker_ip,
+        obj_st_mem=str(object_store),
+    )
+    stop_cmd = "{python_dir}/ray stop -f".format(python_dir=python_dir)
+    ssh = "ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    print("Killing worker node", worker_ip)
+    outs, errs = subprocess.Popen(
+        "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).communicate()
+    print("Raylets before kill:", outs)
+    subprocess.Popen(
+        "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).communicate()
+    outs, errs = subprocess.Popen(
+        "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).communicate()
+    print("Raylets after kill:", outs)
+    subprocess.Popen(
+        "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=start_cmd),
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).communicate()
+
+
+def fail_and_restart_node(args: Args):
+    if not args.fail_node:
+        return
+    if local_cluster is not None:
+        _fail_and_restart_local_node(args.fail_node)
+    else:
+        _fail_and_restart_remote_node(args.fail_node)
 
 
 def wait(
