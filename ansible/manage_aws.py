@@ -14,7 +14,7 @@ flags.DEFINE_string(
 flags.DEFINE_enum(
     "action",
     "stop",
-    ["reboot", "start", "stop"],
+    ["reboot", "start", "stop", "terminate"],
     "action to perform on the instances",
 )
 
@@ -42,6 +42,7 @@ def perform_action(action: str, instances: List[Dict]):
         "reboot": ec2.reboot_instances,
         "start": ec2.start_instances,
         "stop": ec2.stop_instances,
+        "terminate": ec2.terminate_instances,
     }
     fn = action_to_fn[action]
     resp = fn(InstanceIds=ids)
