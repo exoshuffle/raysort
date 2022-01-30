@@ -144,7 +144,7 @@ def get_args(*args, **kwargs):
     parser.add_argument(
         "--fail_node",
         default="",
-        type="str",
+        type=str,
         help=(
             "if not empty, will fail the specified node mid-execution to "
             "test fault tolerance; for a multi-node cluster use the IP of the "
