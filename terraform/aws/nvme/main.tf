@@ -25,7 +25,7 @@ provider "aws" {
 resource "aws_instance" "raysort_nvme_worker" {
   count = var.num_workers
 
-  ami           = “ami-0da5da6db44aaf267” # raysort-hadoop-spark-conda
+  ami           = "ami-0da5da6db44aaf267" # raysort-hadoop-spark-conda
   instance_type = "i3.2xlarge"
   key_name      = "login-us-west-2"
 
