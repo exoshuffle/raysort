@@ -606,7 +606,7 @@ def _get_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
-    args.total_data_size = args.total_gb * 10 ** 9
+    args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
     assert args.map_parallelism % args.merge_factor == 0, args

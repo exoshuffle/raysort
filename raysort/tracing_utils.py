@@ -98,7 +98,7 @@ def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
         print(summary)
 
     def mib_to_gb(x: float) -> float:
-        return x * 1024 * 1024 / 1000 ** 3
+        return x * 1024 * 1024 / 1000**3
 
     def extract_gb(regex: str) -> float:
         matches = re.findall(regex, summary)
