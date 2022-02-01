@@ -36,7 +36,7 @@ def timeit(
                 echo=report_in_progress,
             )
             if event == "sort":
-                tracker.record_sort_start_time.remote()
+                tracker.record_start_time.remote()
             try:
                 begin = time.time()
                 ret = f(*args, **kwargs)
@@ -64,9 +64,9 @@ def timeit(
     return decorator
 
 
-def record_value(metric_name, duration, echo=False):
+def record_value(*args, **kwargs):
     progress_tracker = get_progress_tracker()
-    progress_tracker.record_value.remote(metric_name, duration, echo)
+    progress_tracker.record_value.remote(*args, **kwargs)
 
 
 def get_progress_tracker():
@@ -130,7 +130,7 @@ class ProgressTracker:
         self.spans = []
         self.reset_gauges()
         self.initial_spilling_stats = _get_spilling_stats()
-        self.sort_start_time = None
+        self.start_time = None
         logging_utils.init()
         logging.info(args)
         try:
@@ -161,7 +161,16 @@ class ProgressTracker:
     def dec(self, metric_name, value=1, echo=False):
         return self.inc(metric_name, -value, echo)
 
-    def record_value(self, metric_name, value, echo=False, log_to_wandb=False):
+    def record_value(
+        self,
+        metric_name,
+        value,
+        relative_to_start=False,
+        echo=False,
+        log_to_wandb=False,
+    ):
+        if relative_to_start and self.start_time:
+            value -= self.start_time
         self.series[metric_name].append(value)
         if echo:
             logging.info(f"{metric_name} {value}")
@@ -173,14 +182,10 @@ class ProgressTracker:
         if record_value:
             self.record_value(span.event, span.duration, log_to_wandb=log_to_wandb)
 
-    def record_sort_start_time(self):
-        self.sort_start_time = time.time()
+    def record_start_time(self):
+        self.start_time = time.time()
 
     def report(self):
-        if "output_time" in self.series:
-            self.series["output_time"] = [
-                x - self.sort_start_time for x in self.series["output_time"]
-            ]
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)
@@ -195,6 +200,7 @@ class ProgressTracker:
                 ]
             )
         df = pd.DataFrame(ret, columns=["task", "mean", "std", "max", "min", "count"])
+        print(self.series.get("output_time"))
         print(df.set_index("task"))
         print(self.run_args)
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
@@ -209,7 +215,7 @@ class ProgressTracker:
     def save_trace(self):
         self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
-        filename = f"/tmp/raysort-{self.sort_start_time}.json"
+        filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
         wandb.save(filename, base_path="/tmp")

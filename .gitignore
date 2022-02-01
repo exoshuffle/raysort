@@ -1,10 +1,12 @@
 *.backup
 *.egg-info
 *.log
+*.pdf
 *.so
 *.tfstate
 .gdb_history
 .vscode
+.DS_Store
 __pycache__
 build
 cython_debug
