@@ -397,6 +397,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    start_time = time.time()
     map_bounds, _ = get_boundaries(1)
     merge_bounds, _ = get_boundaries(args.num_reducers)
 
@@ -447,6 +448,10 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 ).remote(
                     args, w, m, merge_bounds, *map_blocks
                 )
+        
+        if start_time > 0 and (time.time() - start_time) > args.fail_time:
+            ray_utils.fail_and_restart_node(args)
+            start_time = -1
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
@@ -630,7 +635,7 @@ def main(args: Args):
 
     if args.generate_input:
         sort_utils.generate_input(args)
-
+    
     if args.sort:
         for _ in range(args.repeat_sort):
             tracker.reset_gauges.remote()
