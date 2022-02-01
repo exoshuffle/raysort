@@ -40,6 +40,32 @@ sns.set_theme(style="ticks")
 sns.set_palette("Set2")
 
 
+def get_data_ft():
+    df = pd.DataFrame(
+        [
+            ["Ray-Riffle", "No failure", 1002.35],
+            ["Ray-Riffle", "With failure", 1556.876],
+            ["Ray-Magnet", "No failure", 988.296],
+            ["Ray-Magnet", "With failure", 1026.939],
+            ["Ray-Cosco", "No failure", 827.059],
+            ["Ray-Cosco", "With failure", 881.596],
+        ],
+        columns=["version", "fail_mode", "time"],
+    )
+    figname = "ft_comparison"
+    return (
+        df,
+        [],
+        figname,
+        "version",
+        "time",
+        "fail_mode",
+        "Failure Mode",
+        "",
+        "Job Completion Time (s)",
+        None,
+    )
+
 # https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
 def get_data_small():
     df = pd.DataFrame(
@@ -47,18 +73,18 @@ def get_data_small():
             ["Ray-simple", "2GB", 758.968],
             ["Ray-simple", "0.5GB", 1096.112],
             ["Ray-simple", "0.1GB", 0],
-            ["Ray-Riffle", "2GB", 0],
-            ["Ray-Riffle", "0.5GB", 0],
-            ["Ray-Riffle", "0.1GB", 0],
-            ["Ray-Magnet", "2GB", 994.10569],
-            ["Ray-Magnet", "0.5GB", 983.43],
-            ["Ray-Magnet", "0.1GB", 0],
-            ["Ray-opt", "2GB", 802.993],
-            ["Ray-opt", "0.5GB", 762.152],
-            ["Ray-opt", "0.1GB", 847.755],
+            ["Ray-Riffle", "2GB", 1002.35],
+            ["Ray-Riffle", "0.5GB", 1031.096],
+            ["Ray-Riffle", "0.1GB", 2817.34],
+            ["Ray-Magnet", "2GB", 988.296],
+            ["Ray-Magnet", "0.5GB", 984.41],
+            ["Ray-Magnet", "0.1GB", 1112.63],
+            ["Ray-Cosco", "2GB", 827.059],
+            ["Ray-Cosco", "0.5GB", 779.383],
+            ["Ray-Cosco", "0.1GB", 988.836],
             ["Spark", "2GB", 925.232],
             ["Spark", "0.5GB", 995.099],
-            ["Spark", "0.1GB", 0],
+            ["Spark", "0.1GB", 850.577],
         ],
         columns=["version", "partition_size", "time"],
     )
@@ -157,5 +183,5 @@ def plot(
     g.savefig(filename)
 
 
-for data in [get_data_small(), get_data_large()]:
+for data in [get_data_small(), get_data_ft()]:
     plot(*data)
