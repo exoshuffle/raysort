@@ -314,15 +314,19 @@ def final_merge(
     pinfo = sort_utils.part_info(args, part_id, kind="output")
     merge_fn = _dummy_merge if args.skip_sorting else sortlib.merge_partitions
     merger = merge_fn(M, get_block)
-    if args.skip_output or args.output_consume_time > 0:
-        first = True
+    if args.skip_output:
+        first_chunk = True
         for datachunk in merger:
+            if first_chunk:
+                first_chunk = False
+                tracing_utils.record_value(
+                    "output_time",
+                    time.time(),
+                    relative_to_start=True,
+                    echo=True,
+                    log_to_wandb=True,
+                )
             del datachunk
-            if first:
-                first = False
-                if args.output_consume_time > 0:
-                    tracing_utils.record_value("output_time", time.time())
-        time.sleep(args.output_consume_time)
         return pinfo
 
     with open(pinfo.path, "wb", buffering=args.io_size) as fout:
