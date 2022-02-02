@@ -385,19 +385,24 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         ray_utils.wait(map_results[:, 0], wait_all=True)
         return []
 
-    reducer_results = []
-    for w in range(args.num_workers):
-        for r in range(args.num_reducers_per_worker):
-            reducer_results.append(
-                final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                    args,
-                    w,
-                    r,
-                    *map_results[:, w * args.num_reducers_per_worker + r],
-                )
+    reduce_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results.flatten(),
+                num_returns=(r - args.reduce_parallelism) * args.num_workers,
             )
-
-    return ray.get(reducer_results)
+        reduce_results[:, r] = [
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+                args, w, r, *map_results[:, w * args.num_reducers_per_worker + r]
+            )
+            for w in range(args.num_workers)
+        ]
+    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -486,8 +491,6 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             )
             for w in range(args.num_workers)
         ]
-    del all_map_results
-    del merge_results
 
     return ray.get(reduce_results.flatten().tolist())
 
@@ -576,8 +579,6 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(args.num_workers)
         ]
         merge_results[:, :, r] = None
-    del all_map_results
-    del merge_results
 
     return ray.get(reduce_results.flatten().tolist())
 
