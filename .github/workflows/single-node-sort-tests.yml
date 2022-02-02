@@ -46,4 +46,4 @@ jobs:
         run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --skip_input --sort --ray_address=
 
       - name: 1GB Ray native shuffle, Riffle version
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --skip_input --sort --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --merge_factor=8 --skip_input --sort --ray_address=

@@ -178,6 +178,7 @@ def get_data_ft():
         None,
     )
 
+
 # https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
 def get_data_small():
     df = pd.DataFrame(
