@@ -385,19 +385,23 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         ray_utils.wait(map_results[:, 0], wait_all=True)
         return []
 
-    reducer_results = []
-    for w in range(args.num_workers):
-        for r in range(args.num_reducers_per_worker):
-            reducer_results.append(
-                final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                    args,
-                    w,
-                    r,
-                    *map_results[:, w * args.num_reducers_per_worker + r],
-                )
+    reduce_results = []
+    for r in range(args.num_reducers_per_worker):
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results.flatten(),
+                num_returns=(r - args.reduce_parallelism) * args.num_workers,
             )
+        reduce_results[:, r] = [
+            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+                args, w, r, *map_results[:, w * args.num_reducers_per_worker + r]
+            )
+            for w in range(args.num_workers)
+        ]
 
-    return ray.get(reducer_results)
+    return ray.get(reduce_results)
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -452,7 +456,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 ).remote(
                     args, w, m, merge_bounds, *map_blocks
                 )
-        
+
         if start_time > 0 and (time.time() - start_time) > args.fail_time:
             ray_utils.fail_and_restart_node(args)
             start_time = -1
@@ -639,7 +643,7 @@ def main(args: Args):
 
     if args.generate_input:
         sort_utils.generate_input(args)
-    
+
     if args.sort:
         for _ in range(args.repeat_sort):
             tracker.reset_gauges.remote()
