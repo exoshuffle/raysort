@@ -406,6 +406,8 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
+    round_merge_factor = args.merge_factor // args.map_parallelism
+
     start_time = time.time()
     map_bounds, _ = get_boundaries(1)
     merge_bounds, _ = get_boundaries(args.num_reducers)
@@ -432,24 +434,28 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 **opt
             ).remote(args, part_id, map_bounds, path)
             part_id += 1
+        all_map_results.append(map_results)
 
-        # Make sure all merge tasks previous rounds finish.
-        num_extra_rounds = round - args.num_concurrent_rounds + 1
-        if num_extra_rounds > 0:
-            ray_utils.wait(
-                merge_results[:, 0].flatten(),
-                num_returns=num_extra_rounds
-                * args.merge_parallelism
-                * args.num_workers,
+        if (round + 1) % round_merge_factor == 0:
+            # Make sure all merge tasks previous rounds finish.
+            num_extra_rounds = (
+                (round + 1) // round_merge_factor - args.num_concurrent_rounds + 1
             )
+            if num_extra_rounds > 0:
+                ray_utils.wait(
+                    merge_results[:, 0].flatten(),
+                    num_returns=num_extra_rounds * args.num_workers,
+                )
 
-        # Submit merge tasks.
-        f = int(np.ceil(num_map_tasks / args.merge_parallelism))
-        for j in range(args.merge_parallelism):
-            m = round * args.merge_parallelism + j
+            # Submit merge tasks.
+            merge_start = round - round_merge_factor + 1
+            merge_end = round + 1
+            map_results_to_merge = np.concatenate(
+                all_map_results[merge_start:merge_end], axis=1
+            )
+            m = round
             for w in range(args.num_workers):
-                # TODO(lsf): this does not respect merge_factor for now.
-                map_blocks = map_results[w, :]
+                map_blocks = map_results_to_merge[w, :]
                 merge_results[
                     w + m * args.num_workers, :
                 ] = merge_mapper_blocks.options(
@@ -465,7 +471,6 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
         ray_utils.wait(map_results.flatten())
-        all_map_results.append(map_results)
 
     ray_utils.fail_and_restart_node(args)
 
@@ -615,8 +620,12 @@ def _get_app_args(args: Args):
     args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
-    assert args.map_parallelism % args.merge_factor == 0, args
-    args.merge_parallelism = args.map_parallelism // args.merge_factor
+    if args.riffle:
+        assert args.merge_factor % args.map_parallelism == 0, args
+        args.merge_parallelism = 1
+    else:
+        assert args.map_parallelism % args.merge_factor == 0, args
+        args.merge_parallelism = args.map_parallelism // args.merge_factor
     args.num_rounds = int(
         np.ceil(args.num_mappers / args.num_workers / args.map_parallelism)
     )
