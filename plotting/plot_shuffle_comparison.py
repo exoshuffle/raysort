@@ -40,6 +40,118 @@ sns.set_theme(style="ticks")
 sns.set_palette("Set2")
 
 
+def get_dask_comparison():
+    columns = ["data size", "setup", "time"]
+    df = pd.DataFrame(
+        [
+            ["1 GB", "32 workers", 9.257539613],
+            ["1 GB", "8 workers", 9.152182102],
+            ["1 GB", "1 worker", 29.10137018],
+            ["1 GB", "Dask-on-Ray", 8.962659121],
+            ["10 GB", "32 workers", 117.7881519],
+            ["10 GB", "8 workers", 112.825515],
+            ["10 GB", "1 worker", 356.3388017],
+            ["10 GB", "Dask-on-Ray", 98.41430688],
+            ["20 GB", "32 workers", 0],
+            ["20 GB", "8 workers", 252.654465],
+            ["20 GB", "1 worker", 1327.135815],
+            ["20 GB", "Dask-on-Ray", 186.0701251],
+            ["100 GB", "32 workers", 0],
+            ["100 GB", "8 workers", 0],
+            ["100 GB", "1 worker", 14221.8383],
+            ["100 GB", "Dask-on-Ray", 1588.793045],
+        ],
+        columns=columns,
+    )
+    figname = "dask_on_ray_comp"
+    return (df,
+            [],
+            figname,
+            columns[0],
+            columns[2],
+            columns[1],
+            "",
+            "",
+            "Job Completion Time (s)",
+            None,
+    )
+
+
+def get_obj_fusion_time():
+    columns = ["partition_size", "object_fusion", "time"]
+    df = pd.DataFrame(
+        [
+#            ["1GB", "With fusion (default)", 0],
+#            ["1GB", "Without fusion", 0],
+            ["2GB", "With fusion (default)", 758.968],
+            ["2GB", "Without fusion", 808.523],
+       ],
+        columns=columns,
+    )
+    figname = "obj_fusion_runtime"
+    return (df,
+            [],
+            figname,
+            columns[0],
+            columns[2],
+            columns[1],
+            "",
+            "",
+            "Job Completion Time (s)",
+            None,
+            28,
+    )
+
+
+def get_obj_fusion_throughput():
+    columns = ["partition_size", "object_fusion", "spill_throughput"]
+    df = pd.DataFrame(
+        [
+#            ["1GB", "With fusion (default)", 0],
+#            ["1GB", "Without fusion", 0],
+            ["2GB", "With fusion (default)", 1767],
+            ["2GB", "Without fusion", 1084],
+       ],
+        columns=columns,
+    )
+    figname = "obj_fusion_throughput"
+    return (df,
+            [],
+            figname,
+            columns[0],
+            columns[2],
+            columns[1],
+            "",
+            "",
+            "Spill Throughput (MiB/s)",
+            None,
+            28,
+    )
+
+
+def get_pipelined_fetch():
+    columns = ["partition_size", "arg_pipelined", "runtime"]
+    df = pd.DataFrame(
+        [
+            ["2GB", "Pipelined (default)", 758.968],
+            ["2GB", "Not pipelined", 808.444],
+       ],
+        columns=columns,
+    )
+    figname = "arg_fetching"
+    return (df,
+            [],
+            figname,
+            columns[0],
+            columns[2],
+            columns[1],
+            "Argument Fetching",
+            "",
+            "Job Completion Time (s)",
+            None,
+    )
+
+
 def get_data_ft():
     df = pd.DataFrame(
         [
@@ -60,7 +172,7 @@ def get_data_ft():
         "version",
         "time",
         "fail_mode",
-        "Failure Mode",
+        "",
         "",
         "Job Completion Time (s)",
         None,
@@ -147,7 +259,20 @@ def plot(
     xtitle,
     ytitle,
     palette,
+    fontsize=None,
 ):
+    if fontsize:
+        TINY_SIZE = 16
+        SMALL_SIZE = fontsize - 3 
+        MEDIUM_SIZE = fontsize
+        plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+        plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
+        plt.rc('axes', labelsize=TINY_SIZE)    # fontsize of the x and y labels
+        plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+        plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+        plt.rc('legend', fontsize=SMALL_SIZE)
+        plt.rcParams.update({'font.size': fontsize})
+
     g = sns.catplot(
         data=df,
         kind="bar",
@@ -157,6 +282,7 @@ def plot(
         palette=palette,
         height=3,
         aspect=1 / golden_ratio,
+        log=True,
     )
     fig = g.figure
     ax = fig.gca()
@@ -183,5 +309,7 @@ def plot(
     g.savefig(filename)
 
 
-for data in [get_data_small(), get_data_ft()]:
-    plot(*data)
+#for data in [get_data_small(), get_data_ft(), get_obj_fusion_time(), get_obj_fusion_throughput(), get_pipelined_fetch()]:
+#    plot(*data)
+data = get_dask_comparison()
+plot(*data)
