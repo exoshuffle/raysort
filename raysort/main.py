@@ -636,9 +636,8 @@ def _get_app_args(args: Args):
 
 
 def init(args: Args) -> ray.actor.ActorHandle:
-    global cluster
     logging_utils.init()
-    cluster = ray_utils.init(args)
+    ray_utils.init(args)
     os.makedirs(constants.WORK_DIR, exist_ok=True)
     _get_app_args(args)
     return tracing_utils.create_progress_tracker(args)
