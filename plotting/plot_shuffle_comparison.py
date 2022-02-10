@@ -63,21 +63,23 @@ def get_microbenchmark():
             ["Ray-prefetching-off", "1 MB", 130],
             ["Ray-prefetching-off", "0.1 MB", 130],
         ],
-        columns=columns
+        columns=columns,
     )
     figname = "microbenchmark"
-    return (df,
-            [],
-            figname,
-            columns[0],
-            columns[2],
-            columns[1],
-            "Block Size",
-            "",
-            "Run Time (s)",
-            None,
-            None,
+    return (
+        df,
+        [],
+        figname,
+        columns[0],
+        columns[2],
+        columns[1],
+        "Block Size",
+        "",
+        "Run Time (s)",
+        None,
+        None,
     )
+
 
 def get_dask_comparison():
     columns = ["data size", "setup", "time"]
@@ -103,17 +105,18 @@ def get_dask_comparison():
         columns=columns,
     )
     figname = "dask_on_ray_comp"
-    return (df,
-            [],
-            figname,
-            columns[0],
-            columns[2],
-            columns[1],
-            "",
-            "",
-            "Job Completion Time (s)",
-            None,
-            None,
+    return (
+        df,
+        [],
+        figname,
+        columns[0],
+        columns[2],
+        columns[1],
+        "",
+        "",
+        "Job Completion Time (s)",
+        None,
+        None,
     )
 
 
@@ -121,25 +124,26 @@ def get_obj_fusion_time():
     columns = ["partition_size", "object_fusion", "time"]
     df = pd.DataFrame(
         [
-#            ["1GB", "With fusion (default)", 0],
-#            ["1GB", "Without fusion", 0],
+            #            ["1GB", "With fusion (default)", 0],
+            #            ["1GB", "Without fusion", 0],
             ["2GB", "With fusion (default)", 758.968],
             ["2GB", "Without fusion", 808.523],
-       ],
+        ],
         columns=columns,
     )
     figname = "obj_fusion_runtime"
-    return (df,
-            [],
-            figname,
-            columns[0],
-            columns[2],
-            columns[1],
-            "",
-            "",
-            "Job Completion Time (s)",
-            None,
-            28,
+    return (
+        df,
+        [],
+        figname,
+        columns[0],
+        columns[2],
+        columns[1],
+        "",
+        "",
+        "Job Completion Time (s)",
+        None,
+        28,
     )
 
 
@@ -147,25 +151,26 @@ def get_obj_fusion_throughput():
     columns = ["partition_size", "object_fusion", "spill_throughput"]
     df = pd.DataFrame(
         [
-#            ["1GB", "With fusion (default)", 0],
-#            ["1GB", "Without fusion", 0],
+            #            ["1GB", "With fusion (default)", 0],
+            #            ["1GB", "Without fusion", 0],
             ["2GB", "With fusion (default)", 1767],
             ["2GB", "Without fusion", 1084],
-       ],
+        ],
         columns=columns,
     )
     figname = "obj_fusion_throughput"
-    return (df,
-            [],
-            figname,
-            columns[0],
-            columns[2],
-            columns[1],
-            "",
-            "",
-            "Spill Throughput (MiB/s)",
-            None,
-            28,
+    return (
+        df,
+        [],
+        figname,
+        columns[0],
+        columns[2],
+        columns[1],
+        "",
+        "",
+        "Spill Throughput (MiB/s)",
+        None,
+        28,
     )
 
 
@@ -175,20 +180,21 @@ def get_pipelined_fetch():
         [
             ["2GB", "Pipelined (default)", 758.968],
             ["2GB", "Not pipelined", 808.444],
-       ],
+        ],
         columns=columns,
     )
     figname = "arg_fetching"
-    return (df,
-            [],
-            figname,
-            columns[0],
-            columns[2],
-            columns[1],
-            "Argument Fetching",
-            "",
-            "Job Completion Time (s)",
-            None,
+    return (
+        df,
+        [],
+        figname,
+        columns[0],
+        columns[2],
+        columns[1],
+        "Argument Fetching",
+        "",
+        "Job Completion Time (s)",
+        None,
     )
 
 
@@ -304,15 +310,15 @@ def plot(
 ):
     if fontsize:
         TINY_SIZE = 16
-        SMALL_SIZE = fontsize - 3 
+        SMALL_SIZE = fontsize - 3
         MEDIUM_SIZE = fontsize
-        plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-        plt.rc('axes', titlesize=MEDIUM_SIZE)     # fontsize of the axes title
-        plt.rc('axes', labelsize=TINY_SIZE)    # fontsize of the x and y labels
-        plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-        plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-        plt.rc('legend', fontsize=SMALL_SIZE)
-        plt.rcParams.update({'font.size': fontsize})
+        plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
+        plt.rc("axes", titlesize=MEDIUM_SIZE)  # fontsize of the axes title
+        plt.rc("axes", labelsize=TINY_SIZE)  # fontsize of the x and y labels
+        plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("legend", fontsize=SMALL_SIZE)
+        plt.rcParams.update({"font.size": fontsize})
 
     g = sns.catplot(
         data=df,
