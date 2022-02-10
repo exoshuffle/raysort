@@ -40,25 +40,64 @@ sns.set_theme(style="ticks")
 sns.set_palette("Set2")
 
 
+def get_microbenchmark():
+    columns = ["settings", "operation", "time"]
+    # Data may not be correct.
+    df = pd.DataFrame(
+        [
+            ["Ray-default", "10 MB", 118.567094],
+            ["Ray-default", "100 KB", 141.655059],
+            ["Ray-default", "10 MB", 52.182254],
+            ["Ray-default", "1 MB", 100],
+            ["Ray-default", "100 KB", 100],
+            ["Ray-default", "10 KB", 100],
+            ["Ray-fusing-off", "10 MB", 118.547842],
+            ["Ray-fusing-off", "100 KB", 214.00119],
+            ["Ray-fusing-off", "10 MB", 52.228644],
+            ["Ray-fusing-off", "1 MB", 53.304679],
+            ["Ray-fusing-off", "100 KB", 59.523472],
+            ["Ray-fusing-off", "10 KB", 586],
+            ["Ray-prefetching-off", "Read", 0],
+            ["Ray-prefetching-off", "Write", 0],
+            ["Ray-prefetching-off", "10 MB", 130],
+            ["Ray-prefetching-off", "1 MB", 130],
+            ["Ray-prefetching-off", "0.1 MB", 130],
+        ],
+        columns=columns
+    )
+    figname = "microbenchmark"
+    return (df,
+            [],
+            figname,
+            columns[0],
+            columns[2],
+            columns[1],
+            "Block Size",
+            "",
+            "Run Time (s)",
+            None,
+            None,
+    )
+
 def get_dask_comparison():
     columns = ["data size", "setup", "time"]
     df = pd.DataFrame(
         [
-            ["1 GB", "32 workers", 9.257539613],
-            ["1 GB", "8 workers", 9.152182102],
-            ["1 GB", "1 worker", 29.10137018],
+            ["1 GB", "Dask: 32 procs x 1 thread", 9.257539613],
+            ["1 GB", "Dask: 8 procs x 4 threads", 9.152182102],
+            ["1 GB", "Dask: 1 proc x 32 threads", 29.10137018],
             ["1 GB", "Dask-on-Ray", 8.962659121],
-            ["10 GB", "32 workers", 117.7881519],
-            ["10 GB", "8 workers", 112.825515],
-            ["10 GB", "1 worker", 356.3388017],
+            ["10 GB", "Dask: 32 procs x 1 thread", 117.7881519],
+            ["10 GB", "Dask: 8 procs x 4 threads", 112.825515],
+            ["10 GB", "Dask: 1 proc x 32 threads", 356.3388017],
             ["10 GB", "Dask-on-Ray", 98.41430688],
-            ["20 GB", "32 workers", 0],
-            ["20 GB", "8 workers", 252.654465],
-            ["20 GB", "1 worker", 1327.135815],
+            ["20 GB", "Dask: 32 procs x 1 thread", 0],
+            ["20 GB", "Dask: 8 procs x 4 threads", 252.654465],
+            ["20 GB", "Dask: 1 proc x 32 threads", 1327.135815],
             ["20 GB", "Dask-on-Ray", 186.0701251],
-            ["100 GB", "32 workers", 0],
-            ["100 GB", "8 workers", 0],
-            ["100 GB", "1 worker", 14221.8383],
+            ["100 GB", "Dask: 32 procs x 1 thread", 0],
+            ["100 GB", "Dask: 8 procs x 4 threads", 0],
+            ["100 GB", "Dask: 1 proc x 32 threads", 14221.8383],
             ["100 GB", "Dask-on-Ray", 1588.793045],
         ],
         columns=columns,
@@ -73,6 +112,7 @@ def get_dask_comparison():
             "",
             "",
             "Job Completion Time (s)",
+            None,
             None,
     )
 
@@ -184,11 +224,11 @@ def get_data_small():
     df = pd.DataFrame(
         [
             ["Ray-simple", "2GB", 758.968],
-            ["Ray-simple", "0.5GB", 1096.112],
+            ["Ray-simple", "0.5GB", 1308.5],
             ["Ray-simple", "0.1GB", 0],
             ["Ray-Riffle", "2GB", 1002.35],
             ["Ray-Riffle", "0.5GB", 1031.096],
-            ["Ray-Riffle", "0.1GB", 2817.34],
+            ["Ray-Riffle", "0.1GB", 1141.065],
             ["Ray-Magnet", "2GB", 988.296],
             ["Ray-Magnet", "0.5GB", 984.41],
             ["Ray-Magnet", "0.1GB", 1112.63],
@@ -283,7 +323,6 @@ def plot(
         palette=palette,
         height=3,
         aspect=1 / golden_ratio,
-        log=True,
     )
     fig = g.figure
     ax = fig.gca()
@@ -310,7 +349,5 @@ def plot(
     g.savefig(filename)
 
 
-#for data in [get_data_small(), get_data_ft(), get_obj_fusion_time(), get_obj_fusion_throughput(), get_pipelined_fetch()]:
-#    plot(*data)
-data = get_dask_comparison()
-plot(*data)
+for data in [get_data_small(), get_data_ft(), get_obj_fusion_time()]:
+    plot(*data)
