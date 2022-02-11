@@ -154,15 +154,18 @@ def _get_resources_args(args: Args):
 
 def _init_local_cluster():
     system_config = {
-        "max_io_workers": 1,
-        "object_spilling_threshold": 1,
+        # "max_io_workers": 1,
+        # Ablations:
+        # "object_spilling_threshold": 1,
+        "min_spilling_size": 0,
         # "send_unpin": True,
     }
     if os.path.exists("/mnt/nvme0/tmp"):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
-    num_nodes = os.cpu_count() // 2
+    # num_nodes = os.cpu_count() // 2
+    num_nodes = 1
     cluster = _build_cluster(system_config, num_nodes)
     return cluster
 
