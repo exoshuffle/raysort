@@ -21,7 +21,7 @@
         name: data0
         fs_type: ext4
 
-    - name: Create filesystem on nvme
+    - name: Create filesystem on EBS disk
       become: yes
       filesystem:
         fstype: ext4
@@ -33,7 +33,7 @@
         path: "{{mnt_path}}"
         state: directory
 
-    - name: Mount nvme
+    - name: Mount EBS disk
       become: yes
       mount:
         path: "{{mnt_path}}"
@@ -41,13 +41,13 @@
         fstype: ext4
         state: mounted
 
-    - name: Clear nvme temp directory
+    - name: Clear EBS temp directory
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
         state: "{{item}}"
         mode: "777"
-      with_items:
+      loop:
         - absent
         - directory
 
@@ -76,7 +76,7 @@
         limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
-      with_items:
+      loop:
         - hard
         - soft
     

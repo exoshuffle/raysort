@@ -44,7 +44,7 @@
         path: "{{mnt_path}}/tmp"
         state: "{{item}}"
         mode: "777"
-      with_items:
+      loop:
         - absent
         - directory
 
@@ -73,7 +73,7 @@
         limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
-      with_items:
+      loop:
         - hard
         - soft
 

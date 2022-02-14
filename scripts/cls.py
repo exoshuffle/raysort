@@ -199,13 +199,9 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
 
 
 def get_or_create_ansible_inventory(
-    cluster_name: str, ips: List[str] = [], must_exist: bool = False
+    cluster_name: str, ips: List[str] = []
 ) -> pathlib.Path:
     path = SCRIPT_DIR / ANSIBLE_DIR / f"_{cluster_name}.yml"
-    if must_exist:
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Ansible inventory does not exist {path}")
-        return path
     if len(ips) == 0:
         raise ValueError("No hosts provided to Ansible")
     with open(path, "w") as fout:
@@ -337,9 +333,14 @@ def restart_ray(inventory_path: pathlib.Path) -> None:
     run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
     run("ray stop -f")
     run(get_ray_start_cmd_head())
+    # TODO: add option to clear input or not, install ray or not, etc.
     run_ansible_playbook(inventory_path, "ray", vars={"head_ip": head_ip})
     sleep(5, "wait for Ray nodes to start up")
     run("ray status")
+
+
+def restart_yarn() -> None:
+    run(str(SCRIPT_DIR / "config/ansible/start_spark.sh"))
 
 
 # ------------------------------------------------------------
@@ -347,15 +348,35 @@ def restart_ray(inventory_path: pathlib.Path) -> None:
 # ------------------------------------------------------------
 
 
+def setup_command_options(cli_fn):
+    decorators = [
+        cli.command(),
+        click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
+        click.option(
+            "--ray",
+            default=False,
+            is_flag=True,
+            help="start a Ray cluster",
+        ),
+        click.option(
+            "--yarn",
+            default=False,
+            is_flag=True,
+            help="start a YARN cluster",
+        ),
+    ]
+    ret = cli_fn
+    for dec in decorators:
+        ret = dec(ret)
+    return ret
+
+
 @click.group()
 def cli():
     pass
 
 
-@cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-@click.option("--ray", default=False, is_flag=True, help="start a Ray cluster")
-@click.option("--yarn", default=False, is_flag=True, help="start a YARN cluster")
+@setup_command_options
 def up(cluster_name: str, ray: bool, yarn: bool):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
@@ -366,18 +387,12 @@ def up(cluster_name: str, ray: bool, yarn: bool):
     if ray:
         restart_ray(inventory_path)
     if yarn:
-        pass
+        restart_yarn()
 
 
-@cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-@click.option("--common", default=False, is_flag=True, help="perform general setup")
-@click.option("--ray", default=False, is_flag=True, help="start a Ray cluster")
-@click.option("--yarn", default=False, is_flag=True, help="start a YARN cluster")
-def setup(cluster_name: str, common: bool, ray: bool, yarn: bool):
-    inventory_path = get_or_create_ansible_inventory(cluster_name, must_exist=True)
-    if common:
-        common_setup(cluster_name)
+@setup_command_options
+def setup(cluster_name: str, ray: bool, yarn: bool):
+    inventory_path = common_setup(cluster_name)
     if ray:
         restart_ray(inventory_path)
     if yarn:
