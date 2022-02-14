@@ -39,16 +39,24 @@ Notes:
 
 1. Install Terraform: `scripts/installers/install_terraform.sh`
 2. Run `python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
-3. You can run `python scripts/cls.py setup --ray` or `--yarn` to redo the Ray or YARN setup
-4. Run a test run on the cluster: `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
+3. Run a test run on the cluster: `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
+
+## Cluster Management
+
+`scripts/cls.py` is the centralized place for cluster management code. Before you use it, change `DEFAULT_CLUSTER_NAME` in the script to your liking. All commands need a cluster name argument; the default name will be used if you do not pass one.
+
+- `python scripts/cls.py up` launches a cluster via Terraform and configures it via Ansible. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
+- `python scripts/cls.py setup` skips Terraform and only runs Ansible for software setup. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
+- `python scripts/cls.py down` terminates the cluster via Terraform. Tip: when you're done for the day, run ``python scripts/cls.py down && sudo shutdown -h now` to terminate the cluster and stop your head node.
+- `python scripts/cls.py start/stop/reboot` calls the AWS CLI tool to start/stop/reboot all your machines in the cluster. Useful when you want to stop the cluster but not terminate the machines.
 
 ## Misc
 
 ### Configuring Ray
 
-* All of Ray's system configuration parameters can be found in [`ray_config_defs.h`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h)
-* You only need to specify the config on the head node. All worker nodes will use the same config.
-* There are two ways to specify a configuration value. Suppose you want to set [`min_spilling_size`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h#L409) to 0, then:
+- All of Ray's system configuration parameters can be found in [`ray_config_defs.h`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h)
+- You only need to specify the config on the head node. All worker nodes will use the same config.
+- There are two ways to specify a configuration value. Suppose you want to set [`min_spilling_size`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h#L409) to 0, then:
   1. You can set it in Python, where you do `ray.init(..., _system_config={"min_spilling_size": 0, ...})`
   2. You can set it in the environment variable by running `export RAY_min_spilling_size=0` before running your `ray start` command or your Python program that calls `ray.init()`. This is preferred as our experiment tracker will automatically pick up these environment variables and log them in the W&B trials. Again, it suffices to only set this environment variable on the head node.
 
