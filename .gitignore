@@ -16,4 +16,5 @@ data
 wandb
 
 .terraform*
-ansible/_*.yml
+**/_*.yml
+**/terraform/_*

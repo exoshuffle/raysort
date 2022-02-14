@@ -1,7 +1,7 @@
 ansible
-azure-cli
+# azure-cli
 black
+click
 IPython
-jinja2
 memory_profiler
 pytest

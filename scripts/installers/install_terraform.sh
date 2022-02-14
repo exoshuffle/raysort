@@ -14,3 +14,7 @@ sudo apt-get update && sudo apt-get install terraform
 # Verify the installation
 
 terraform -version
+
+# Create cache directory
+
+mkdir -p ~/.terraform.d/plugin-cache
