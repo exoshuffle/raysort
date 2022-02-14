@@ -138,6 +138,9 @@ def _get_data_dirs():
 def _get_resources_args(args: Args):
     resources = ray.cluster_resources()
     logging.info(f"Cluster resources: {resources}")
+    assert (
+        "worker" in resources
+    ), "Ray cluster is not set up correctly: no worker resources"
     args.num_workers = int(resources["worker"])
     head_node_str = "node:" + ray.util.get_node_ip_address()
     args.worker_ips = [
@@ -163,7 +166,14 @@ def _init_local_cluster():
     return cluster
 
 
+def _print_ray_env_vars():
+    for k, v in os.environ.items():
+        if k.startswith("RAY_"):
+            logging.info(f"{k}={v}")
+
+
 def init(args: Args):
+    _print_ray_env_vars()
     if args.ray_address:
         ray.init(address=args.ray_address)
         cluster = None
