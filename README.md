@@ -45,6 +45,14 @@ Notes:
 
 ## Misc
 
+### Configuring Ray
+
+* All of Ray's system configuration parameters can be found in [`ray_config_defs.h`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h)
+* You only need to specify the config on the head node. All worker nodes will use the same config.
+* There are two ways to specify a configuration value. Suppose you want to set [`min_spilling_size`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h#L409) to 0, then:
+  1. You can set it in Python, where you do `ray.init(..., _system_config={"min_spilling_size": 0, ...})`
+  2. You can set it in the environment variable by running `export RAY_min_spilling_size=0` before running your `ray start` command or your Python program that calls `ray.init()`. This is preferred as our experiment tracker will automatically pick up these environment variables and log them in the W&B trials. Again, it suffices to only set this environment variable on the head node.
+
 ### Troubleshooting
 
 #### Package is missing
@@ -64,19 +72,10 @@ pip install awscli
 aws configure
 ```
 
-#### Missing AWS credentials
-
-Install AWS's CLI and set credentials with:
-
-```
-pip install awscli
-aws configure
-```
-
 #### Cluster missing packages/version mismatch
 
 Verify that the image the nodes are being created from matches expectations.
-This [image](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da5da6db44aaf267) is currently being used.
+This image [`raysort-hadoop-spark-conda`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da5da6db44aaf267) is currently being used.
 
 ### FIO test
 
