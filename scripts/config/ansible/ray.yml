@@ -7,9 +7,11 @@
     pythondir: ~/miniconda3/envs/raysort/bin
     clear_input_dir: false
     reinstall_ray: false
-    object_store_memory: "{{28 * 1024 * 1024 * 1024}}"
+    ray_object_manager_port: 8076
+    ray_merics_export_port: 8090
+    ray_object_store_memory: "{{28 * 1024 * 1024 * 1024}}"
   tasks:
-    - name: Install latest Ray
+    - name: Install nightly Ray
       shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
       when: reinstall_ray
 
@@ -33,10 +35,10 @@
         nohup
         {{pythondir}}/ray start
         --address={{head_ip}}:6379
-        --object-manager-port=8076
-        --metrics-export-port=8090
+        --object-manager-port={{ray_object_manager_port}}
+        --metrics-export-port={{ray_merics_export_port}}
         --resources='{"worker":1}'
-        --object-store-memory={{object_store_memory}}
+        --object-store-memory={{ray_object_store_memory}}
 
     - name: Start Node Exporter
       shell: >

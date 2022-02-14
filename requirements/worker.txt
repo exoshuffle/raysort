@@ -4,7 +4,7 @@ Cython
 numpy
 pandas
 py-spy
-# ray[default]==1.10.0
-ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
+ray[default]==1.10.0
+# ray[default] @ https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
 # ray[default] @ https://ray-ci-artifact-pr-public.s3.amazonaws.com/0fb2e5a74ff577bb90ed6cbbdfe7621866e9a52d/tmp/artifacts/.whl/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
 wandb

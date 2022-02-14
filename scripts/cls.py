@@ -26,6 +26,7 @@ TERRAFORM_TEMPLATE_DIR = "aws-template"
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
 RAY_METRICS_EXPORT_PORT = 8090
+RAY_OBJECT_MANAGER_PORT = 8076
 GRAFANA_SERVER_PORT = 3000
 
 
@@ -89,7 +90,6 @@ def run_ansible_playbook(
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
     if len(vars) > 0:
         cmd += f" --extra-vars '{json.dumps(vars)}'"
-    print(cmd)
     return run(cmd, retries=retries, time_between_retries=time_between_retries)
 
 
@@ -132,7 +132,8 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
     tf_dir = get_tf_dir(cluster_name)
     if os.path.exists(tf_dir):
-        click.echo(f"Found existing configuration for {cluster_name}")
+        if not must_exist:
+            click.echo(f"Found existing configuration for {cluster_name}")
         return tf_dir
     elif must_exist:
         raise FileNotFoundError(f"Cluster configuration does not exist {tf_dir}")
@@ -157,7 +158,7 @@ def terraform_provision(cluster_name: str) -> None:
 def get_tf_output(
     cluster_name: str, key: Union[str, List[str]]
 ) -> Union[List[str], List[List[str]]]:
-    tf_dir = get_or_create_tf_dir(cluster_name)
+    tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     p = run("terraform output -json", cwd=tf_dir, stdout=subprocess.PIPE)
     data = json.loads(p.stdout.decode("ascii"))
     if isinstance(key, list):
@@ -203,6 +204,8 @@ def get_or_create_ansible_inventory(
 ) -> pathlib.Path:
     path = SCRIPT_DIR / ANSIBLE_DIR / f"_{cluster_name}.yml"
     if len(ips) == 0:
+        if os.path.exists(path):
+            return path
         raise ValueError("No hosts provided to Ansible")
     with open(path, "w") as fout:
         fout.write(get_ansible_inventory_content(ips))
@@ -324,18 +327,27 @@ def get_ray_start_cmd_head() -> str:
     resources = json.dumps({"head": 1})
     cmd = "ray start --head"
     cmd += f" --metrics-export-port={RAY_METRICS_EXPORT_PORT}"
+    cmd += f" --object-manager-port={RAY_OBJECT_MANAGER_PORT}"
     cmd += f" --resources='{resources}'"
     return cmd
 
 
-def restart_ray(inventory_path: pathlib.Path) -> None:
+def restart_ray(
+    inventory_path: pathlib.Path, clear_input_dir: bool, reinstall_ray: bool
+) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
     run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
     run("ray stop -f")
     run(get_ray_start_cmd_head())
-    # TODO: add option to clear input or not, install ray or not, etc.
-    run_ansible_playbook(inventory_path, "ray", vars={"head_ip": head_ip})
-    sleep(5, "wait for Ray nodes to start up")
+    vars = {
+        "head_ip": head_ip,
+        "clear_input_dir": clear_input_dir,
+        "reinstall_ray": reinstall_ray,
+        "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
+        "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
+    }
+    run_ansible_playbook(inventory_path, "ray", vars=vars, retries=1)
+    sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
 
 
@@ -365,6 +377,18 @@ def setup_command_options(cli_fn):
             is_flag=True,
             help="start a YARN cluster",
         ),
+        click.option(
+            "--clear_input_dir",
+            default=False,
+            is_flag=True,
+            help="whether to remove input data directory",
+        ),
+        click.option(
+            "--reinstall_ray",
+            default=False,
+            is_flag=True,
+            help="whether to reinstall Ray nightly",
+        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -378,7 +402,9 @@ def cli():
 
 
 @setup_command_options
-def up(cluster_name: str, ray: bool, yarn: bool):
+def up(
+    cluster_name: str, ray: bool, yarn: bool, clear_input_dir: bool, reinstall_ray: bool
+):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
     if cluster_exists and not config_exists:
@@ -386,16 +412,32 @@ def up(cluster_name: str, ray: bool, yarn: bool):
     terraform_provision(cluster_name)
     inventory_path = common_setup(cluster_name)
     if ray:
-        restart_ray(inventory_path)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray)
     if yarn:
         restart_yarn()
 
 
 @setup_command_options
-def setup(cluster_name: str, ray: bool, yarn: bool):
-    inventory_path = common_setup(cluster_name)
+@click.option(
+    "--common",
+    default=True,
+    is_flag=True,
+    help="whether to perform common setup (file sync, etc)",
+)
+def setup(
+    cluster_name: str,
+    ray: bool,
+    yarn: bool,
+    clear_input_dir: bool,
+    reinstall_ray: bool,
+    common: bool,
+):
+    if common:
+        inventory_path = common_setup(cluster_name)
+    else:
+        inventory_path = get_or_create_ansible_inventory(cluster_name)
     if ray:
-        restart_ray(inventory_path)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray)
     if yarn:
         restart_yarn()
 
@@ -426,6 +468,18 @@ def stop(cluster_name: str):
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
 def reboot(cluster_name: str):
     aws_action(cluster_name, "reboot_instances", "Rebooted")
+
+
+@cli.command()
+@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
+@click.argument("worker_id", type=int, default=0)
+def ssh(cluster_name: str, worker_id: int):
+    ips = get_tf_output(cluster_name, "instance_ips")
+    click.echo(f"worker_ips = {ips}")
+    ip = ips[worker_id]
+    run(
+        f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
+    )
 
 
 if __name__ == "__main__":
