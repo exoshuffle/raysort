@@ -8,7 +8,6 @@ import time
 import wandb
 from typing import Dict
 
-import pandas as pd
 import ray
 from ray.util.metrics import Gauge
 
@@ -141,6 +140,9 @@ class ProgressTracker:
             else:
                 raise e
         wandb.config.update(args)
+        wandb.config.update(
+            {k: v for k, v in os.environ.items() if k.startswith("RAY_")}
+        )
 
     def reset_gauges(self):
         for g in self.gauges.values():
@@ -186,6 +188,8 @@ class ProgressTracker:
         self.start_time = time.time()
 
     def report(self):
+        import pandas as pd
+
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)

@@ -1,0 +1,22 @@
+all:
+  hosts:
+    node_172_31_48_189:
+      ansible_host: 172.31.48.189
+    node_172_31_48_228:
+      ansible_host: 172.31.48.228
+    node_172_31_51_182:
+      ansible_host: 172.31.51.182
+    node_172_31_52_177:
+      ansible_host: 172.31.52.177
+    node_172_31_54_14:
+      ansible_host: 172.31.54.14
+    node_172_31_56_10:
+      ansible_host: 172.31.56.10
+    node_172_31_61_172:
+      ansible_host: 172.31.61.172
+    node_172_31_63_142:
+      ansible_host: 172.31.63.142
+  vars:
+    ansible_host_key_checking: false
+    ansible_ssh_private_key_file: /home/ubuntu/.aws/login-us-west-2.pem
+    ansible_user: ubuntu

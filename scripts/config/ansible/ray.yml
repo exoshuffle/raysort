@@ -2,19 +2,34 @@
 - hosts: all
   vars:
     head_ip: 0.0.0.0
-    mnt_path: /mnt/nvme0
+    mnt_path: /mnt/ebs0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
-    - name: Clear nvme temp directory
+    # - name: Clear nvme temp directory
+    #   become: yes
+    #   file:
+    #     path: "{{mnt_path}}/tmp"
+    #     state: "{{item}}"
+    #     mode: "777"
+    #   with_items:
+    #     - absent
+    #     - directory
+
+    - name: Install latest Ray
+      shell: "{{pythondir}}/pip install ray==1.10.0"
+      # shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
+
+    - name: Clear only temp directories
       become: yes
       file:
-        path: "{{mnt_path}}/tmp"
-        state: "{{ item }}"
+        path: "{{item}}"
+        state: absent
         mode: "777"
       with_items:
-        - absent
-        - directory
+        - "{{mnt_path}}/tmp/ray"
+        - "{{mnt_path}}/tmp/temp"
+        - "{{mnt_path}}/tmp/output"
 
     - name: Restart Ray
       shell: >

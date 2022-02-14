@@ -10,10 +10,10 @@ import ray
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--region", default="us-west-2")
-    parser.add_argument("--bucket", default="lsf-berkeley-edu")
+    parser.add_argument("--bucket", default="raysort-dev")
     parser.add_argument("--prefix", default="gcptest")
-    parser.add_argument("--num_objects", default=1024, type=int)
-    parser.add_argument("--object_size", default=1024 * 1024 * 128, type=int)
+    parser.add_argument("--num_objects", default=1000, type=int)
+    parser.add_argument("--object_size", default=128 * 1000 * 1000, type=int)
     return parser.parse_args()
 
 

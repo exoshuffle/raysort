@@ -2,14 +2,11 @@
 - hosts: all
   strategy: free
   vars:
-    data_disk: /dev/nvme1n1
-    ssd_device: /dev/nvme1n1p1
-    mnt_path: /mnt/nvme0
+    data_disk: /dev/disk/azure/scsi1/lun0
+    ssd_device: /dev/disk/azure/scsi1/lun0-part1
+    mnt_path: /mnt/ebs0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
-    hosts_path: /etc/hosts
-    hadoop_config_path: /opt/hadoop/etc/hadoop
-    spark_config_path: /opt/spark/conf
   tasks:
     - name: Create a new ext4 partition
       become: yes
@@ -50,22 +47,6 @@
       with_items:
         - absent
         - directory
-
-    - name: Sync hosts file
-      become: yes
-      copy:
-        src: "{{hosts_path}}"
-        dest: "{{hosts_path}}"
-
-    - name: Copy Hadoop core-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/core-site.xml"
-        dest: "{{hadoop_config_path}}/core-site.xml"
-
-    - name: Copy Hadoop yarn-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/yarn-site.xml"
-        dest: "{{hadoop_config_path}}/yarn-site.xml"
 
     - name: Sync workdir
       synchronize:

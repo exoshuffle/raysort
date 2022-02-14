@@ -10,8 +10,10 @@ pip install -Ur requirements/dev.txt
 pip install -Ur requirements/worker.txt
 pip install -e .
 pushd raysort/sortlib && python setup.py build_ext --inplace && popd
-scripts/install_binaries.sh
+scripts/installers/install_binaries.sh
 ```
+
+Set up [direnv](https://direnv.net/), otherwise manually `source .envrc`.
 
 ## Running Locally
 
@@ -35,13 +37,10 @@ Notes:
 
 ## Starting up a Cluster
 
-1. Install Terraform: `$RAYSORT_ROOT/terraform/setup.sh`
-2. Go to `$RAYSORT_ROOT/terraform/aws`. If you don't have [direnv](https://direnv.net/), manually run the content of `.envrc`.
-3. In `$RAYSORT_ROOT/terraform/aws`, run `terraform apply` to launch a cluster of AWS instances.
-4. Make sure you can ssh into one of the worker nodes using `ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null <worker_ip>`. If you cannot, it's likely because your current VM is not in the same security group as the worker nodes (which are in the `default` security group). The easiest solution is to find your instance on the AWS EC2 UI, right click "Security -> Change Security Groups", and add your instance to the `default` security group. TODO: this might be possible to automate in Terraform.
-5. Run Ansible to set up the worker nodes: `$RAYSORT_ROOT/ansible/setup.sh`
-6. Start Ray: `$RAYSORT_ROOT/ansible/start_ray.sh`
-7. Run a test run on the cluster: `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
+1. Install Terraform: `scripts/installers/install_terraform.sh`
+2. Run `python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
+3. You can run `python scripts/cls.py setup --ray` or `--yarn` to redo the Ray or YARN setup
+4. Run a test run on the cluster: `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
 
 ## Misc
 
@@ -76,6 +75,10 @@ aws configure
 
 Verify that the image the nodes are being created from matches expectations.
 This image [`raysort-hadoop-spark-conda`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da5da6db44aaf267) is currently being used.
+
+#### Cannot connect to worker node
+
+First, try manually connect: `ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null <worker_ip>`. If this doesn't work, it's likely because your current VM is not in the same security group as the worker nodes (which are in the `default` security group). The easiest solution is to find your instance on the AWS EC2 UI, right click "Security -> Change Security Groups", and add your instance to the `default` security group. TODO: this might be possible to automate in Terraform.
 
 ### FIO test
 
