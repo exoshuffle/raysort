@@ -22,7 +22,7 @@ resource "aws_instance" "cluster" {
   ebs_block_device {
     device_name = "sdb"
     iops        = 3000
-    throughput  = 625
+    throughput  = 300
     volume_size = 1000
     volume_type = "gp3"
   }

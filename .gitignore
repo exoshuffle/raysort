@@ -17,3 +17,4 @@ wandb
 
 .terraform*
 **/_*.yml
+**/terraform/_*

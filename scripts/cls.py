@@ -340,6 +340,7 @@ def restart_ray(inventory_path: pathlib.Path) -> None:
 
 
 def restart_yarn() -> None:
+    # TODO: convert this to Python
     run(str(SCRIPT_DIR / "config/ansible/start_spark.sh"))
 
 
