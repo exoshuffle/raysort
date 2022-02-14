@@ -155,10 +155,11 @@ def _get_resources_args(args: Args):
 def _init_local_cluster():
     system_config = {
         "max_io_workers": 1,
-        "object_spilling_threshold": 1,
+        "object_spilling_threshold": 0,
         # "send_unpin": True,
     }
-    if os.path.exists("/mnt/nvme0/tmp"):
+    spill_dir = "/mnt/hdd-nvme1/tmp" # "/mnt/nvme0/tmp"
+    if os.path.exists(spill_dir):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
         )
