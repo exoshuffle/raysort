@@ -11,11 +11,22 @@ prepare() {
 
 install_gensort() {
     DIR=$BIN_DIR/gensort
-    mkdir -p $DIR || exit $?
+    mkdir -p $DIR
     pushd $DIR
     TARFILE=gensort-linux-1.5.tar.gz
-    wget http://www.ordinal.com/try.cgi/$TARFILE || exit $?
-    tar xvf $TARFILE || exit $?
+    wget http://www.ordinal.com/try.cgi/$TARFILE
+    tar xf $TARFILE
+    popd
+}
+
+install_grafana() {
+    DIR=$BIN_DIR/grafana
+    APP=grafana-8.3.6
+    mkdir -p $DIR
+    pushd $DIR
+    TARFILE=$APP.linux-amd64.tar.gz
+    wget https://dl.grafana.com/oss/release/$TARFILE
+    tar xf $TARFILE --strip-components=1
     popd
 }
 
@@ -25,13 +36,13 @@ _install_github_binary() {
     VER=$3
     SEP=$4
     DIR=$BIN_DIR
-    mkdir -p $DIR || exit $?
+    mkdir -p $DIR
     pushd $DIR
     TARNAME=${BIN}-${VER}${SEP}linux-amd64
     TARFILE=$TARNAME.tar.gz
-    wget https://github.com/$PROJ/$BIN/releases/download/v$VER/$TARFILE || exit $?
-    tar xvf $TARFILE || exit $?
-    mv $TARNAME $BIN || exit $?
+    wget https://github.com/$PROJ/$BIN/releases/download/v$VER/$TARFILE
+    tar xf $TARFILE
+    mv $TARNAME $BIN
     popd
 }
 
@@ -52,7 +63,7 @@ cleanup() {
 }
 
 show_files() {
-    find $BIN_DIR
+    find $BIN_DIR -type d
 }
 
 show_help() {
@@ -65,7 +76,7 @@ show_help() {
 
 args="$@"
 if [ -z "$args" ]; then
-    args="gensort prometheus node_exporter"
+    args="gensort prometheus node_exporter grafana"
 fi
 
 prepare

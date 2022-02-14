@@ -20,9 +20,9 @@ WORK_DIR = "/tmp/raysort"
 INPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "input-manifest.csv")
 OUTPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "output-manifest.csv")
 DATA_DIR_FMT = {
-    "input": "{mnt}/tmp/input/",
-    "output": "{mnt}/tmp/output/",
-    "temp": "{mnt}/tmp/temp/",
+    "input": "{dir}/tmp/input/",
+    "output": "{dir}/tmp/output/",
+    "temp": "{dir}/tmp/temp/",
 }
 FILENAME_FMT = {
     "input": "input-{part_id:010x}",

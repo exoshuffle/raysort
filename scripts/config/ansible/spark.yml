@@ -2,7 +2,7 @@
 ---
 - hosts: all
   vars:
-    hadoop_dir: /mnt/nvme0/tmp/hadoop/
+    hadoop_dir: /mnt/ebs0/tmp/hadoop/
   tasks:
     - name: Remove any existing data directory
       file:

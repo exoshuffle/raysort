@@ -638,7 +638,7 @@ def _get_app_args(args: Args):
 def init(args: Args) -> ray.actor.ActorHandle:
     logging_utils.init()
     ray_utils.init(args)
-    os.makedirs(constants.WORK_DIR, exist_ok=True)
+    sort_utils.init(args)
     _get_app_args(args)
     return tracing_utils.create_progress_tracker(args)
 

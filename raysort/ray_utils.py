@@ -126,10 +126,10 @@ def _build_cluster(
     return cluster
 
 
-def _get_mount_points():
+def _get_data_dirs():
     mnt = "/mnt"
     if os.path.exists(mnt):
-        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("nvme")]
+        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("ebs")]
         if len(ret) > 0:
             return ret
     return [tempfile.gettempdir()]
@@ -147,20 +147,16 @@ def _get_resources_args(args: Args):
     ]
     args.num_nodes = args.num_workers + 1
     assert args.num_workers == len(args.worker_ips), args
-    args.mount_points = _get_mount_points()
+    args.data_dirs = _get_data_dirs()
     args.node_workmem = resources["memory"] / args.num_nodes
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
 
 
 def _init_local_cluster():
-    system_config = {
-        "max_io_workers": 1,
-        "object_spilling_threshold": 1,
-        # "send_unpin": True,
-    }
-    if os.path.exists("/mnt/nvme0/tmp"):
+    system_config = {}
+    if os.path.exists("/mnt/ebs0/tmp"):
         system_config.update(
-            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/nvme0/tmp/ray"]}}'
+            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
         )
     num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
