@@ -99,7 +99,7 @@ def run_ansible_playbook(
 
 
 def get_tf_dir(cluster_name: str) -> pathlib.Path:
-    return SCRIPT_DIR / TERRAFORM_DIR / cluster_name
+    return SCRIPT_DIR / TERRAFORM_DIR / ("_" + cluster_name)
 
 
 def get_instances(filters: Dict[str, str]) -> List[Dict]:
@@ -130,7 +130,7 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
 
 
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
-    tf_dir = SCRIPT_DIR / TERRAFORM_DIR / cluster_name
+    tf_dir = get_tf_dir(cluster_name)
     if os.path.exists(tf_dir):
         click.echo(f"Found existing configuration for {cluster_name}")
         return tf_dir
