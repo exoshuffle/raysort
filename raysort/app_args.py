@@ -4,10 +4,6 @@ import numpy as np
 
 from raysort.typing import Args, ByteCount
 
-# ------------------------------------------------------------
-#     Parse Arguments
-# ------------------------------------------------------------
-
 STEPS = ["generate_input", "sort", "validate_output"]
 
 
