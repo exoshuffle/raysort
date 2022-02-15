@@ -6,6 +6,7 @@ import os
 import re
 import time
 from typing import Dict
+import yaml
 
 import ray
 from ray.util import metrics
@@ -143,6 +144,9 @@ class ProgressTracker:
         wandb.config.update(
             {k: v for k, v in os.environ.items() if k.startswith("RAY_")}
         )
+        with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
+            wandb.config.update(yaml.safe_load(fin))
+        logging.info(wandb.config)
 
     def reset_gauges(self):
         for g in self.gauges.values():

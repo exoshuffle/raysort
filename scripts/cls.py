@@ -7,7 +7,7 @@ import signal
 import shutil
 import subprocess
 import time
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 import yaml
 
 import boto3
@@ -22,6 +22,7 @@ SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 ANSIBLE_DIR = "config/ansible"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
+RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
@@ -315,21 +316,32 @@ def common_setup(cluster_name: str) -> pathlib.Path:
     return inventory_path
 
 
-def get_ray_start_cmd_head() -> str:
+def json_dump_no_space(data) -> str:
+    return json.dumps(data, separators=(",", ":"))
+
+
+def get_ray_start_cmd() -> Tuple[str, Dict]:
     system_config = {
-        "object_spilling_config": {
-            "type": "filesystem",
-            "params": {"directory_path": [f"{EBS_MNT}/ray"]},
-        },
+        "object_spilling_config": json_dump_no_space(
+            {
+                "type": "filesystem",
+                "params": {"directory_path": [f"{EBS_MNT}/ray"]},
+            },
+        ),
     }
-    for key, val in system_config.items():
-        os.environ["RAY_" + key] = json.dumps(val)
-    resources = json.dumps({"head": 1})
+    system_config_str = json_dump_no_space(system_config)
+    resources = json_dump_no_space({"head": 1})
     cmd = "ray start --head"
     cmd += f" --metrics-export-port={RAY_METRICS_EXPORT_PORT}"
     cmd += f" --object-manager-port={RAY_OBJECT_MANAGER_PORT}"
+    cmd += f" --system-config='{system_config_str}'"
     cmd += f" --resources='{resources}'"
-    return cmd
+    return cmd, system_config
+
+
+def write_ray_system_config(config: Dict, path: str) -> None:
+    with open(path, "w") as fout:
+        yaml.dump(config, fout)
 
 
 def restart_ray(
@@ -338,7 +350,8 @@ def restart_ray(
     head_ip = run_output("ec2metadata --local-ipv4")
     run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
     run("ray stop -f")
-    run(get_ray_start_cmd_head())
+    ray_cmd, ray_system_config = get_ray_start_cmd()
+    run(ray_cmd)
     vars = {
         "head_ip": head_ip,
         "clear_input_dir": clear_input_dir,
@@ -349,11 +362,20 @@ def restart_ray(
     run_ansible_playbook(inventory_path, "ray", vars=vars, retries=1)
     sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
+    write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
 
 
 def restart_yarn() -> None:
     # TODO: convert this to Python
     run(str(SCRIPT_DIR / "config/ansible/start_spark.sh"))
+
+
+def print_after_setup(cluster_name: str) -> None:
+    success_msg = f"Cluster {cluster_name} is up and running."
+    click.secho("\n" + "-" * len(success_msg), fg="green")
+    click.secho(success_msg, fg="green")
+    click.echo(f"  Terraform config directory: {get_tf_dir(cluster_name)}")
+    click.echo(f"  Ray system config written to: {RAY_SYSTEM_CONFIG_FILE_PATH}")
 
 
 # ------------------------------------------------------------
@@ -415,12 +437,13 @@ def up(
         restart_ray(inventory_path, clear_input_dir, reinstall_ray)
     if yarn:
         restart_yarn()
+    print_after_setup(cluster_name)
 
 
 @setup_command_options
 @click.option(
     "--common",
-    default=True,
+    default=False,
     is_flag=True,
     help="whether to perform common setup (file sync, etc)",
 )
@@ -440,6 +463,7 @@ def setup(
         restart_ray(inventory_path, clear_input_dir, reinstall_ray)
     if yarn:
         restart_yarn()
+    print_after_setup(cluster_name)
 
 
 @cli.command()

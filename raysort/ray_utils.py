@@ -163,14 +163,7 @@ def _init_local_cluster():
     return cluster
 
 
-def _print_ray_env_vars():
-    for k, v in os.environ.items():
-        if k.startswith("RAY_"):
-            logging.info(f"{k}={v}")
-
-
 def init(args: Args):
-    _print_ray_env_vars()
     if args.ray_address:
         ray.init(address=args.ray_address)
         cluster = None
