@@ -132,7 +132,6 @@ class ProgressTracker:
         self.initial_spilling_stats = _get_spilling_stats()
         self.start_time = None
         logging_utils.init()
-        logging.info(args)
         try:
             wandb.init(entity="raysort", project="raysort")
         except wandb.errors.UsageError as e:
@@ -144,8 +143,9 @@ class ProgressTracker:
         wandb.config.update(
             {k: v for k, v in os.environ.items() if k.startswith("RAY_")}
         )
-        with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
-            wandb.config.update(yaml.safe_load(fin))
+        if os.path.exists(constants.RAY_SYSTEM_CONFIG_FILE):
+            with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
+                wandb.config.update(yaml.safe_load(fin))
         logging.info(wandb.config)
 
     def reset_gauges(self):
