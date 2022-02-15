@@ -60,6 +60,12 @@ Notes:
   1. You can set it in Python, where you do `ray.init(..., _system_config={"min_spilling_size": 0, ...})`
   2. You can set it in the environment variable by running `export RAY_min_spilling_size=0` before running your `ray start` command or your Python program that calls `ray.init()`. This is preferred as our experiment tracker will automatically pick up these environment variables and log them in the W&B trials. Again, it suffices to only set this environment variable on the head node.
 
+Useful Ray environment variables:
+```bash
+# Enable debug logging for all raylets and workers
+export RAY_BACKEND_LOG_LEVEL=debug
+```
+
 ### Troubleshooting
 
 #### Package is missing
