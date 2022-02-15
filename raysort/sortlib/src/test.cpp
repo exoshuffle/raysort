@@ -35,9 +35,9 @@ std::vector<ConstArray<Record>> MakeConstRecordArrays(
 
 void test_file_merger() {
   FileMerger merger(
-      {"/mnt/nvme0/tmp/temp/temp-00000000", "/mnt/nvme0/tmp/temp/temp-00000001",
-       "/mnt/nvme0/tmp/temp/temp-00000002", "/mnt/nvme0/tmp/temp/temp-00000003"},
-      "/mnt/nvme0/tmp/temp/test-output", 100 * 1024 * 1024, 1 * 1024 * 1024);
+      {"/mnt/ebs0/tmp/temp/temp-00000000", "/mnt/ebs0/tmp/temp/temp-00000001",
+       "/mnt/ebs0/tmp/temp/temp-00000002", "/mnt/ebs0/tmp/temp/temp-00000003"},
+      "/mnt/ebs0/tmp/temp/test-output", 100 * 1024 * 1024, 1 * 1024 * 1024);
   merger.Run();
 }
 

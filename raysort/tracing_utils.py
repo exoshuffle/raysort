@@ -5,12 +5,12 @@ import logging
 import os
 import re
 import time
-import wandb
 from typing import Dict
+import yaml
 
-import pandas as pd
 import ray
-from ray.util.metrics import Gauge
+from ray.util import metrics
+import wandb
 
 from raysort import constants
 from raysort import logging_utils
@@ -125,7 +125,7 @@ class ProgressTracker:
             "sort_completed",
         ]
         self.counts = {m: 0 for m in gauges}
-        self.gauges = {m: Gauge(m) for m in gauges}
+        self.gauges = {m: metrics.Gauge(m) for m in gauges}
         self.series = collections.defaultdict(list)
         self.spans = []
         self.reset_gauges()
@@ -141,6 +141,12 @@ class ProgressTracker:
             else:
                 raise e
         wandb.config.update(args)
+        wandb.config.update(
+            {k: v for k, v in os.environ.items() if k.startswith("RAY_")}
+        )
+        with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
+            wandb.config.update(yaml.safe_load(fin))
+        logging.info(wandb.config)
 
     def reset_gauges(self):
         for g in self.gauges.values():
@@ -149,7 +155,7 @@ class ProgressTracker:
     def inc(self, metric_name, value=1, echo=False, log_to_wandb=False):
         gauge = self.gauges.get(metric_name)
         if gauge is None:
-            logging.warning(f"No such Gauge: {metric_name}")
+            logging.warning(f"No such gauge: {metric_name}")
             return
         self.counts[metric_name] += value
         gauge.set(self.counts[metric_name])
@@ -186,6 +192,8 @@ class ProgressTracker:
         self.start_time = time.time()
 
     def report(self):
+        import pandas as pd
+
         ret = []
         for key, values in self.series.items():
             ss = pd.Series(values)

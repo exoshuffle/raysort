@@ -1,4 +1,3 @@
-import argparse
 import csv
 import os
 import random
@@ -12,10 +11,7 @@ import ray
 
 from raysort import constants
 from raysort import logging_utils
-from raysort.types import PartId, PartInfo, Path, RecordCount
-
-
-Args = argparse.Namespace
+from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
 def load_manifest(args: Args, path: Path) -> List[PartInfo]:
@@ -27,6 +23,24 @@ def load_manifest(args: Args, path: Path) -> List[PartInfo]:
     with open(path) as fin:
         reader = csv.reader(fin)
         return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
+
+
+@ray.remote
+def make_data_dirs(args: Args):
+    for dir in args.data_dirs:
+        for dir_fmt in constants.DATA_DIR_FMT.values():
+            dirpath = dir_fmt.format(dir=dir)
+            os.makedirs(dirpath, exist_ok=True)
+
+
+def init(args: Args):
+    os.makedirs(constants.WORK_DIR, exist_ok=True)
+    tasks = [
+        make_data_dirs.options(**_node_res(node)).remote(args)
+        for node in args.worker_ips
+    ]
+    ray.get(tasks)
+    logging.info("Created data directories on all worker nodes")
 
 
 # ------------------------------------------------------------
@@ -57,16 +71,15 @@ def _validate_input_manifest(args: Args) -> bool:
 
 def part_info(args: Args, part_id: PartId, *, kind="input") -> PartInfo:
     node = ray.util.get_node_ip_address()
-    mnt = random.choice(args.mount_points)
-    filepath = _get_part_path(mnt, part_id, kind)
+    dir = random.choice(args.data_dirs)
+    filepath = _get_part_path(dir, part_id, kind)
     return PartInfo(part_id, node, filepath)
 
 
-def _get_part_path(mnt: Path, part_id: PartId, kind="input") -> Path:
+def _get_part_path(dir: Path, part_id: PartId, kind="input") -> Path:
     assert kind in {"input", "output", "temp"}
     dir_fmt = constants.DATA_DIR_FMT[kind]
-    dirpath = dir_fmt.format(mnt=mnt)
-    os.makedirs(dirpath, exist_ok=True)
+    dirpath = dir_fmt.format(dir=dir)
     filename_fmt = constants.FILENAME_FMT[kind]
     filename = filename_fmt.format(part_id=part_id)
     filepath = os.path.join(dirpath, filename)

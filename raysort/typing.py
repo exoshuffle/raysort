@@ -1,5 +1,7 @@
+import argparse
 from typing import NamedTuple, Tuple
 
+Args = argparse.Namespace
 ByteCount = int
 NodeAddress = str
 PartId = int

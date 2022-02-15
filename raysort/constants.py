@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from raysort.types import ByteCount, PartId, RecordCount
+from raysort.typing import ByteCount, PartId, RecordCount
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
@@ -17,12 +17,13 @@ VALSORT_PATH = os.path.join(__DIR__, "bin/gensort/64/valsort")
 
 # Filenames
 WORK_DIR = "/tmp/raysort"
+RAY_SYSTEM_CONFIG_FILE = "_ray_config.yml"
 INPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "input-manifest.csv")
 OUTPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "output-manifest.csv")
 DATA_DIR_FMT = {
-    "input": "{mnt}/tmp/input/",
-    "output": "{mnt}/tmp/output/",
-    "temp": "{mnt}/tmp/temp/",
+    "input": "{dir}/tmp/input/",
+    "output": "{dir}/tmp/output/",
+    "temp": "{dir}/tmp/temp/",
 }
 FILENAME_FMT = {
     "input": "input-{part_id:010x}",

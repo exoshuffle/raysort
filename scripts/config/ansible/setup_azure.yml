@@ -4,7 +4,7 @@
   vars:
     data_disk: /dev/disk/azure/scsi1/lun0
     ssd_device: /dev/disk/azure/scsi1/lun0-part1
-    mnt_path: /mnt/nvme0
+    mnt_path: /mnt/ebs0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
@@ -44,7 +44,7 @@
         path: "{{mnt_path}}/tmp"
         state: "{{item}}"
         mode: "777"
-      with_items:
+      loop:
         - absent
         - directory
 
@@ -73,7 +73,7 @@
         limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
-      with_items:
+      loop:
         - hard
         - soft
 

@@ -4,7 +4,7 @@
   vars:
     data_disk: /dev/nvme1n1
     ssd_device: /dev/nvme1n1p1
-    mnt_path: /mnt/nvme0
+    mnt_path: /mnt/ebs0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
@@ -21,7 +21,7 @@
         name: data0
         fs_type: ext4
 
-    - name: Create filesystem on nvme
+    - name: Create filesystem on EBS disk
       become: yes
       filesystem:
         fstype: ext4
@@ -33,7 +33,7 @@
         path: "{{mnt_path}}"
         state: directory
 
-    - name: Mount nvme
+    - name: Mount EBS disk
       become: yes
       mount:
         path: "{{mnt_path}}"
@@ -41,31 +41,15 @@
         fstype: ext4
         state: mounted
 
-    - name: Clear nvme temp directory
+    - name: Clear EBS temp directory
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
         state: "{{item}}"
         mode: "777"
-      with_items:
+      loop:
         - absent
         - directory
-
-    - name: Sync hosts file
-      become: yes
-      copy:
-        src: "{{hosts_path}}"
-        dest: "{{hosts_path}}"
-
-    - name: Copy Hadoop core-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/core-site.xml"
-        dest: "{{hadoop_config_path}}/core-site.xml"
-
-    - name: Copy Hadoop yarn-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/yarn-site.xml"
-        dest: "{{hadoop_config_path}}/yarn-site.xml"
 
     - name: Sync workdir
       synchronize:
@@ -92,9 +76,32 @@
         limit_type: "{{item}}"
         limit_item: nofile
         value: 65535
-      with_items:
+      loop:
         - hard
         - soft
+    
+    - name: Check Hadoop files exist
+      local_action: stat path={{hadoop_config_path}}
+      register: hadoop
+
+    - name: Sync hosts file
+      become: yes
+      copy:
+        src: "{{hosts_path}}"
+        dest: "{{hosts_path}}"
+      when: hadoop
+
+    - name: Copy Hadoop core-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/core-site.xml"
+        dest: "{{hadoop_config_path}}/core-site.xml"
+      when: hadoop
+
+    - name: Copy Hadoop yarn-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/yarn-site.xml"
+        dest: "{{hadoop_config_path}}/yarn-site.xml"
+      when: hadoop
 
     - name: Start Node Exporter
       shell: >
