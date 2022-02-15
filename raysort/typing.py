@@ -1,7 +1,5 @@
-from typing import NamedTuple, Tuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import argparse
+import argparse
+from typing import NamedTuple, Tuple
 
 Args = argparse.Namespace
 ByteCount = int
