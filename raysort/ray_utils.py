@@ -8,9 +8,7 @@ from typing import Dict, List, Tuple
 
 import ray
 from ray import cluster_utils
-
-
-Args = argparse.Namespace
+from raysort.typing import Args
 
 local_cluster = None
 

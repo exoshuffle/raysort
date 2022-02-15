@@ -1,5 +1,9 @@
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple, TYPE_CHECKING
 
+if TYPE_CHECKING:
+    import argparse
+
+Args = argparse.Namespace
 ByteCount = int
 NodeAddress = str
 PartId = int

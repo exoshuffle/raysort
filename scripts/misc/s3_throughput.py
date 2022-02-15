@@ -13,7 +13,7 @@ import ray
 from raysort import logging_utils
 from raysort import monitoring_utils
 from raysort import ray_utils
-from raysort.types import *
+from raysort.typing import *
 
 BYTES_PER_MB = 1024 * 1024
 BYTES_PER_GB = BYTES_PER_MB * 1024
