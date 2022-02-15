@@ -16,7 +16,7 @@ from raysort import constants
 from raysort import file_utils
 from raysort import logging_utils
 from raysort import s3_utils
-from raysort.types import *
+from raysort.typing import *
 
 BYTES_PER_MB = 1024 * 1024
 GB_RECORDS = 1000 * 1000 * 10  # 1 GiB worth of records.

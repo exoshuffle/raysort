@@ -1,4 +1,3 @@
-import argparse
 import csv
 import os
 import random
@@ -12,10 +11,7 @@ import ray
 
 from raysort import constants
 from raysort import logging_utils
-from raysort.types import PartId, PartInfo, Path, RecordCount
-
-
-Args = argparse.Namespace
+from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
 def load_manifest(args: Args, path: Path) -> List[PartInfo]:
