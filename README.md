@@ -73,15 +73,9 @@ export RAY_BACKEND_LOG_LEVEL=debug
 - Attach it to your machine and format it as follows:
   - Create a partition by running `sudo parted /dev/your_ebs_device`
   - If a partition table does not exist, create it with `mklabel gpt`.
-  - Run `mkpart ext4 0% 100%`. If a warning about it not being properly aligned appears, run `mkpart` and provide the following:
-  ```
-  Partition name?  []? part0
-  File system type?  [ext2]? ext4
-  Start? 0%
-  End? 100%
-  ```
+  - Run `mkpart part0 ext4 0% 100%`. Make sure no warnings appear.
   - Exit `parted` and run `sudo mkfs.ext4 path_to_volume`.
-  - Run `sudo mount -o sync path_to_volume /mnt/ebs0`.
+  - Run `sudo mount -o sync path_to_volume /mnt/ebs0`. Only use `-o sync` if you are running microbenchmarks.
 - Verify that the mounting worked with `lsblk`.
   - If the desired volume is not mounted, edit `/etc/fstab` to remove any conflicting lines. Then, restart your machine and remount.
 
