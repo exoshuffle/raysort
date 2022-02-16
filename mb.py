@@ -1,11 +1,12 @@
 import argparse
+import subprocess
+import os
 
 import numpy as np
 import ray
 import tqdm
 
 from raysort import logging_utils
-from raysort import ray_utils
 from raysort import tracing_utils
 
 
@@ -23,8 +24,8 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--num_objects",
-        # default=16000, # 1MB
-        default=16000 * 10,  # 100KB
+        default=16000, # 1MB
+        # default=16000 * 10,  # 100KB
         # default=16000 * 20,  # 50KB
         type=int,
     )
@@ -50,11 +51,11 @@ def consume_all(args, refs):
     task = None
     for t in tqdm.tqdm(range(args.num_tasks)):
         if task is not None:
-            ray.get(task)
+            print(ray.get(task))
         begin = t * args.num_objects_per_task
         end = (t + 1) * args.num_objects_per_task
         task = consume.remote(*refs[begin:end])
-    ray.get(task)
+    print(ray.get(task))
     # Wait for tasks.
     # with tqdm.tqdm(total=len(tasks)) as pbar:
     #     not_ready = tasks
@@ -77,17 +78,35 @@ def produce_all(args):
 def work(args):
     # Produce.
     refs = produce_all(args)
+
+    # Nuke the cache to test reading from disk.
+    subprocess.run("sudo bash -c 'echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+    
     # Consume.
     consume_all(args, refs)
 
 
 def main(args):
     logging_utils.init()
-    ray_utils.init(args)
-    tracker = tracing_utils.create_progress_tracker(args)
+
+    system_config = {}
+    if os.path.exists("/mnt/ebs0/tmp"):
+        system_config.update(
+            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
+        )   
+    ray.init(
+        num_cpus=2,
+        resources={"head": 1, "worker": 1},
+        object_store_memory=1_000_000_000,
+        _system_config=system_config
+    )
+
+    # Produce/consume and log statistics.
+    tracker = tracing_utils.create_progress_tracker(args)  
     work(args)
     ray.get(tracker.performance_report.remote())
 
 
 if __name__ == "__main__":
     main(get_args())
+

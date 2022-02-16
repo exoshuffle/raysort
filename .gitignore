@@ -18,3 +18,7 @@ wandb
 .terraform*
 **/_*.yml
 **/terraform/_*
+
+*.ipynb
+.ipynb_checkpoints/*
+fio_*
