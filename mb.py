@@ -51,11 +51,11 @@ def consume_all(args, refs):
     task = None
     for t in tqdm.tqdm(range(args.num_tasks)):
         if task is not None:
-            print(ray.get(task))
+            ray.get(task)
         begin = t * args.num_objects_per_task
         end = (t + 1) * args.num_objects_per_task
         task = consume.remote(*refs[begin:end])
-    print(ray.get(task))
+
     # Wait for tasks.
     # with tqdm.tqdm(total=len(tasks)) as pbar:
     #     not_ready = tasks
