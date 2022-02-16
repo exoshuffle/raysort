@@ -61,10 +61,29 @@ Notes:
   2. You can set it in the environment variable by running `export RAY_min_spilling_size=0` before running your `ray start` command or your Python program that calls `ray.init()`. This is preferred as our experiment tracker will automatically pick up these environment variables and log them in the W&B trials. Again, it suffices to only set this environment variable on the head node.
 
 Useful Ray environment variables:
+
 ```bash
 # Enable debug logging for all raylets and workers
 export RAY_BACKEND_LOG_LEVEL=debug
 ```
+
+### Mounting a new volume
+
+- Create a new volume in the same region as your machine on the [AWS Dashboard](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#Volumes:).
+- Attach it to your machine and format it as follows:
+  - Create a partition by running `sudo parted /dev/your_ebs_device`
+  - If a partition table does not exist, create it with `mklabel gpt`.
+  - Run `mkpart ext4 0% 100%`. If a warning about it not being properly aligned appears, run `mkpart` and provide the following:
+  ```
+  Partition name?  []? part0
+  File system type?  [ext2]? ext4
+  Start? 0%
+  End? 100%
+  ```
+  - Exit `parted` and run `sudo mkfs.ext4 path_to_volume`.
+  - Run `sudo mount -o sync path_to_volume /mnt/ebs0`.
+- Verify that the mounting worked with `lsblk`.
+  - If the desired volume is not mounted, edit `/etc/fstab` to remove any conflicting lines. Then, restart your machine and remount.
 
 ### Troubleshooting
 
