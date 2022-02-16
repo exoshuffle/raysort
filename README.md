@@ -71,7 +71,7 @@ export RAY_BACKEND_LOG_LEVEL=debug
 
 - Create a new volume in the same region as your machine on the [AWS Dashboard](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#Volumes:).
 - Attach it to your machine and format it as follows:
-  - Create a partition by running `sudo parted path_to_volume`
+  - Create a partition by running `sudo parted /dev/your_ebs_device`
   - If a partition table does not exist, create it with `mklabel gpt`.
   - Run `mkpart ext4 0% 100%`. If a warning about it not being properly aligned appears, run `mkpart` and provide the following:
   ```
@@ -81,7 +81,7 @@ export RAY_BACKEND_LOG_LEVEL=debug
   End? 100%
   ```
   - Exit `parted` and run `sudo mkfs.ext4 path_to_volume`.
-  - Run `sudo mount path_to_volume /mnt/ebs0`
+  - Run `sudo mount -o sync path_to_volume /mnt/ebs0`.
 - Verify that the mounting worked with `lsblk`.
   - If the desired volume is not mounted, edit `/etc/fstab` to remove any conflicting lines. Then, restart your machine and remount.
 
