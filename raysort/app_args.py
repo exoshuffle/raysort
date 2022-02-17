@@ -124,7 +124,7 @@ def get_args(*args, **kwargs):
         help="if set, will use a locally emulated Ray cluster",
     )
     parser.add_argument(
-        "--ray_spill_path",
+        "--spill_path",
         default="/mnt/ebs0/tmp",
         type=str,
         help="[only used in local cluster setup] can be a local path or S3",

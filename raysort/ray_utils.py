@@ -155,18 +155,18 @@ def _get_resources_args(args: Args):
 
 def _init_local_cluster(args: Args):
     system_config = {}
-    if "://" in args.ray_spill_path:
+    if "://" in args.spill_path:
         system_config.update(
             object_spilling_config=json.dumps(
-                {"type": "smart_open", "params": {"uri": args.ray_spill_path}},
+                {"type": "smart_open", "params": {"uri": args.spill_path}},
             )
         )
-    elif args.ray_spill_path:
+    elif args.spill_path:
         system_config.update(
             object_spilling_config=json.dumps(
                 {
                     "type": "filesystem",
-                    "params": {"directory_path": args.ray_spill_path},
+                    "params": {"directory_path": args.spill_path},
                 },
             )
         )
