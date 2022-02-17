@@ -14,6 +14,7 @@ import wandb
 
 from raysort import constants
 from raysort import logging_utils
+from raysort.typing import Args
 
 Span = collections.namedtuple(
     "Span",
@@ -23,9 +24,9 @@ Span = collections.namedtuple(
 
 def timeit(
     event: str,
-    report_in_progress=True,
-    report_completed=True,
-    log_to_wandb=False,
+    report_in_progress: bool = True,
+    report_completed: bool = True,
+    log_to_wandb: bool = False,
 ):
     def decorator(f):
         @functools.wraps(f)
@@ -73,8 +74,10 @@ def get_progress_tracker():
     return ray.get_actor(constants.PROGRESS_TRACKER_ACTOR)
 
 
-def create_progress_tracker(args):
-    return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(args)
+def create_progress_tracker(*args, **kwargs):
+    return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(
+        *args, **kwargs
+    )
 
 
 def _make_trace_event(span: Span):
@@ -110,22 +113,20 @@ def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
     }
 
 
+class _DefaultDictWithKey(collections.defaultdict):
+    def __missing__(self, key):
+        if self.default_factory:
+            self[key] = self.default_factory(key)
+            return self[key]
+        return super().__missing__(key)
+
+
 @ray.remote(resources={"head": 1e-3})
 class ProgressTracker:
-    def __init__(self, args):
+    def __init__(self, args: Args, project: str = "raysort"):
         self.run_args = args
-        gauges = [
-            "map_in_progress",
-            "merge_in_progress",
-            "reduce_in_progress",
-            "sort_in_progress",
-            "map_completed",
-            "merge_completed",
-            "reduce_completed",
-            "sort_completed",
-        ]
-        self.counts = {m: 0 for m in gauges}
-        self.gauges = {m: metrics.Gauge(m) for m in gauges}
+        self.counts = collections.defaultdict(int)
+        self.gauges = _DefaultDictWithKey(metrics.Gauge)
         self.series = collections.defaultdict(list)
         self.spans = []
         self.reset_gauges()
@@ -133,7 +134,7 @@ class ProgressTracker:
         self.start_time = None
         logging_utils.init()
         try:
-            wandb.init(entity="raysort", project="raysort")
+            wandb.init(entity="raysort", project=project)
         except wandb.errors.UsageError as e:
             if "call wandb.login" in e.message:
                 wandb.init(mode="offline")
@@ -152,36 +153,32 @@ class ProgressTracker:
         for g in self.gauges.values():
             g.set(0)
 
-    def inc(self, metric_name, value=1, echo=False, log_to_wandb=False):
-        gauge = self.gauges.get(metric_name)
-        if gauge is None:
-            logging.warning(f"No such gauge: {metric_name}")
-            return
-        self.counts[metric_name] += value
-        gauge.set(self.counts[metric_name])
+    def inc(self, metric: str, value: float = 1, echo=False, log_to_wandb=False):
+        self.counts[metric] += value
+        self.gauges[metric].set(self.counts[metric])
         if echo:
-            logging.info(f"{metric_name} {self.counts[metric_name]}")
+            logging.info(f"{metric} {self.counts[metric]}")
         if log_to_wandb:
-            wandb.log({metric_name: self.counts[metric_name]})
+            wandb.log({metric: self.counts[metric]})
 
-    def dec(self, metric_name, value=1, echo=False):
-        return self.inc(metric_name, -value, echo)
+    def dec(self, metric: str, value: float = 1, echo=False):
+        return self.inc(metric, -value, echo)
 
     def record_value(
         self,
-        metric_name,
-        value,
+        metric: str,
+        value: float,
         relative_to_start=False,
         echo=False,
         log_to_wandb=False,
     ):
         if relative_to_start and self.start_time:
             value -= self.start_time
-        self.series[metric_name].append(value)
+        self.series[metric].append(value)
         if echo:
-            logging.info(f"{metric_name} {value}")
+            logging.info(f"{metric} {value}")
         if log_to_wandb:
-            wandb.log({metric_name: value})
+            wandb.log({metric: value})
 
     def record_span(self, span: Span, record_value=True, log_to_wandb=False):
         self.spans.append(span)
