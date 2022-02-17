@@ -155,21 +155,22 @@ def _get_resources_args(args: Args):
 
 def _init_local_cluster(args: Args):
     system_config = {}
-    if "://" in args.spill_path:
-        system_config.update(
-            object_spilling_config=json.dumps(
-                {"type": "smart_open", "params": {"uri": args.spill_path}},
+    if args.spill_path:
+        if "://" in args.spill_path:
+            system_config.update(
+                object_spilling_config=json.dumps(
+                    {"type": "smart_open", "params": {"uri": args.spill_path}},
+                )
             )
-        )
-    elif args.spill_path:
-        system_config.update(
-            object_spilling_config=json.dumps(
-                {
-                    "type": "filesystem",
-                    "params": {"directory_path": args.spill_path},
-                },
+        else:
+            system_config.update(
+                object_spilling_config=json.dumps(
+                    {
+                        "type": "filesystem",
+                        "params": {"directory_path": args.spill_path},
+                    },
+                )
             )
-        )
     num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
     return cluster
