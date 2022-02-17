@@ -1,11 +1,13 @@
 import csv
+import io
+import logging
 import os
 import random
-import logging
 import subprocess
 import tempfile
-from typing import Dict, List
+from typing import Dict, Iterable, List, Optional, Tuple
 
+import boto3
 import numpy as np
 import ray
 
@@ -14,23 +16,60 @@ from raysort import logging_utils
 from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
+# ------------------------------------------------------------
+#     Loading and Saving Partitions
+# ------------------------------------------------------------
+
+
 def load_manifest(args: Args, path: Path) -> List[PartInfo]:
     if args.skip_input:
         return [
-            PartInfo(i, args.worker_ips[i % args.num_workers], None)
+            PartInfo(args.worker_ips[i % args.num_workers], None)
             for i in range(args.num_mappers)
         ]
     with open(path) as fin:
         reader = csv.reader(fin)
-        return [PartInfo(int(part_id), node, path) for part_id, node, path in reader]
+        ret = [PartInfo(node, path) for node, path in reader]
+        assert len(ret) == args.num_mappers, (len(ret), args)
+        return ret
+
+
+def load_partition(args: Args, path: Path) -> np.ndarray:
+    if args.skip_input:
+        return generate_partition(args.input_part_size)
+    if args.use_s3:
+        s3 = boto3.client("s3")
+        buf = io.BytesIO()
+        s3.download_fileobj(constants.S3_BUCKET, path, buf)
+        return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
+    return np.fromfile(path, dtype=np.uint8)
+
+
+def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
+    if args.use_s3:
+        # TODO(@lsf): use multipart upload
+        s3 = boto3.client("s3")
+        buf = io.BytesIO()
+        for datachunk in producer:
+            buf.write(datachunk)
+        buf.seek(0)
+        s3.upload_fileobj(buf, constants.S3_BUCKET, path)
+    else:
+        with open(path, "wb", buffering=args.io_size) as fout:
+            for datachunk in producer:
+                fout.write(datachunk)
+
+
+# ------------------------------------------------------------
+#     Initialization
+# ------------------------------------------------------------
 
 
 @ray.remote
 def make_data_dirs(args: Args):
-    for dir in args.data_dirs:
-        for dir_fmt in constants.DATA_DIR_FMT.values():
-            dirpath = dir_fmt.format(dir=dir)
-            os.makedirs(dirpath, exist_ok=True)
+    for prefix in args.data_dirs:
+        for kind in constants.FILENAME_FMT.keys():
+            os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
 def init(args: Args):
@@ -47,7 +86,7 @@ def init(args: Args):
 #     Generate Input
 # ------------------------------------------------------------
 
-
+# TODO(@lsf): put these in one place in ray_utils
 def _node_res(node: str) -> Dict[str, float]:
     return {"resources": {f"node:{node}": 1e-3}}
 
@@ -60,33 +99,47 @@ def _validate_input_manifest(args: Args) -> bool:
     parts = parts[: args.num_mappers]
     if len(parts) < args.num_mappers:
         return False
-    for _, _, path in parts:
-        if not os.path.exists(path):
+    for part in parts:
+        if not os.path.exists(part.path):
             return False
-        if os.path.getsize(path) != args.input_part_size:
+        if os.path.getsize(part.path) != args.input_part_size:
             return False
     logging.info("Found existing input manifest, skipping generating input.")
     return True
 
 
-def part_info(args: Args, part_id: PartId, *, kind="input") -> PartInfo:
-    node = ray.util.get_node_ip_address()
+def part_info(args: Args, part_id: PartId, *, kind="input", s3=False) -> PartInfo:
+    if s3:
+        shard = part_id // constants.S3_SHARD_FACTOR
+        path = _get_part_path(part_id, shard=shard, kind=kind)
+        return PartInfo(None, path)
     if len(args.data_dirs) > 1:
-        dir = random.choice(args.data_dirs)
+        prefix = random.choice(args.data_dirs)
     else:
-        dir = args.data_dirs[0]
-    filepath = _get_part_path(dir, part_id, kind)
-    return PartInfo(part_id, node, filepath)
+        prefix = args.data_dirs[0]
+    filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
+    node = ray.util.get_node_ip_address()
+    return PartInfo(node, filepath)
 
 
-def _get_part_path(dir: Path, part_id: PartId, kind="input") -> Path:
-    assert kind in {"input", "output", "temp"}
-    dir_fmt = constants.DATA_DIR_FMT[kind]
-    dirpath = dir_fmt.format(dir=dir)
+def _get_part_path(
+    part_id: PartId,
+    *,
+    prefix: Path = "",
+    shard: Optional[int] = None,
+    kind: str = "input",
+) -> Path:
     filename_fmt = constants.FILENAME_FMT[kind]
     filename = filename_fmt.format(part_id=part_id)
-    filepath = os.path.join(dirpath, filename)
-    return filepath
+    shard_str = f"{shard:08x}" if shard is not None else ""
+    return os.path.join(prefix, kind, shard_str, filename)
+
+
+def _upload_s3(src: Path, dst: Path, *, delete_src: bool = True) -> None:
+    s3 = boto3.client("s3")
+    s3.upload_file(src, constants.S3_BUCKET, dst)
+    if delete_src:
+        os.remove(src)
 
 
 @ray.remote
@@ -99,7 +152,12 @@ def generate_part(
         [constants.GENSORT_PATH, f"-b{offset}", f"{size}", pinfo.path], check=True
     )
     logging.info(f"Generated input {pinfo}")
-    return pinfo, size
+    if args.use_s3:
+        s3_info = part_info(args, part_id, s3=True)
+        _upload_s3(pinfo.path, s3_info.path)
+        logging.info(f"Uploaded input {s3_info}")
+        return s3_info
+    return pinfo
 
 
 def generate_input(args: Args):
@@ -119,10 +177,9 @@ def generate_input(args: Args):
         offset += size
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
-    assert sum([s for _, s in parts]) == total_size, (parts, args)
     with open(constants.INPUT_MANIFEST_FILE, "w") as fout:
         writer = csv.writer(fout)
-        writer.writerows([p for p, _ in parts])
+        writer.writerows(parts)
 
 
 def generate_partition(part_size: int) -> np.ndarray:
@@ -146,23 +203,35 @@ def _run_valsort(args: List[str]):
         raise RuntimeError(f"Validation failed: {args}")
 
 
-@ray.remote
-def validate_part(path: Path):
-    logging_utils.init()
+def _validate_part_impl(path: Path) -> Tuple[int, bytes]:
     sum_path = path + ".sum"
     _run_valsort(["-o", sum_path, path])
-    logging.info(f"Validated output {path}")
     with open(sum_path, "rb") as fin:
         return os.path.getsize(path), fin.read()
+
+
+@ray.remote
+def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
+    logging_utils.init()
+    logging.info(f"Validating output {path}")
+    if args.use_s3:
+        s3 = boto3.client("s3")
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            s3.download_fileobj(constants.S3_BUCKET, path, f)
+        ret = _validate_part_impl(f.name)
+        os.remove(f.name)
+        return ret
+    return _validate_part_impl(path)
 
 
 def validate_output(args: Args):
     if args.skip_sorting or args.skip_output:
         return
-    partitions = load_manifest(args, constants.OUTPUT_MANIFEST_FILE)
+    parts = load_manifest(args, constants.OUTPUT_MANIFEST_FILE)
     results = []
-    for _, node, path in partitions:
-        results.append(validate_part.options(**_node_res(node)).remote(path))
+    for part in parts:
+        node_res = _node_res(part.node) if part.node else {}
+        results.append(validate_part.options(**node_res).remote(args, part.path))
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
     total = sum(sz for sz, _ in results)

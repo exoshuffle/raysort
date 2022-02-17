@@ -118,6 +118,12 @@ def get_args(*args, **kwargs):
         help="how many times to run the sort for benchmarking",
     )
     parser.add_argument(
+        "--use_s3",
+        default=False,
+        action="store_true",
+        help="if set, will use S3 for input and output data",
+    )
+    parser.add_argument(
         "--local",
         default=False,
         action="store_true",

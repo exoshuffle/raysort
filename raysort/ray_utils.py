@@ -127,7 +127,9 @@ def _build_cluster(
 def _get_data_dirs():
     mnt = "/mnt"
     if os.path.exists(mnt):
-        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("ebs")]
+        ret = [
+            os.path.join(mnt, d, "tmp") for d in os.listdir(mnt) if d.startswith("ebs")
+        ]
         if len(ret) > 0:
             return ret
     return [tempfile.gettempdir()]

@@ -17,12 +17,6 @@ from raysort import tracing_utils
 from raysort.typing import Args, BlockInfo, PartId, PartInfo, Path
 
 
-def _load_partition(args: Args, path: Path) -> np.ndarray:
-    if args.skip_input:
-        return sort_utils.generate_partition(args.input_part_size)
-    return np.fromfile(path, dtype=np.uint8)
-
-
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
     N = len(bounds)
     offset = 0
@@ -45,9 +39,10 @@ def mapper(
     path: Path,
 ) -> List[np.ndarray]:
     start_time = time.time()
-    part = _load_partition(args, path)
+    part = sort_utils.load_partition(args, path)
+    assert part.size == args.input_part_size, (part.shape, args)
     load_duration = time.time() - start_time
-    tracing_utils.record_value("map_disk_time", load_duration)
+    tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = (
         _dummy_sort_and_partition if args.skip_sorting else sortlib.sort_and_partition
     )
@@ -115,6 +110,7 @@ def merge_mapper_blocks(
             # ray.put() should only use shared memory. Need to investigate.
             del datachunk
         else:
+            # TODO(@lsf): support S3 for manual_spilling
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = sort_utils.part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
@@ -173,11 +169,8 @@ def final_merge(
                     log_to_wandb=True,
                 )
             del datachunk
-        return pinfo
-
-    with open(pinfo.path, "wb", buffering=args.io_size) as fout:
-        for datachunk in merger:
-            fout.write(datachunk)
+    else:
+        sort_utils.save_partition(args, pinfo.path, merger)
     return pinfo
 
 
@@ -186,7 +179,7 @@ def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
 
 
 def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
-    return _node_res(args.worker_ips[node_i], parallelism)
+    return _node_res(args.worker_ips[node_i % args.num_workers], parallelism)
 
 
 def get_boundaries(
@@ -212,12 +205,13 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     num_map_tasks_per_round = args.num_workers * args.map_parallelism
 
     for part_id in range(args.num_mappers):
-        _, node, path = parts[part_id]
-        opt = dict(**mapper_opt, **_node_res(node))
+        part = parts[part_id]
+        node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
+        opt = dict(**mapper_opt, **node_res)
         map_results[part_id, :] = mapper.options(**opt).remote(
-            args, part_id, bounds, path
+            args, part_id, bounds, part.path
         )
-        # TODO: try memory-aware scheduling
+        # TODO(@lsf): try memory-aware scheduling
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
             # Wait for at least one map task from this round to finish before
             # scheduling the next round.
@@ -273,12 +267,13 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
         map_results = np.empty((args.num_workers, args.map_parallelism), dtype=object)
         for i in range(num_map_tasks):
-            _, node, path = parts[part_id]
-            opt = dict(**mapper_opt, **_node_res(node))
+            part = parts[part_id]
+            node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
+            opt = dict(**mapper_opt, **node_res)
             m = part_id % num_map_tasks_per_round
             map_results[i % args.num_workers, i // args.num_workers] = mapper.options(
                 **opt
-            ).remote(args, part_id, map_bounds, path)
+            ).remote(args, part_id, map_bounds, part.path)
             part_id += 1
         all_map_results.append(map_results)
 
@@ -367,11 +362,12 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, args.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
-            _, node, path = parts[part_id]
-            opt = dict(**mapper_opt, **_node_res(node))
+            part = parts[part_id]
+            node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
+            opt = dict(**mapper_opt, **node_res)
             m = part_id % num_map_tasks_per_round
             map_results[m, :] = mapper.options(**opt).remote(
-                args, part_id, map_bounds, path
+                args, part_id, map_bounds, part.path
             )
             part_id += 1
 

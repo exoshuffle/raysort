@@ -18,18 +18,19 @@ VALSORT_PATH = os.path.join(__DIR__, "bin/gensort/64/valsort")
 # Filenames
 WORK_DIR = "/tmp/raysort"
 RAY_SYSTEM_CONFIG_FILE = "_ray_config.yml"
+# TODO: INPUT_MANIFEST_FILE should have a s3/no-s3 suffix
 INPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "input-manifest.csv")
 OUTPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "output-manifest.csv")
-DATA_DIR_FMT = {
-    "input": "{dir}/tmp/input/",
-    "output": "{dir}/tmp/output/",
-    "temp": "{dir}/tmp/temp/",
-}
 FILENAME_FMT = {
     "input": "input-{part_id:010x}",
     "output": "output-{part_id:010x}",
     "temp": "temp-{part_id:010x}",
 }
+FILEPATH_FMT = "{prefix}/{kind}/{filename}"
+
+# S3
+S3_BUCKET = "raysort-tmp"
+S3_SHARD_FACTOR = 1024  # How many objects in a prefix in S3
 
 # Prometheus config
 PROM_RAY_EXPORTER_PORT = 8090

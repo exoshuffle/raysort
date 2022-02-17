@@ -3,7 +3,6 @@ from typing import NamedTuple, Tuple
 
 Args = argparse.Namespace
 ByteCount = int
-NodeAddress = str
 PartId = int
 Path = str
 RecordCount = int
@@ -12,8 +11,7 @@ BlockInfo = Tuple[int, int]
 
 
 class PartInfo(NamedTuple):
-    part_id: PartId
-    node: NodeAddress
+    node: str
     path: Path
 
     def __repr__(self):
