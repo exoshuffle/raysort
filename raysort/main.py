@@ -432,7 +432,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
 @tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(args: Args):
-    parts = sort_utils.load_manifest(args, constants.INPUT_MANIFEST_FILE)
+    parts = sort_utils.load_manifest(args)
 
     if args.simple_shuffle:
         results = sort_simple(args, parts)
@@ -442,7 +442,7 @@ def sort_main(args: Args):
         results = sort_two_stage(args, parts)
 
     if not args.skip_output:
-        with open(constants.OUTPUT_MANIFEST_FILE, "w") as fout:
+        with open(sort_utils.get_manifest_file(args, kind="output"), "w") as fout:
             writer = csv.writer(fout)
             writer.writerows(results)
 

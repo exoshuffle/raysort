@@ -21,12 +21,18 @@ from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 # ------------------------------------------------------------
 
 
-def load_manifest(args: Args, path: Path) -> List[PartInfo]:
-    if args.skip_input:
+def get_manifest_file(args: Args, kind: str = "input") -> Path:
+    suffix = "s3" if args.use_s3 else "fs"
+    return constants.MANIFEST_FMT.format(kind=kind, suffix=suffix)
+
+
+def load_manifest(args: Args, kind: str = "input") -> List[PartInfo]:
+    if args.skip_input and kind == "input":
         return [
             PartInfo(args.worker_ips[i % args.num_workers], None)
             for i in range(args.num_mappers)
         ]
+    path = get_manifest_file(args, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
         ret = [PartInfo(node, path) for node, path in reader]
@@ -73,7 +79,6 @@ def make_data_dirs(args: Args):
 
 
 def init(args: Args):
-    os.makedirs(constants.WORK_DIR, exist_ok=True)
     tasks = [
         make_data_dirs.options(**_node_res(node)).remote(args)
         for node in args.worker_ips
@@ -93,7 +98,7 @@ def _node_res(node: str) -> Dict[str, float]:
 
 def _validate_input_manifest(args: Args) -> bool:
     try:
-        parts = load_manifest(args, constants.INPUT_MANIFEST_FILE)
+        parts = load_manifest(args)
     except FileNotFoundError:
         return False
     parts = parts[: args.num_mappers]
@@ -177,7 +182,7 @@ def generate_input(args: Args):
         offset += size
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
-    with open(constants.INPUT_MANIFEST_FILE, "w") as fout:
+    with open(get_manifest_file(args), "w") as fout:
         writer = csv.writer(fout)
         writer.writerows(parts)
 
@@ -227,7 +232,7 @@ def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
 def validate_output(args: Args):
     if args.skip_sorting or args.skip_output:
         return
-    parts = load_manifest(args, constants.OUTPUT_MANIFEST_FILE)
+    parts = load_manifest(args, kind="output")
     results = []
     for part in parts:
         node_res = _node_res(part.node) if part.node else {}
