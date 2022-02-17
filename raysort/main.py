@@ -174,14 +174,6 @@ def final_merge(
     return pinfo
 
 
-def _node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
-    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
-
-
-def _node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
-    return _node_res(args.worker_ips[node_i % args.num_workers], parallelism)
-
-
 def get_boundaries(
     num_map_returns: int, num_merge_returns: int = -1
 ) -> Tuple[List[int], List[List[int]]]:
@@ -197,6 +189,12 @@ def get_boundaries(
     return map_bounds, merge_bounds
 
 
+def _get_node_res(args: Args, part: PartInfo, part_id: PartId) -> Dict:
+    if part.node:
+        return ray_utils.node_res(part.node)
+    return ray_utils.node_i(args, part_id)
+
+
 def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     bounds, _ = get_boundaries(args.num_reducers)
 
@@ -206,8 +204,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     for part_id in range(args.num_mappers):
         part = parts[part_id]
-        node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
-        opt = dict(**mapper_opt, **node_res)
+        opt = dict(**mapper_opt, **_get_node_res(args, part, part_id))
         map_results[part_id, :] = mapper.options(**opt).remote(
             args, part_id, bounds, part.path
         )
@@ -237,9 +234,9 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 num_returns=(r - args.reduce_parallelism) * args.num_workers,
             )
         reduce_results[:, r] = [
-            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                args, w, r, *map_results[:, w * args.num_reducers_per_worker + r]
-            )
+            final_merge.options(
+                **ray_utils.node_i(args, w, args.reduce_parallelism)
+            ).remote(args, w, r, *map_results[:, w * args.num_reducers_per_worker + r])
             for w in range(args.num_workers)
         ]
     return ray.get(reduce_results.flatten().tolist())
@@ -268,8 +265,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((args.num_workers, args.map_parallelism), dtype=object)
         for i in range(num_map_tasks):
             part = parts[part_id]
-            node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
-            opt = dict(**mapper_opt, **node_res)
+            opt = dict(**mapper_opt, **_get_node_res(args, part, part_id))
             m = part_id % num_map_tasks_per_round
             map_results[i % args.num_workers, i // args.num_workers] = mapper.options(
                 **opt
@@ -300,7 +296,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_results[
                     w + m * args.num_workers, :
                 ] = merge_mapper_blocks.options(
-                    **merger_opt, **_node_i(args, w)
+                    **merger_opt, **ray_utils.node_i(args, w)
                 ).remote(
                     args, w, m, merge_bounds, *map_blocks
                 )
@@ -332,7 +328,9 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 num_returns=(r - args.reduce_parallelism) * args.num_workers,
             )
         reduce_results[:, r] = [
-            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
+            final_merge.options(
+                **ray_utils.node_i(args, w, args.reduce_parallelism)
+            ).remote(
                 args, w, r, *merge_results[:, w * args.num_reducers_per_worker + r]
             )
             for w in range(args.num_workers)
@@ -363,8 +361,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
             part = parts[part_id]
-            node_res = _node_res(part.node) if part.node else _node_i(args, part_id)
-            opt = dict(**mapper_opt, **node_res)
+            opt = dict(**mapper_opt, **_get_node_res(args, part, part_id))
             m = part_id % num_map_tasks_per_round
             map_results[m, :] = mapper.options(**opt).remote(
                 args, part_id, map_bounds, part.path
@@ -388,7 +385,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(args.num_workers):
                 map_blocks = map_results[j * f : (j + 1) * f, w]
                 merge_results[w, m, :] = merge_mapper_blocks.options(
-                    **merger_opt, **_node_i(args, w)
+                    **merger_opt, **ray_utils.node_i(args, w)
                 ).remote(args, w, m, merge_bounds[w], *map_blocks)
 
         if start_time > 0 and (time.time() - start_time) > args.fail_time:
@@ -420,9 +417,9 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                 num_returns=(r - args.reduce_parallelism) * args.num_workers,
             )
         reduce_results[:, r] = [
-            final_merge.options(**_node_i(args, w, args.reduce_parallelism)).remote(
-                args, w, r, *merge_results[w, :, r]
-            )
+            final_merge.options(
+                **ray_utils.node_i(args, w, args.reduce_parallelism)
+            ).remote(args, w, r, *merge_results[w, :, r])
             for w in range(args.num_workers)
         ]
         merge_results[:, :, r] = None

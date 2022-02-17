@@ -5,7 +5,7 @@ import os
 import random
 import subprocess
 import tempfile
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import boto3
 import numpy as np
@@ -13,6 +13,7 @@ import ray
 
 from raysort import constants
 from raysort import logging_utils
+from raysort import ray_utils
 from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
@@ -80,7 +81,7 @@ def make_data_dirs(args: Args):
 
 def init(args: Args):
     tasks = [
-        make_data_dirs.options(**_node_res(node)).remote(args)
+        make_data_dirs.options(**ray_utils.node_res(node)).remote(args)
         for node in args.worker_ips
     ]
     ray.get(tasks)
@@ -90,10 +91,6 @@ def init(args: Args):
 # ------------------------------------------------------------
 #     Generate Input
 # ------------------------------------------------------------
-
-# TODO(@lsf): put these in one place in ray_utils
-def _node_res(node: str) -> Dict[str, float]:
-    return {"resources": {f"node:{node}": 1e-3}}
 
 
 def _validate_input_manifest(args: Args) -> bool:
@@ -175,7 +172,7 @@ def generate_input(args: Args):
     for part_id in range(args.num_mappers):
         node = args.worker_ips[part_id % args.num_workers]
         tasks.append(
-            generate_part.options(**_node_res(node)).remote(
+            generate_part.options(**ray_utils.node_res(node)).remote(
                 args, part_id, min(size, total_size - offset), offset
             )
         )
@@ -235,8 +232,8 @@ def validate_output(args: Args):
     parts = load_manifest(args, kind="output")
     results = []
     for part in parts:
-        node_res = _node_res(part.node) if part.node else {}
-        results.append(validate_part.options(**node_res).remote(args, part.path))
+        opt = ray_utils.node_res(part.node) if part.node else {}
+        results.append(validate_part.options(**opt).remote(args, part.path))
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
     total = sum(sz for sz, _ in results)
