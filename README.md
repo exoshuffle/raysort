@@ -20,19 +20,19 @@ Set up [direnv](https://direnv.net/), otherwise manually `source .envrc`.
 A full end-to-end test run:
 
 ```bash
-python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --ray_address= 2>&1 | tee local.log
+python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --local 2>&1 | tee local.log
 ```
 
 A quicker run, skipping input:
 
 ```bash
-python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --skip_input --sort --ray_address= 2>&1 | tee local.log
+python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --skip_input --sort --local 2>&1 | tee local.log
 ```
 
 Notes:
 
 - Run `python raysort/main.py --help` to see description of arguments.
-- Specifying `--ray_address=` (empty address) will make Raysort launch a new (local) Ray cluster to start the run. If not, it will try to connect to an existing one using `ray.init("auto")`.
+- Specifying `--local` will make Raysort launch an locally emulated Ray cluster to start the run. If not, it will try to connect to an existing one using `ray.init("auto")`.
 - By default, Raysort calls `gensort` to generate input data and `valsort` to validate output data on disk. If you want to skip both or either steps, set `--skip_input` or `--skip_output`. If input is skipped, Raysort will generate input data on the fly using `np.random`.
 
 ## Starting up a Cluster
