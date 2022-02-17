@@ -1,4 +1,4 @@
-name: Single Node Tests with S3 I/O
+name: Single Node Sort Tests with S3 I/O
 on:
   push:
     branches:
@@ -37,10 +37,10 @@ jobs:
           scripts/installers/install_binaries.sh gensort
 
       - name: 1GB Ray native shuffle, spilling on S3
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=1_000_000 --local --spill_path=s3://raysort-tmp/ray
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://raysort-tmp/ray
 
       - name: 10GB Ray native shuffle, input/output on S3
-        run: python raysort/main.py --total_gb=10.24 --input_part_size=10_000_000 --local --use_s3
+        run: python raysort/main.py --total_gb=10.24 --input_part_size=40_000_000 --local --use_s3
 
       - name: 10GB Ray native shuffle, input/output and spilling on S3
-        run: python raysort/main.py --total_gb=10.24 --input_part_size=10_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
+        run: python raysort/main.py --total_gb=10.24 --input_part_size=40_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
