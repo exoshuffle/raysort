@@ -30,7 +30,7 @@ FILEPATH_FMT = "{prefix}/{kind}/{filename}"
 
 # S3
 S3_BUCKET = "raysort-tmp"
-S3_SHARD_FACTOR = 1024  # How many objects in a prefix in S3
+S3_SHARD_FACTOR = 256  # How many objects in a prefix in S3
 
 # Prometheus config
 PROM_RAY_EXPORTER_PORT = 8090
