@@ -39,8 +39,8 @@ jobs:
       - name: 1GB Ray native shuffle, spilling on S3
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://raysort-tmp/ray
 
-      - name: 1GB Ray native shuffle, input/output on S3
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --use_s3
+      - name: 0.1GB Ray native shuffle, input/output on S3
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --use_s3
 
-      - name: 1GB Ray native shuffle, input/output and spilling on S3
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
+      - name: 0.1GB Ray native shuffle, input/output and spilling on S3
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
