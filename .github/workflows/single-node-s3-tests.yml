@@ -1,0 +1,52 @@
+name: Single Node Tests with S3 I/O
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      WANDB_MODE: offline
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install Python 3
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/worker.txt
+
+      - name: Install project package
+        run: |
+          pip install -e .
+          pushd raysort/sortlib && python setup.py build_ext --inplace && popd
+
+      - name: Install gensort binary dependencies
+        run: |
+          scripts/installers/install_binaries.sh gensort
+
+      - name: 1GB Ray native shuffle, spilling on S3
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=1_000_000 --local --spill_path=s3://raysort-tmp/ray
+
+      - name: 10GB Ray native shuffle, input/output on S3
+        run: python raysort/main.py --total_gb=10.24 --input_part_size=10_000_000 --local --use_s3
+
+      - name: 10GB Ray native shuffle, input/output and spilling on S3
+        run: python raysort/main.py --total_gb=10.24 --input_part_size=10_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
