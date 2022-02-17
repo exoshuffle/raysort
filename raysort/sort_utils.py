@@ -71,9 +71,10 @@ def _validate_input_manifest(args: Args) -> bool:
 
 def part_info(args: Args, part_id: PartId, *, kind="input") -> PartInfo:
     node = ray.util.get_node_ip_address()
-    dir = (
-        random.choice(args.data_dirs) if len(args.data_dirs) > 1 else args.data_dirs[0]
-    )
+    if len(args.data_dirs) > 1:
+        dir = random.choice(args.data_dirs)
+    else:
+        dir = args.data_dirs[0]
     filepath = _get_part_path(dir, part_id, kind)
     return PartInfo(part_id, node, filepath)
 
