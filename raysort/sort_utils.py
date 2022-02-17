@@ -220,6 +220,7 @@ def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
         s3 = boto3.client("s3")
         with tempfile.NamedTemporaryFile(delete=False) as f:
             s3.download_fileobj(constants.S3_BUCKET, path, f)
+        logging.info(f"Downloaded output {path}")
         ret = _validate_part_impl(f.name)
         os.remove(f.name)
         return ret
