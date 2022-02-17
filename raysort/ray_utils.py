@@ -158,8 +158,7 @@ def _init_local_cluster():
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
         )
-    # num_nodes = os.cpu_count() // 2
-    num_nodes = 1
+    num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
     return cluster
 
