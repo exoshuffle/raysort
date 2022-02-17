@@ -114,7 +114,9 @@ def microbenchmark(args):
 
 
 def init_ray(args):
-    system_config = {}
+    system_config = {
+        "max_io_workers": 1,
+    }
     if os.path.exists("/mnt/ebs0/tmp"):
         system_config.update(
             object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
@@ -125,7 +127,6 @@ def init_ray(args):
         )
     if args.no_prefetching:
         system_config.update(
-            max_io_workers=1,
             max_object_pull_fraction=0,
         )
     logging.info(system_config)
