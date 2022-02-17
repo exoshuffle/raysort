@@ -125,7 +125,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--spill_path",
-        default="/mnt/ebs0/tmp",
+        default=None,
         type=str,
         help="[only used in local cluster setup] can be a local path or S3",
     )

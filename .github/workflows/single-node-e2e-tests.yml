@@ -35,19 +35,19 @@ jobs:
           scripts/installers/install_binaries.sh gensort
 
       - name: 1GB simple shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --simple_shuffle --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --simple_shuffle --local
 
       - name: 1GB two stage shuffle with manual spilling
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --manual_spilling --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --manual_spilling --local
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --local
 
       - name: 1GB Ray native shuffle with ray.put()
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_put --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_put --local
 
       - name: 1GB Ray native shuffle, Magnet version
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --local
 
       - name: 1GB Ray native shuffle, Riffle version
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --merge_factor=8 --ray_address=
+        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --merge_factor=8 --local
