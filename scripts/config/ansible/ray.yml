@@ -3,6 +3,7 @@
   vars:
     head_ip: 0.0.0.0
     mnt_path: /mnt/ebs0
+    tmpfs_path: /mnt/tmpfs
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     clear_input_dir: false
@@ -15,9 +16,9 @@
       shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
       when: reinstall_ray
 
-    - name: Clear temporary in-memory directories
+    - name: Clear tmpfs
       file:
-        path: /dev/shm/raysort
+        path: "{{tmpfs_path}}/raysort"
         state: absent
 
     - name: Clear temp directories

@@ -15,6 +15,9 @@ jobs:
       S3_BUCKET: raysort-github-ci
       WANDB_MODE: offline
     steps:
+      - name: Mount tmpfs
+        run: sudo mount -t tmpfs tmpfs /mnt/tmpfs
+
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -34,8 +37,7 @@ jobs:
           pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 
       - name: Install gensort binary dependencies
-        run: |
-          scripts/installers/install_binaries.sh gensort
+        run: scripts/installers/install_binaries.sh gensort
 
       - name: 1GB Ray native shuffle, spilling on S3
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://$S3_BUCKET/ray

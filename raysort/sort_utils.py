@@ -5,6 +5,7 @@ import os
 import random
 import subprocess
 import tempfile
+import time
 from typing import Iterable, List, Optional, Tuple
 
 import boto3
@@ -14,6 +15,7 @@ import ray
 from raysort import constants
 from raysort import logging_utils
 from raysort import ray_utils
+from raysort import tracing_utils
 from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
@@ -42,7 +44,7 @@ def load_manifest(args: Args, kind: str = "input") -> List[PartInfo]:
 
 def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
-        return generate_partition(args.input_part_size)
+        return create_partition(args.input_part_size)
     if args.s3_bucket:
         s3 = boto3.client("s3")
         buf = io.BytesIO()
@@ -51,7 +53,7 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     return np.fromfile(path, dtype=np.uint8)
 
 
-def _multipart_upload(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
+def _multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
     s3 = boto3.client("s3")
     mpu = s3.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
     mpu_parts = []
@@ -75,7 +77,7 @@ def _multipart_upload(args: Args, path: Path, producer: Iterable[np.ndarray]) ->
         mpu_part_id += 1
 
     tail = io.BytesIO()
-    for datachunk in producer:
+    for datachunk in merger:
         if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
@@ -96,12 +98,25 @@ def _multipart_upload(args: Args, path: Path, producer: Iterable[np.ndarray]) ->
     )
 
 
-def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
-    if args.s3_bucket:
-        _multipart_upload(args, path, producer)
+def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
+    if args.skip_output:
+        first_chunk = True
+        for datachunk in merger:
+            if first_chunk:
+                first_chunk = False
+                tracing_utils.record_value(
+                    "output_time",
+                    time.time(),
+                    relative_to_start=True,
+                    echo=True,
+                    log_to_wandb=True,
+                )
+            del datachunk
+    elif args.s3_bucket:
+        _multipart_upload(args, path, merger)
     else:
         with open(path, "wb", buffering=args.io_size) as fout:
-            for datachunk in producer:
+            for datachunk in merger:
                 fout.write(datachunk)
 
 
@@ -112,19 +127,18 @@ def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> No
 
 @ray.remote
 def make_data_dirs(args: Args):
-    os.makedirs(constants.SHM_PATH, exist_ok=True)
+    os.makedirs(constants.TMPFS_PATH, exist_ok=True)
     for prefix in args.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
 def init(args: Args):
-    tasks = [
-        make_data_dirs.options(**ray_utils.node_res(node)).remote(args)
-        for node in args.worker_ips
-    ]
+    opts = [ray_utils.node_res(node) for node in args.worker_ips]
+    opts.append({"resources": {"head": 1}})
+    tasks = [make_data_dirs.options(**opt).remote(args) for opt in opts]
     ray.get(tasks)
-    logging.info("Created data directories on all worker nodes")
+    logging.info("Created data directories on all nodes")
 
 
 # ------------------------------------------------------------
@@ -142,7 +156,6 @@ def _validate_input_manifest(args: Args) -> bool:
     if len(parts) < args.num_mappers:
         logging.warning("Too few input partitions in manifest")
         return False
-    # TODO(@lsf): check size of partition from remote node or S3
     logging.info("Validated manifest, skipping generating input")
     return True
 
@@ -198,7 +211,7 @@ def generate_part(
     logging_utils.init()
     if args.s3_bucket:
         pinfo = part_info(args, part_id, s3=True)
-        path = os.path.join(constants.SHM_PATH, f"{part_id:010x}")
+        path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
         pinfo = part_info(args, part_id)
         path = pinfo.path
@@ -231,7 +244,7 @@ def generate_input(args: Args):
         writer.writerows(parts)
 
 
-def generate_partition(part_size: int) -> np.ndarray:
+def create_partition(part_size: int) -> np.ndarray:
     num_records = part_size // 100
     mat = np.empty((num_records, 100), dtype=np.uint8)
     mat[:, :10] = np.frombuffer(
@@ -265,17 +278,17 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 
 
 @ray.remote
-def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
+def validate_part(args: Args, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
     if args.s3_bucket:
         s3 = boto3.client("s3")
-        tmp_path = os.path.join(constants.SHM_PATH, os.path.basename(path))
-        s3.download_file(args.s3_bucket, path, tmp_path)
+        tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
+        s3.download_file(args.s3_bucket, pinfo.path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
-        ret = _validate_part_impl(path)
-    logging.info(f"Validated output {path}")
+        ret = _validate_part_impl(pinfo.path)
+    logging.info(f"Validated output {pinfo}")
     return ret
 
 
@@ -285,9 +298,13 @@ def validate_output(args: Args):
     parts = load_manifest(args, kind="output")
     assert len(parts) == args.num_reducers, (len(parts), args)
     results = []
-    for part in parts:
-        opt = ray_utils.node_res(part.node) if part.node else {}
-        results.append(validate_part.options(**opt).remote(args, part.path))
+    for pinfo in enumerate(parts):
+        opt = (
+            ray_utils.node_res(pinfo.node)
+            if pinfo.node
+            else {"resources": {"worker": 1e-3}}
+        )
+        results.append(validate_part.options(**opt).remote(args, pinfo))
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
     total = sum(sz for sz, _ in results)

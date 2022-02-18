@@ -25,7 +25,7 @@ FILENAME_FMT = {
 }
 FILEPATH_FMT = "{prefix}/{kind}/{filename}"
 SHARD_FMT = "{shard:04x}"
-SHM_PATH = "/dev/shm/raysort"
+TMPFS_PATH = "/mnt/tmpfs/raysort"
 
 # S3
 S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024
