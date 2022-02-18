@@ -40,7 +40,7 @@ def mapper(
 ) -> List[np.ndarray]:
     start_time = time.time()
     part = sort_utils.load_partition(args, path)
-    assert part.size == args.input_part_size, (part.shape, args)
+    assert part.size == args.input_part_size, (part.shape, path, args)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = (
