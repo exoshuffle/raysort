@@ -116,6 +116,7 @@ def microbenchmark(args):
 def init_ray(args):
     system_config = {
         "max_io_workers": 1,
+        "object_spilling_threshold": 1,
     }
     if os.path.exists("/mnt/ebs0/tmp"):
         system_config.update(
