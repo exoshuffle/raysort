@@ -27,7 +27,6 @@ FILEPATH_FMT = "{prefix}/{kind}/{filename}"
 SHARD_FMT = "{shard:04x}"
 
 # S3
-S3_BUCKET = "raysort-tmp"
 S3_SHARD_NUMBER = 16**2  # 256, must be power of 16
 S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 

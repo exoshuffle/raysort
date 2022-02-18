@@ -12,6 +12,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      S3_BUCKET: raysort-github-ci
       WANDB_MODE: offline
     steps:
       - name: Checkout repository
@@ -37,10 +38,10 @@ jobs:
           scripts/installers/install_binaries.sh gensort
 
       - name: 1GB Ray native shuffle, spilling on S3
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://raysort-tmp/ray
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://$S3_BUCKET/ray
 
       - name: 0.1GB Ray native shuffle, input/output on S3
-        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --use_s3
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET
 
       - name: 0.1GB Ray native shuffle, input/output and spilling on S3
-        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --use_s3 --spill_path=s3://raysort-tmp/ray
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --spill_path=s3://raysort-tmp/ray

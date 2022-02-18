@@ -112,10 +112,10 @@ def get_args(*args, **kwargs):
         help="if set, will run Riffle-style map-side merge",
     )
     parser.add_argument(
-        "--use_s3",
-        default=False,
-        action="store_true",
-        help="if set, will use S3 for input and output data",
+        "--s3_bucket",
+        default=None,
+        type=str,
+        help="if set, will use this S3 bucket for input and output data",
     )
     parser.add_argument(
         "--local",

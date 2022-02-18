@@ -23,7 +23,7 @@ from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
 
 def get_manifest_file(args: Args, kind: str = "input") -> Path:
-    suffix = "s3" if args.use_s3 else "fs"
+    suffix = "s3" if args.s3_bucket else "fs"
     return constants.MANIFEST_FMT.format(kind=kind, suffix=suffix)
 
 
@@ -44,23 +44,23 @@ def load_manifest(args: Args, kind: str = "input") -> List[PartInfo]:
 def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
         return generate_partition(args.input_part_size)
-    if args.use_s3:
+    if args.s3_bucket:
         s3 = boto3.client("s3")
         buf = io.BytesIO()
-        s3.download_fileobj(constants.S3_BUCKET, path, buf)
+        s3.download_fileobj(args.s3_bucket, path, buf)
         return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
     return np.fromfile(path, dtype=np.uint8)
 
 
 def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
-    if args.use_s3:
+    if args.s3_bucket:
         # TODO(@lsf): use multipart upload
         s3 = boto3.client("s3")
         buf = io.BytesIO()
         for datachunk in producer:
             buf.write(datachunk)
         buf.seek(0)
-        s3.upload_fileobj(buf, constants.S3_BUCKET, path)
+        s3.upload_fileobj(buf, args.s3_bucket, path)
     else:
         with open(path, "wb", buffering=args.io_size) as fout:
             for datachunk in producer:
@@ -137,9 +137,9 @@ def _get_part_path(
     return os.path.join(prefix, kind, shard_str, filename)
 
 
-def _upload_s3(src: Path, dst: Path, *, delete_src: bool = True) -> None:
+def _upload_s3(args: Args, src: Path, dst: Path, *, delete_src: bool = True) -> None:
     s3 = boto3.client("s3")
-    s3.upload_file(src, constants.S3_BUCKET, dst)
+    s3.upload_file(src, args.s3_bucket, dst)
     if delete_src:
         os.remove(src)
 
@@ -159,15 +159,15 @@ def generate_part(
     args: Args, part_id: PartId, size: RecordCount, offset: RecordCount
 ) -> PartInfo:
     logging_utils.init()
-    if args.use_s3:
+    if args.s3_bucket:
         pinfo = part_info(args, part_id, s3=True)
         path = f"/dev/shm/{part_id}"
     else:
         pinfo = part_info(args, part_id)
         path = pinfo.path
-    _run_gensort(offset, size, path, args.use_s3)
-    if args.use_s3:
-        _upload_s3(path, pinfo.path)
+    _run_gensort(offset, size, path, args.s3_bucket)
+    if args.s3_bucket:
+        _upload_s3(args, path, pinfo.path)
     logging.info(f"Generated input {pinfo}")
     return pinfo
 
@@ -230,10 +230,10 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 @ray.remote
 def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
     logging_utils.init()
-    if args.use_s3:
+    if args.s3_bucket:
         s3 = boto3.client("s3")
         tmp_path = "/dev/shm/" + os.path.basename(path)
-        s3.download_file(constants.S3_BUCKET, path, tmp_path)
+        s3.download_file(args.s3_bucket, path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
