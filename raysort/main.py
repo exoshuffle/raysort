@@ -454,19 +454,17 @@ def init(args: Args) -> ray.actor.ActorHandle:
 
 def main(args: Args):
     tracker = init(args)
+    try:
+        if args.generate_input:
+            sort_utils.generate_input(args)
 
-    if args.generate_input:
-        sort_utils.generate_input(args)
-
-    if args.sort:
-        for _ in range(args.repeat_sort):
-            tracker.reset_gauges.remote()
+        if args.sort:
             sort_main(args)
 
-    if args.validate_output:
-        sort_utils.validate_output(args)
-
-    ray.get(tracker.performance_report.remote())
+        if args.validate_output:
+            sort_utils.validate_output(args)
+    finally:
+        ray.get(tracker.performance_report.remote())
 
 
 if __name__ == "__main__":

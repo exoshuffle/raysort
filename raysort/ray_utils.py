@@ -192,6 +192,6 @@ def init(args: Args):
     if args.local:
         cluster = _init_local_cluster(args)
     else:
-        ray.init()
+        ray.init(address="auto")
     _get_resources_args(args)
     return cluster

@@ -112,7 +112,7 @@ def _validate_input_manifest(args: Args) -> bool:
 
 def part_info(args: Args, part_id: PartId, *, kind="input", s3=False) -> PartInfo:
     if s3:
-        shard = part_id // constants.S3_SHARD_FACTOR
+        shard = part_id & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
     if len(args.data_dirs) > 1:
@@ -133,7 +133,7 @@ def _get_part_path(
 ) -> Path:
     filename_fmt = constants.FILENAME_FMT[kind]
     filename = filename_fmt.format(part_id=part_id)
-    shard_str = f"{shard:08x}" if shard is not None else ""
+    shard_str = constants.SHARD_FMT.format(shard=shard) if shard is not None else ""
     return os.path.join(prefix, kind, shard_str, filename)
 
 
@@ -144,21 +144,31 @@ def _upload_s3(src: Path, dst: Path, *, delete_src: bool = True) -> None:
         os.remove(src)
 
 
+def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
+    # gensort by default uses direct I/O unless `,buf` is specified.
+    # tmpfs does not support direct I/O so we must disabled it.
+    if buf:
+        path += ",buf"
+    subprocess.run(
+        f"{constants.GENSORT_PATH} -b{offset} {size} {path}", shell=True, check=True
+    )
+
+
 @ray.remote
 def generate_part(
     args: Args, part_id: PartId, size: RecordCount, offset: RecordCount
 ) -> PartInfo:
     logging_utils.init()
-    pinfo = part_info(args, part_id)
-    subprocess.run(
-        [constants.GENSORT_PATH, f"-b{offset}", f"{size}", pinfo.path], check=True
-    )
-    logging.info(f"Generated input {pinfo}")
     if args.use_s3:
-        s3_info = part_info(args, part_id, s3=True)
-        _upload_s3(pinfo.path, s3_info.path)
-        logging.info(f"Uploaded input {s3_info}")
-        return s3_info
+        pinfo = part_info(args, part_id, s3=True)
+        path = f"/dev/shm/{part_id}"
+    else:
+        pinfo = part_info(args, part_id)
+        path = pinfo.path
+    _run_gensort(offset, size, path, args.use_s3)
+    if args.use_s3:
+        _upload_s3(path, pinfo.path)
+    logging.info(f"Generated input {pinfo}")
     return pinfo
 
 
@@ -198,16 +208,21 @@ def generate_partition(part_size: int) -> np.ndarray:
 # ------------------------------------------------------------
 
 
-def _run_valsort(args: List[str]):
-    proc = subprocess.run([constants.VALSORT_PATH] + args, capture_output=True)
+def _run_valsort(argstr: str):
+    proc = subprocess.run(
+        f"{constants.VALSORT_PATH} {argstr}", shell=True, capture_output=True
+    )
     if proc.returncode != 0:
         logging.critical("\n" + proc.stderr.decode("ascii"))
-        raise RuntimeError(f"Validation failed: {args}")
+        raise RuntimeError(f"Validation failed: {argstr}")
 
 
-def _validate_part_impl(path: Path) -> Tuple[int, bytes]:
+def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
     sum_path = path + ".sum"
-    _run_valsort(["-o", sum_path, path])
+    argstr = f"-o {sum_path} {path}"
+    if buf:
+        argstr += ",buf"
+    _run_valsort(argstr)
     with open(sum_path, "rb") as fin:
         return os.path.getsize(path), fin.read()
 
@@ -215,16 +230,16 @@ def _validate_part_impl(path: Path) -> Tuple[int, bytes]:
 @ray.remote
 def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
     logging_utils.init()
-    logging.info(f"Validating output {path}")
     if args.use_s3:
         s3 = boto3.client("s3")
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            s3.download_fileobj(constants.S3_BUCKET, path, f)
-        logging.info(f"Downloaded output {path}")
-        ret = _validate_part_impl(f.name)
-        os.remove(f.name)
-        return ret
-    return _validate_part_impl(path)
+        tmp_path = "/dev/shm/" + os.path.basename(path)
+        s3.download_file(constants.S3_BUCKET, path, tmp_path)
+        ret = _validate_part_impl(tmp_path, buf=True)
+        os.remove(tmp_path)
+    else:
+        ret = _validate_part_impl(path)
+    logging.info(f"Validated output {path}")
+    return ret
 
 
 def validate_output(args: Args):
@@ -243,5 +258,5 @@ def validate_output(args: Args):
     with tempfile.NamedTemporaryFile() as fout:
         fout.write(all_checksum)
         fout.flush()
-        _run_valsort(["-s", fout.name])
+        _run_valsort(f"-s {fout.name}")
     logging.info("All OK!")

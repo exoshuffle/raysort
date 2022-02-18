@@ -5,6 +5,7 @@
     data_disk: /dev/nvme1n1
     ssd_device: /dev/nvme1n1p1
     mnt_path: /mnt/ebs0
+    awsdir: ~/.aws
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
@@ -51,6 +52,13 @@
         - absent
         - directory
 
+    - name: Sync aws directory
+      synchronize:
+        src: "{{awsdir}}/"
+        dest: "{{awsdir}}"
+        delete: yes
+        recursive: yes
+
     - name: Sync workdir
       synchronize:
         src: "{{workdir}}/"
@@ -79,7 +87,7 @@
       loop:
         - hard
         - soft
-    
+
     - name: Check Hadoop files exist
       local_action: stat path={{hadoop_config_path}}
       register: hadoop

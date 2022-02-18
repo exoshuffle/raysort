@@ -24,10 +24,12 @@ FILENAME_FMT = {
     "temp": "temp-{part_id:010x}",
 }
 FILEPATH_FMT = "{prefix}/{kind}/{filename}"
+SHARD_FMT = "{shard:04x}"
 
 # S3
 S3_BUCKET = "raysort-tmp"
-S3_SHARD_FACTOR = 256  # How many objects in a prefix in S3
+S3_SHARD_NUMBER = 16**2  # 256, must be power of 16
+S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 
 # Prometheus config
 PROM_RAY_EXPORTER_PORT = 8090
