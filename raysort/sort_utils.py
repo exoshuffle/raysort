@@ -99,12 +99,6 @@ def _multipart_upload(args: Args, path: Path, producer: Iterable[np.ndarray]) ->
 def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
     if args.s3_bucket:
         _multipart_upload(args, path, producer)
-        # s3 = boto3.client("s3")
-        # buf = io.BytesIO()
-        # for datachunk in producer:
-        #     buf.write(datachunk)
-        # buf.seek(0)
-        # s3.upload_fileobj(buf, args.s3_bucket, path)
     else:
         with open(path, "wb", buffering=args.io_size) as fout:
             for datachunk in producer:
