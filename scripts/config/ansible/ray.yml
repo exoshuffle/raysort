@@ -15,6 +15,11 @@
       shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
       when: reinstall_ray
 
+    - name: Clear temporary in-memory directories
+      file:
+        path: /dev/shm/raysort
+        state: absent
+
     - name: Clear temp directories
       become: yes
       file:
@@ -23,10 +28,10 @@
         mode: "777"
       when: item.when
       loop:
-        - {dir: "{{mnt_path}}/tmp/input", when: "{{clear_input_dir}}"}
-        - {dir: "{{mnt_path}}/tmp/output", when: true}
-        - {dir: "{{mnt_path}}/tmp/ray", when: true}
-        - {dir: "{{mnt_path}}/tmp/temp", when: true}
+        - { dir: "{{mnt_path}}/tmp/input", when: "{{clear_input_dir}}" }
+        - { dir: "{{mnt_path}}/tmp/output", when: true }
+        - { dir: "{{mnt_path}}/tmp/ray", when: true }
+        - { dir: "{{mnt_path}}/tmp/temp", when: true }
 
     - name: Restart Ray
       shell: >

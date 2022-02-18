@@ -37,7 +37,6 @@ def load_manifest(args: Args, kind: str = "input") -> List[PartInfo]:
     with open(path) as fin:
         reader = csv.reader(fin)
         ret = [PartInfo(node, path) for node, path in reader]
-        assert len(ret) == args.num_mappers, (len(ret), args)
         return ret
 
 
@@ -52,15 +51,60 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     return np.fromfile(path, dtype=np.uint8)
 
 
+def _multipart_upload(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
+    s3 = boto3.client("s3")
+    mpu = s3.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
+    mpu_parts = []
+    mpu_part_id = 1
+
+    def upload_part(data):
+        nonlocal mpu_part_id
+        resp = s3.upload_part(
+            Body=data,
+            Bucket=args.s3_bucket,
+            Key=path,
+            PartNumber=mpu_part_id,
+            UploadId=mpu["UploadId"],
+        )
+        mpu_parts.append(
+            {
+                "ETag": resp["ETag"],
+                "PartNumber": mpu_part_id,
+            }
+        )
+        mpu_part_id += 1
+
+    tail = io.BytesIO()
+    for datachunk in producer:
+        if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
+            # There should never be large chunks once we start seeing
+            # small chunks towards the end.
+            assert tail.getbuffer().nbytes == 0
+            upload_part(datachunk.tobytes())
+        else:
+            tail.write(datachunk)
+
+    if tail.getbuffer().nbytes > 0:
+        tail.seek(0)
+        upload_part(tail)
+
+    s3.complete_multipart_upload(
+        Bucket=args.s3_bucket,
+        Key=path,
+        MultipartUpload={"Parts": mpu_parts},
+        UploadId=mpu["UploadId"],
+    )
+
+
 def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> None:
     if args.s3_bucket:
-        # TODO(@lsf): use multipart upload
-        s3 = boto3.client("s3")
-        buf = io.BytesIO()
-        for datachunk in producer:
-            buf.write(datachunk)
-        buf.seek(0)
-        s3.upload_fileobj(buf, args.s3_bucket, path)
+        _multipart_upload(args, path, producer)
+        # s3 = boto3.client("s3")
+        # buf = io.BytesIO()
+        # for datachunk in producer:
+        #     buf.write(datachunk)
+        # buf.seek(0)
+        # s3.upload_fileobj(buf, args.s3_bucket, path)
     else:
         with open(path, "wb", buffering=args.io_size) as fout:
             for datachunk in producer:
@@ -74,6 +118,7 @@ def save_partition(args: Args, path: Path, producer: Iterable[np.ndarray]) -> No
 
 @ray.remote
 def make_data_dirs(args: Args):
+    os.makedirs(constants.SHM_PATH, exist_ok=True)
     for prefix in args.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
@@ -98,15 +143,13 @@ def _validate_input_manifest(args: Args) -> bool:
         parts = load_manifest(args)
     except FileNotFoundError:
         return False
+    logging.info("Found existing input manifest")
     parts = parts[: args.num_mappers]
     if len(parts) < args.num_mappers:
+        logging.warning("Too few input partitions in manifest")
         return False
-    for part in parts:
-        if not os.path.exists(part.path):
-            return False
-        if os.path.getsize(part.path) != args.input_part_size:
-            return False
-    logging.info("Found existing input manifest, skipping generating input.")
+    # TODO(@lsf): check size of partition from remote node or S3
+    logging.info("Validated manifest, skipping generating input")
     return True
 
 
@@ -161,7 +204,7 @@ def generate_part(
     logging_utils.init()
     if args.s3_bucket:
         pinfo = part_info(args, part_id, s3=True)
-        path = f"/dev/shm/{part_id}"
+        path = os.path.join(constants.SHM_PATH, f"{part_id:010x}")
     else:
         pinfo = part_info(args, part_id)
         path = pinfo.path
@@ -232,7 +275,7 @@ def validate_part(args: Args, path: Path) -> Tuple[int, bytes]:
     logging_utils.init()
     if args.s3_bucket:
         s3 = boto3.client("s3")
-        tmp_path = "/dev/shm/" + os.path.basename(path)
+        tmp_path = os.path.join(constants.SHM_PATH, os.path.basename(path))
         s3.download_file(args.s3_bucket, path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
@@ -246,6 +289,7 @@ def validate_output(args: Args):
     if args.skip_sorting or args.skip_output:
         return
     parts = load_manifest(args, kind="output")
+    assert len(parts) == args.num_reducers, (len(parts), args)
     results = []
     for part in parts:
         opt = ray_utils.node_res(part.node) if part.node else {}

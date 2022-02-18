@@ -25,8 +25,10 @@ FILENAME_FMT = {
 }
 FILEPATH_FMT = "{prefix}/{kind}/{filename}"
 SHARD_FMT = "{shard:04x}"
+SHM_PATH = "/dev/shm/raysort"
 
 # S3
+S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024
 S3_SHARD_NUMBER = 16**2  # 256, must be power of 16
 S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 
