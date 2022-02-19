@@ -16,7 +16,9 @@ jobs:
       WANDB_MODE: offline
     steps:
       - name: Mount tmpfs
-        run: sudo mount -t tmpfs tmpfs /mnt/tmpfs
+        run: |
+          sudo mkdir /mnt/tmpfs
+          sudo mount -t tmpfs tmpfs /mnt/tmpfs
 
       - name: Checkout repository
         uses: actions/checkout@v2
