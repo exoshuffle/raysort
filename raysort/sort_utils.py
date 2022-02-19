@@ -298,7 +298,7 @@ def validate_output(args: Args):
     parts = load_manifest(args, kind="output")
     assert len(parts) == args.num_reducers, (len(parts), args)
     results = []
-    for pinfo in enumerate(parts):
+    for pinfo in parts:
         opt = (
             ray_utils.node_res(pinfo.node)
             if pinfo.node
