@@ -146,20 +146,6 @@ def init(args: Args):
 # ------------------------------------------------------------
 
 
-def _validate_input_manifest(args: Args) -> bool:
-    try:
-        parts = load_manifest(args)
-    except FileNotFoundError:
-        return False
-    logging.info("Found existing input manifest")
-    parts = parts[: args.num_mappers]
-    if len(parts) < args.num_mappers:
-        logging.warning("Too few input partitions in manifest")
-        return False
-    logging.info("Validated manifest, skipping generating input")
-    return True
-
-
 def part_info(args: Args, part_id: PartId, *, kind="input", s3=False) -> PartInfo:
     if s3:
         shard = part_id & constants.S3_SHARD_MASK
@@ -223,7 +209,7 @@ def generate_part(
 
 
 def generate_input(args: Args):
-    if args.skip_input or _validate_input_manifest(args):
+    if args.skip_input:
         return
     total_size = constants.bytes_to_records(args.total_data_size)
     size = constants.bytes_to_records(args.input_part_size)

@@ -54,6 +54,13 @@
         fstype: tmpfs
         state: mounted
 
+    - name: Set tmpfs permission
+      become: yes
+      file:
+        path: "{{tmpfs_path}}"
+        state: directory
+        mode: "777"
+
     - name: Clear temp directories
       become: yes
       file:
