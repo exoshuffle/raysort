@@ -12,6 +12,11 @@ jobs:
     env:
       WANDB_MODE: offline
     steps:
+      - name: Mount tmpfs
+        run: |
+          sudo mkdir /mnt/tmpfs
+          sudo mount -t tmpfs tmpfs /mnt/tmpfs
+
       - name: Checkout repository
         uses: actions/checkout@v2
 
@@ -30,20 +35,23 @@ jobs:
           pip install -e .
           pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 
+      - name: Install gensort binary dependencies
+        run: scripts/installers/install_binaries.sh gensort
+
       - name: 1GB simple shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --simple_shuffle --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --simple_shuffle --local
 
       - name: 1GB two stage shuffle with manual spilling
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --manual_spilling --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --manual_spilling --local
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local
 
       - name: 1GB Ray native shuffle with ray.put()
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --use_put --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --use_put --local
 
       - name: 1GB Ray native shuffle, Magnet version
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --magnet --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --magnet --local
 
       - name: 1GB Ray native shuffle, Riffle version
-        run: python raysort/main.py --total_gb=1.28 --input_part_size=10_000_000 --riffle --merge_factor=8 --skip_input --sort --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --riffle --merge_factor=8 --local

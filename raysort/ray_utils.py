@@ -13,6 +13,15 @@ from raysort.typing import Args
 local_cluster = None
 
 
+def node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+    assert node_ip is not None, node_ip
+    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+
+
+def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+    return node_res(args.worker_ips[node_i % args.num_workers], parallelism)
+
+
 def _fail_and_restart_local_node(args: Args):
     idx = int(args.fail_node)
     worker_node = list(local_cluster.worker_nodes)[idx]
@@ -127,7 +136,9 @@ def _build_cluster(
 def _get_data_dirs():
     mnt = "/mnt"
     if os.path.exists(mnt):
-        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("ebs")]
+        ret = [
+            os.path.join(mnt, d, "tmp") for d in os.listdir(mnt) if d.startswith("ebs")
+        ]
         if len(ret) > 0:
             return ret
     return [tempfile.gettempdir()]
@@ -181,6 +192,6 @@ def init(args: Args):
     if args.local:
         cluster = _init_local_cluster(args)
     else:
-        ray.init()
+        ray.init(address="auto")
     _get_resources_args(args)
     return cluster

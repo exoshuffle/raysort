@@ -3,15 +3,17 @@
   strategy: free
   vars:
     data_disk: /dev/nvme1n1
-    ssd_device: /dev/nvme1n1p1
+    data_partition: /dev/nvme1n1p1
     mnt_path: /mnt/ebs0
+    tmpfs_path: /mnt/tmpfs
+    awsdir: ~/.aws
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
     hadoop_config_path: /opt/hadoop/etc/hadoop
     spark_config_path: /opt/spark/conf
   tasks:
-    - name: Create a new ext4 partition
+    - name: Create a partition table and a partition
       become: yes
       parted:
         device: "{{data_disk}}"
@@ -21,27 +23,45 @@
         name: data0
         fs_type: ext4
 
-    - name: Create filesystem on EBS disk
+    - name: Create a filesystem on the partition
       become: yes
       filesystem:
         fstype: ext4
-        dev: "{{ssd_device}}"
+        dev: "{{data_partition}}"
 
-    - name: Create mount directory
+    - name: Create mount points
       become: yes
       file:
-        path: "{{mnt_path}}"
+        path: "{{item}}"
         state: directory
+      loop:
+        - "{{mnt_path}}"
+        - "{{tmpfs_path}}"
 
-    - name: Mount EBS disk
+    - name: Mount the data disk
       become: yes
       mount:
         path: "{{mnt_path}}"
-        src: "{{ssd_device}}"
+        src: "{{data_partition}}"
         fstype: ext4
         state: mounted
 
-    - name: Clear EBS temp directory
+    - name: Mount tmpfs
+      become: yes
+      mount:
+        path: "{{tmpfs_path}}"
+        src: tmpfs
+        fstype: tmpfs
+        state: mounted
+
+    - name: Set tmpfs permission
+      become: yes
+      file:
+        path: "{{tmpfs_path}}"
+        state: directory
+        mode: "777"
+
+    - name: Clear temp directories
       become: yes
       file:
         path: "{{mnt_path}}/tmp"
@@ -50,6 +70,13 @@
       loop:
         - absent
         - directory
+
+    - name: Sync aws directory
+      synchronize:
+        src: "{{awsdir}}/"
+        dest: "{{awsdir}}"
+        delete: yes
+        recursive: yes
 
     - name: Sync workdir
       synchronize:
@@ -79,7 +106,7 @@
       loop:
         - hard
         - soft
-    
+
     - name: Check Hadoop files exist
       local_action: stat path={{hadoop_config_path}}
       register: hadoop

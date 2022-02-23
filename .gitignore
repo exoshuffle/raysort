@@ -1,4 +1,5 @@
 *.backup
+*.csv
 *.egg-info
 *.log
 *.pdf
