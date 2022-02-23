@@ -324,7 +324,6 @@ def json_dump_no_space(data) -> str:
 def get_ray_start_cmd(s3_spill: bool) -> Tuple[str, Dict]:
     system_config = {}
     if s3_spill:
-        # uris = [RAY_S3_SPILL_PATH + f"/{i}" for i in range(10)]
         system_config.update(
             **{
                 "object_spilling_config": json_dump_no_space(
