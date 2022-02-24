@@ -1,0 +1,14 @@
+---
+- hosts: all
+  strategy: free
+  tasks:
+    - name: Remove incorrect partition line
+      become: yes
+      ansible.builtin.lineinfile: 
+        dest: /etc/fstab
+        line: '/dev/nvme0n1p1 /mnt/nvme0 ext4 defaults 0 0'
+        state: absent
+
+    - name: Reboot
+      become: yes
+      reboot:

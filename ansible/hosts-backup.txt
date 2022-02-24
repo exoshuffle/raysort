@@ -1,0 +1,20 @@
+
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+ff02::3 ip6-allhosts
+
+172.31.60.72 dn1
+172.31.60.118 dn2
+172.31.48.180 dn3
+172.31.58.64 dn4
+172.31.62.70 dn5
+172.31.50.163 dn6
+172.31.54.13 dn7
+172.31.50.125 dn8
+

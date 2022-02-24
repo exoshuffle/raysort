@@ -1,0 +1,127 @@
+---
+- hosts: all
+  strategy: free
+  vars:
+    data_disk: /dev/nvme1n1
+    hdd_device: /dev/nvme1n1p1
+    mnt_path: /mnt/nvme0
+    workdir: ~/raysort
+    pythondir: ~/miniconda3/envs/raysort/bin
+    hosts_path: /etc/hosts
+    hadoop_config_path: /opt/hadoop/etc/hadoop
+    spark_config_path: /opt/spark/conf
+  tasks:
+    - name: Create a new ext4 partition
+      become: yes
+      parted:
+        device: "{{data_disk}}"
+        number: 1
+        state: present
+        label: gpt
+        name: data0
+        fs_type: ext4
+
+    - name: Create filesystem on nvme
+      become: yes
+      filesystem:
+        fstype: ext4
+        dev: "{{hdd_device}}"
+
+    - name: Create mount directory
+      become: yes
+      file:
+        path: "{{mnt_path}}"
+        state: directory
+
+    - name: Mount nvme
+      become: yes
+      mount:
+        path: "{{mnt_path}}"
+        src: "{{hdd_device}}"
+        fstype: ext4
+        state: mounted
+
+    - name: Clear nvme temp directory
+      become: yes
+      file:
+        path: "{{mnt_path}}/tmp"
+        state: "{{item}}"
+        mode: "777"
+      with_items:
+        - absent
+        - directory
+
+
+    - name: Sync hosts file
+      become: yes
+      copy:
+        src: "{{hosts_path}}"
+        dest: "{{hosts_path}}"
+
+    # TODO: figure out how to get local_action to automatically modify files
+    # - name: Set Hadoop file
+    #   local_action:
+    #     community.general.xml:
+    #       path: "{{hadoop_config_path}}/core-site.xml"
+    #       xpath: /configuration/property[2]/value
+    #       value: /tmp/hadoop
+      # delegate_to: 127.0.0.1
+      # copy:
+      #   src: "{{hosts_path}}"
+      #   dest: "{{hosts_path}}"
+
+      # local_action:
+      #   community.general.xml:
+      #     path: "{{hadoop_config_path}}/core-site.xml"
+      #     xpath: /configuration/property[2]/value
+      #     value: /tmp/hadoop
+
+    - name: Copy Hadoop core-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/core-site.xml"
+        dest: "{{hadoop_config_path}}/core-site.xml"
+
+    - name: Copy Hadoop yarn-site.xml
+      copy:
+        src: "{{hadoop_config_path}}/yarn-site.xml"
+        dest: "{{hadoop_config_path}}/yarn-site.xml"
+
+    - name: Copy Spark spark-defaults.conf
+      copy:
+        src: "{{spark_config_path}}/spark-defaults.conf"
+        dest: "{{spark_config_path}}/spark-defaults.conf"
+
+    - name: Sync workdir
+      synchronize:
+        src: "{{workdir}}/"
+        dest: "{{workdir}}"
+        delete: yes
+        recursive: yes
+        rsync_opts:
+          - --exclude=.git
+          - --exclude=data
+
+    - name: Install Python dependencies
+      shell: "{{pythondir}}/pip install -Ur {{workdir}}/requirements/worker.txt"
+
+    - name: Install project packages
+      shell: |
+        cd {{workdir}} && {{pythondir}}/pip install -e .
+        cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
+
+    - name: Set soft and hard ulimit
+      become: yes
+      community.general.pam_limits:
+        domain: "*"
+        limit_type: "{{item}}"
+        limit_item: nofile
+        value: 65535
+      with_items:
+        - hard
+        - soft
+
+    - name: Start Node Exporter
+      shell: >
+        nohup
+        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        --web.listen-address 0.0.0.0:8091 &

@@ -17,6 +17,9 @@ flags.DEFINE_enum(
     ["aws", "azure", "aws_spark"],
     "which cloud is the cluster on",
 )
+flags.DEFINE_enum(
+    "storage", "", ["", "nvme", "hdd"], "type of storage the cluster uses"
+)
 flags.DEFINE_string(
     "subscription",
     "aa86df77-e703-453e-b2f4-955c3b33e534",
@@ -52,14 +55,14 @@ def run_json(cmd, **kwargs):
 
 def get_vmss_ips() -> List[str]:
     if FLAGS.cloud == "aws" or FLAGS.cloud == "aws_spark":
-        return get_aws_vmss_ips(FLAGS.cloud)
+        return get_aws_vmss_ips(FLAGS.cloud, FLAGS.storage)
     elif FLAGS.cloud == "azure":
         return get_azure_vmss_ips()
     assert False, FLAGS
 
 
-def get_aws_vmss_ips(cloud: str) -> List[str]:
-    terraform_cwd = pathlib.Path(__file__).parent.parent / "terraform" / cloud
+def get_aws_vmss_ips(cloud: str, storage: str) -> List[str]:
+    terraform_cwd = pathlib.Path(__file__).parent.parent / "terraform" / cloud / storage
     out = run_output("terraform output", cwd=terraform_cwd)
     out = out.split(" = ")[1]
     ret = ast.literal_eval(out)
@@ -120,7 +123,7 @@ def get_inventory_content(node_ips):
 
 
 def write_inventory_file(content):
-    path = f"{SCRIPT_DIR}/_{FLAGS.cloud}.yml"
+    path = f"{SCRIPT_DIR}/_{FLAGS.cloud}_{FLAGS.storage}.yml"
     with open(path, "w") as fout:
         fout.write(content)
 

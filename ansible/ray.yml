@@ -6,23 +6,33 @@
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
-    - name: Clear nvme temp directory
-      become: yes
-      file:
-        path: "{{mnt_path}}/tmp"
-        state: "{{ item }}"
-        mode: "777"
-      with_items:
-        - absent
-        - directory
+    # - name: Clear nvme temp directory
+    #   become: yes
+    #   file:
+    #     path: "{{mnt_path}}/tmp"
+    #     state: "{{ item }}"
+    #     mode: "777"
+    #   with_items:
+    #     - absent
+    #     - directory
 
-    - name: Restart Ray
+    # - name: Restart Ray
+    #   shell: >
+    #     {{pythondir}}/ray stop -f &&
+    #     sleep 3 &&
+    #     nohup
+    #     {{pythondir}}/ray start
+    #     --address={{head_ip}}:6379
+    #     --object-manager-port=8076
+    #     --metrics-export-port=8090
+    #     --resources='{"worker":1}'
+    #     --object-store-memory={{28 * 1024 * 1024 * 1024}}
+    
+    # - name: Start Node Expocrter
+    #   shell: >
+    #     nohup
+    #     {{workdir}}/raysort/bin/node_exporter/node_exporter
+    #     --web.listen-address 0.0.0.0:8091 &
+    - name: Stop Ray
       shell: >
-        {{pythondir}}/ray stop -f &&
-        nohup
-        {{pythondir}}/ray start
-        --address={{head_ip}}:6379
-        --object-manager-port=8076
-        --metrics-export-port=8090
-        --resources='{"worker":1}'
-        --object-store-memory={{28 * 1024 * 1024 * 1024}}
+        {{pythondir}}/ray stop -f

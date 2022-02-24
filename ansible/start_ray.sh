@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 CLOUD=aws
+STORAGE=hdd
 PROM_DATA_PATH=/tmp/prom_data
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 TMP_DIR=/mnt/nvme0/tmp
@@ -20,7 +21,7 @@ ray start --head --port=6379 \
     # --system-config='{"send_unpin":true,"object_spilling_threshold":1,"object_spilling_config":"{\"type\":\"filesystem\",\"params\":{\"directory_path\":[\"/mnt/nvme0/tmp/ray\"]}}"}'
 
 HEAD_IP=$(ec2metadata --local-ipv4)
-ansible-playbook -f $(($(nproc) * 4)) "$SCRIPT_DIR/ray.yml" -i "$SCRIPT_DIR/_$CLOUD.yml" --extra-vars "{\"head_ip\":\"$HEAD_IP\"}"
+ansible-playbook -f $(($(nproc) * 4)) "$SCRIPT_DIR/ray.yml" -i "$SCRIPT_DIR/_${CLOUD}_${STORAGE}.yml" --extra-vars "{\"head_ip\":\"$HEAD_IP\"}"
 sleep 3
 
 pkill -9 prometheus || true
