@@ -69,11 +69,11 @@ def consume_one_by_one(args, refs):
     task = None
     for t in tqdm.tqdm(range(args.num_tasks)):
         if task is not None:
-            print(ray.get(task))
+            ray.get(task)
         task = consume.remote(
             *refs[t * args.num_objects_per_task : (t + 1) * args.num_objects_per_task]
         )
-    print(ray.get(task))
+    ray.get(task)
 
 
 @tracing_utils.timeit("consume_all")
@@ -111,6 +111,7 @@ def microbenchmark(args):
 
     logging.info("Consume")
     consume_one_by_one(args, refs)
+    # consume_all(args, refs)
 
 
 def init_ray(args):
