@@ -83,8 +83,8 @@ def run_ansible_playbook(
     playbook: str,
     *,
     vars: Dict[str, str] = {},
-    retries: int = 10,
-    time_between_retries: float = 30,
+    retries: int = 1,
+    time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
     if not playbook.endswith(".yml"):
         playbook += ".yml"
@@ -311,7 +311,8 @@ def common_setup(cluster_name: str) -> pathlib.Path:
         update_workers_file(ips)
         # TODO: Update core-site.xml and yarn-site.xml with head node IP
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    run_ansible_playbook(inventory_path, "setup_aws")
+    sleep(30, "worker nodes starting up")
+    run_ansible_playbook(inventory_path, "setup_aws", retries=10)
     setup_prometheus(ips + [head_ip])
     setup_grafana()
     return inventory_path
@@ -375,7 +376,7 @@ def restart_ray(
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
     }
-    run_ansible_playbook(inventory_path, "ray", vars=vars, retries=1)
+    run_ansible_playbook(inventory_path, "ray", vars=vars)
     sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
