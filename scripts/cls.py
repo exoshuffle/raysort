@@ -50,7 +50,7 @@ def run(
     *,
     echo: bool = True,
     retries: int = 0,
-    time_between_retries: float = 10,
+    time_between_retries: float = 30,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     if echo:
