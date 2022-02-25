@@ -22,13 +22,13 @@ def get_args(*args, **kwargs):
     parser.add_argument(
         "--num_objects",
         default=16000,  # 1MB
+        # default=16000 * 2,  # 500KB
         # default=16000 * 10,  # 100KB
-        # default=16000 * 20,  # 50KB
         type=int,
     )
     parser.add_argument(
         "--num_objects_per_task",
-        default=100,
+        default=200,
         type=int,
     )
     parser.add_argument(
@@ -51,7 +51,7 @@ def get_args(*args, **kwargs):
         default=False,
         action="store_true",
     )
-    args = parser.parse_args(args, **kwargs)
+    args = parser.parse_args(*args, **kwargs)
     args.object_size = args.total_data_size // args.num_objects
     args.num_tasks = args.num_objects // args.num_objects_per_task
     assert args.object_size * args.num_objects_per_task < args.object_store_memory, args
