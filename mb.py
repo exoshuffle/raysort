@@ -28,7 +28,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--num_objects_per_task",
-        default=200,
+        default=100,
         type=int,
     )
     parser.add_argument(
@@ -58,13 +58,18 @@ def get_args(*args, **kwargs):
     return args
 
 
+def drop_cache():
+    logging.info("Dropping filesystem cache")
+    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+
+
 @ray.remote
 def consume(*xs):
     time.sleep(1)
     return sum(x.size for x in xs)
 
 
-@tracing_utils.timeit("consume_all")
+@tracing_utils.timeit("consume_one_by_one")
 def consume_one_by_one(args, refs):
     task = None
     for t in tqdm.tqdm(range(args.num_tasks)):
@@ -98,6 +103,7 @@ def produce_all(args):
     for i in tqdm.tqdm(range(args.num_objects)):
         obj = np.full(args.object_size, i % 256, dtype=np.uint8)
         refs.append(ray.put(obj))
+    drop_cache()
     return refs
 
 
@@ -106,12 +112,10 @@ def microbenchmark(args):
     logging.info("Produce")
     refs = produce_all(args)
 
-    logging.info("Dropping filesystem cache")
-    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
-
     logging.info("Consume")
     consume_one_by_one(args, refs)
-    # consume_all(args, refs)
+    drop_cache()
+    consume_all(args, refs)
 
 
 def init_ray(args):
