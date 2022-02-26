@@ -1,5 +1,3 @@
-import itertools
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -38,6 +36,7 @@ plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 sns.set_theme(style="ticks")
 sns.set_palette("Set2")
+sns.set(font_scale=1)
 
 
 def get_microbenchmark():
@@ -226,7 +225,7 @@ def get_data_ft():
 
 
 # https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
-def get_data_small():
+def get_data_ssd():
     df = pd.DataFrame(
         [
             ["Ray-simple", "2GB", 758.968],
@@ -248,11 +247,10 @@ def get_data_small():
         columns=["version", "partition_size", "time"],
     )
     theoretical = [813.802]
-    figname = "shuffle_comparison"
     return (
         df,
         theoretical,
-        figname,
+        "shuffle_comparison",
         "version",
         "time",
         "partition_size",
@@ -263,34 +261,38 @@ def get_data_small():
     )
 
 
-def get_data_large():
+def get_data_nvme():
     df = pd.DataFrame(
         [
-            ["Spark", "10TB", 3140.228 / SECS_PER_HR],
-            ["Ray-opt", "10TB", 1469.88 / SECS_PER_HR],
-            ["Spark", "50TB", 0 / SECS_PER_HR],
-            ["Ray-opt", "50TB", 8042.029 / SECS_PER_HR],
-            ["Spark", "100TB", 0 / SECS_PER_HR],
-            ["Ray-opt", "100TB", 15593.347 / SECS_PER_HR],
+            ["Ray-simple", "2GB", 392.003],
+            ["Ray-simple", "0.5GB", 609.277],
+            ["Ray-simple", "0.1GB", 0],
+            ["Ray-Riffle", "2GB", 482.203],
+            ["Ray-Riffle", "0.5GB", 489.848],
+            ["Ray-Riffle", "0.1GB", 0],
+            ["Ray-Magnet", "2GB", 415.271],
+            ["Ray-Magnet", "0.5GB", 461.591],
+            ["Ray-Magnet", "0.1GB", 557.691],
+            ["Ray-Cosco", "2GB", 378.239],
+            ["Ray-Cosco", "0.5GB", 399.196],
+            ["Ray-Cosco", "0.1GB", 511.533],
+            ["Spark", "2GB", 833.298],
+            ["Spark", "0.5GB", 846.917],
+            ["Spark", "0.1GB", 861.462],
         ],
-        columns=["version", "data_size", "time"],
+        columns=["version", "partition_size", "time"],
     )
-    theoretical = [
-        1271.566 / SECS_PER_HR,
-        6357.829 / SECS_PER_HR,
-        12715.658 / SECS_PER_HR,
-    ]
-    figname = "shuffle_comparison_large"
+    theoretical = [339.084]
     return (
         df,
         theoretical,
-        figname,
-        "data_size",
-        "time",
+        "shuffle_comparison_nvme",
         "version",
+        "time",
+        "partition_size",
+        "Partition Size",
         "",
-        "Total Data Size",
-        "Job Completion Time (h)",
+        "Job Completion Time (s)",
         None,
     )
 
@@ -355,5 +357,5 @@ def plot(
     g.savefig(filename)
 
 
-for data in [get_data_small(), get_data_ft(), get_obj_fusion_time()]:
+for data in [get_data_ssd(), get_data_nvme(), get_data_ft(), get_obj_fusion_time()]:
     plot(*data)
