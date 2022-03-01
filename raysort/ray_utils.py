@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import socket
@@ -10,6 +11,15 @@ from ray import cluster_utils
 from raysort.typing import Args
 
 local_cluster = None
+
+
+def node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+    assert node_ip is not None, node_ip
+    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+
+
+def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+    return node_res(args.worker_ips[node_i % args.num_workers], parallelism)
 
 
 def _fail_and_restart_local_node(args: Args):
@@ -126,7 +136,9 @@ def _build_cluster(
 def _get_data_dirs():
     mnt = "/mnt"
     if os.path.exists(mnt):
-        ret = [os.path.join(mnt, d) for d in os.listdir(mnt) if d.startswith("ebs")]
+        ret = [
+            os.path.join(mnt, d, "tmp") for d in os.listdir(mnt) if d.startswith("ebs")
+        ]
         if len(ret) > 0:
             return ret
     return [tempfile.gettempdir()]
@@ -137,7 +149,7 @@ def _get_resources_args(args: Args):
     logging.info(f"Cluster resources: {resources}")
     assert (
         "worker" in resources
-    ), "Ray cluster is not set up correctly: no worker resources"
+    ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"
     args.num_workers = int(resources["worker"])
     head_node_str = "node:" + ray.util.get_node_ip_address()
     args.worker_ips = [
@@ -152,22 +164,34 @@ def _get_resources_args(args: Args):
     args.node_objmem = resources["object_store_memory"] / args.num_nodes
 
 
-def _init_local_cluster():
+def _init_local_cluster(args: Args):
     system_config = {}
-    if os.path.exists("/mnt/ebs0/tmp"):
-        system_config.update(
-            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
-        )
+    if args.spill_path:
+        if "://" in args.spill_path:
+            system_config.update(
+                object_spilling_config=json.dumps(
+                    {"type": "smart_open", "params": {"uri": args.spill_path}},
+                )
+            )
+        else:
+            system_config.update(
+                object_spilling_config=json.dumps(
+                    {
+                        "type": "filesystem",
+                        "params": {"directory_path": args.spill_path},
+                    },
+                )
+            )
     num_nodes = os.cpu_count() // 2
     cluster = _build_cluster(system_config, num_nodes)
     return cluster
 
 
 def init(args: Args):
-    if args.ray_address:
-        ray.init(address=args.ray_address)
-        cluster = None
+    cluster = None
+    if args.local:
+        cluster = _init_local_cluster(args)
     else:
-        cluster = _init_local_cluster()
+        ray.init(address="auto")
     _get_resources_args(args)
     return cluster

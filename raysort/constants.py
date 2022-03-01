@@ -16,20 +16,21 @@ GENSORT_PATH = os.path.join(__DIR__, "bin/gensort/64/gensort")
 VALSORT_PATH = os.path.join(__DIR__, "bin/gensort/64/valsort")
 
 # Filenames
-WORK_DIR = "/tmp/raysort"
 RAY_SYSTEM_CONFIG_FILE = "_ray_config.yml"
-INPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "input-manifest.csv")
-OUTPUT_MANIFEST_FILE = os.path.join(WORK_DIR, "output-manifest.csv")
-DATA_DIR_FMT = {
-    "input": "{dir}/tmp/input/",
-    "output": "{dir}/tmp/output/",
-    "temp": "{dir}/tmp/temp/",
-}
+MANIFEST_FMT = "{kind}-manifest-{suffix}.csv"
 FILENAME_FMT = {
     "input": "input-{part_id:010x}",
     "output": "output-{part_id:010x}",
     "temp": "temp-{part_id:010x}",
 }
+FILEPATH_FMT = "{prefix}/{kind}/{filename}"
+SHARD_FMT = "{shard:04x}"
+TMPFS_PATH = "/mnt/tmpfs/raysort"
+
+# S3
+S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024
+S3_SHARD_NUMBER = 16**2  # 256, must be power of 16
+S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 
 # Prometheus config
 PROM_RAY_EXPORTER_PORT = 8090

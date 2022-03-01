@@ -10,12 +10,6 @@ STEPS = ["generate_input", "sort", "validate_output"]
 def get_args(*args, **kwargs):
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--ray_address",
-        default="auto",
-        type=str,
-        help="if set to None, will launch a local Ray cluster",
-    )
-    parser.add_argument(
         "--total_gb",
         default=1,
         type=float,
@@ -118,10 +112,22 @@ def get_args(*args, **kwargs):
         help="if set, will run Riffle-style map-side merge",
     )
     parser.add_argument(
-        "--repeat_sort",
-        default=1,
-        type=int,
-        help="how many times to run the sort for benchmarking",
+        "--s3_bucket",
+        default=None,
+        type=str,
+        help="if set, will use this S3 bucket for input and output data",
+    )
+    parser.add_argument(
+        "--local",
+        default=False,
+        action="store_true",
+        help="if set, will use a locally emulated Ray cluster",
+    )
+    parser.add_argument(
+        "--spill_path",
+        default=None,
+        type=str,
+        help="[only used in local cluster setup] can be a local path or S3",
     )
     parser.add_argument(
         "--fail_node",

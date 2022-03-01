@@ -23,6 +23,7 @@ ANSIBLE_DIR = "config/ansible"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
+RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray"
 
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
@@ -49,7 +50,7 @@ def run(
     *,
     echo: bool = True,
     retries: int = 0,
-    time_between_retries: float = 10,
+    time_between_retries: float = 30,
     **kwargs,
 ) -> subprocess.CompletedProcess:
     if echo:
@@ -82,8 +83,8 @@ def run_ansible_playbook(
     playbook: str,
     *,
     vars: Dict[str, str] = {},
-    retries: int = 10,
-    time_between_retries: float = 30,
+    retries: int = 1,
+    time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
     if not playbook.endswith(".yml"):
         playbook += ".yml"
@@ -310,7 +311,8 @@ def common_setup(cluster_name: str) -> pathlib.Path:
         update_workers_file(ips)
         # TODO: Update core-site.xml and yarn-site.xml with head node IP
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    run_ansible_playbook(inventory_path, "setup_aws")
+    sleep(30, "worker nodes starting up")
+    run_ansible_playbook(inventory_path, "setup_aws", retries=10)
     setup_prometheus(ips + [head_ip])
     setup_grafana()
     return inventory_path
@@ -320,15 +322,27 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd() -> Tuple[str, Dict]:
-    system_config = {
-        "object_spilling_config": json_dump_no_space(
-            {
-                "type": "filesystem",
-                "params": {"directory_path": [f"{EBS_MNT}/ray"]},
-            },
-        ),
-    }
+def get_ray_start_cmd(s3_spill: bool) -> Tuple[str, Dict]:
+    system_config = {}
+    if s3_spill:
+        system_config.update(
+            **{
+                "object_spilling_config": json_dump_no_space(
+                    {"type": "smart_open", "params": {"uri": RAY_S3_SPILL_PATH}}
+                ),
+            }
+        )
+    else:
+        system_config.update(
+            **{
+                "object_spilling_config": json_dump_no_space(
+                    {
+                        "type": "filesystem",
+                        "params": {"directory_path": [f"{EBS_MNT}/ray"]},
+                    },
+                ),
+            }
+        )
     system_config_str = json_dump_no_space(system_config)
     resources = json_dump_no_space({"head": 1})
     cmd = "ray start --head"
@@ -345,12 +359,15 @@ def write_ray_system_config(config: Dict, path: str) -> None:
 
 
 def restart_ray(
-    inventory_path: pathlib.Path, clear_input_dir: bool, reinstall_ray: bool
+    inventory_path: pathlib.Path,
+    clear_input_dir: bool,
+    reinstall_ray: bool,
+    s3_spill: bool,
 ) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
     run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
     run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd()
+    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill)
     run(ray_cmd)
     vars = {
         "head_ip": head_ip,
@@ -359,7 +376,7 @@ def restart_ray(
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
     }
-    run_ansible_playbook(inventory_path, "ray", vars=vars, retries=1)
+    run_ansible_playbook(inventory_path, "ray", vars=vars)
     sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
@@ -411,6 +428,12 @@ def setup_command_options(cli_fn):
             is_flag=True,
             help="whether to reinstall Ray nightly",
         ),
+        click.option(
+            "--s3_spill",
+            default=False,
+            is_flag=True,
+            help="whether to ask Ray to spill to S3",
+        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -425,7 +448,12 @@ def cli():
 
 @setup_command_options
 def up(
-    cluster_name: str, ray: bool, yarn: bool, clear_input_dir: bool, reinstall_ray: bool
+    cluster_name: str,
+    ray: bool,
+    yarn: bool,
+    clear_input_dir: bool,
+    reinstall_ray: bool,
+    s3_spill: bool,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
@@ -434,7 +462,7 @@ def up(
     terraform_provision(cluster_name)
     inventory_path = common_setup(cluster_name)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill)
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)
@@ -442,10 +470,10 @@ def up(
 
 @setup_command_options
 @click.option(
-    "--common",
+    "--no-common",
     default=False,
     is_flag=True,
-    help="whether to perform common setup (file sync, etc)",
+    help="whether to skip common setup (file sync, mounts, etc)",
 )
 def setup(
     cluster_name: str,
@@ -453,14 +481,15 @@ def setup(
     yarn: bool,
     clear_input_dir: bool,
     reinstall_ray: bool,
-    common: bool,
+    s3_spill: bool,
+    no_common: bool,
 ):
-    if common:
-        inventory_path = common_setup(cluster_name)
-    else:
+    if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
+    else:
+        inventory_path = common_setup(cluster_name)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill)
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)
