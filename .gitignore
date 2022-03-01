@@ -6,6 +6,7 @@
 *.so
 *.tfstate
 .gdb_history
+.ipynb_checkpoints
 .vscode
 .DS_Store
 __pycache__
