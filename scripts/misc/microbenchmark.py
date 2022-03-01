@@ -23,6 +23,7 @@ def get_args(*args, **kwargs):
         "--num_objects",
         default=16000,  # 1MB
         # default=16000 * 2,  # 500KB
+        # default=16000 * 5,  # 200KB
         # default=16000 * 10,  # 100KB
         type=int,
     )
@@ -112,10 +113,12 @@ def microbenchmark(args):
     logging.info("Produce")
     refs = produce_all(args)
 
-    logging.info("Consume")
-    consume_one_by_one(args, refs)
-    drop_cache()
-    consume_all(args, refs)
+    if not args.no_fusing:
+        # Skip consume if we're running no-fusing.
+        logging.info("Consume")
+        consume_one_by_one(args, refs)
+        drop_cache()
+        consume_all(args, refs)
 
 
 def init_ray(args):
