@@ -21,7 +21,7 @@ install_gensort() {
 
 install_grafana() {
     DIR=$BIN_DIR/grafana
-    APP=grafana-8.3.6
+    APP=grafana-8.4.3
     mkdir -p $DIR
     pushd $DIR
     TARFILE=$APP.linux-amd64.tar.gz
@@ -47,15 +47,15 @@ _install_github_binary() {
 }
 
 install_prometheus() {
-    _install_github_binary prometheus prometheus 2.31.1 .
+    _install_github_binary prometheus prometheus 2.33.4 .
 }
 
 install_node_exporter() {
-    _install_github_binary prometheus node_exporter 1.3.0 .
+    _install_github_binary prometheus node_exporter 1.3.1 .
 }
 
 install_jaeger() {
-    _install_github_binary jaegertracing jaeger 1.22.0 -
+    _install_github_binary jaegertracing jaeger 1.31.0 -
 }
 
 cleanup() {

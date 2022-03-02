@@ -6,6 +6,7 @@ If you created your VM using the `raysort-general` image, you should already hav
 
 ```
 conda create -n raysort python=3.9.7
+conda activate raysort
 pip install -Ur requirements/dev.txt
 pip install -Ur requirements/worker.txt
 pip install -e .
