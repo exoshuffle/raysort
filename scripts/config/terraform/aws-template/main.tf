@@ -13,7 +13,7 @@ provider "aws" {
 }
 
 resource "aws_instance" "cluster" {
-  count = 1
+  count = 8
 
   ami           = "ami-0da5da6db44aaf267" # raysort-hadoop-spark-conda
   instance_type = "r6i.2xlarge"

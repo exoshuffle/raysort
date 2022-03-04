@@ -16,6 +16,11 @@
       shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
       when: reinstall_ray
 
+    - name: Enable multiple s3 directories
+      copy:
+        src: ~/raysort/raysort/external_storage.py
+        dest: /home/ubuntu/miniconda3/envs/raysort/lib/python3.9/site-packages/ray/external_storage.py
+
     - name: Clear tmpfs
       file:
         path: "{{tmpfs_path}}/raysort"
