@@ -24,7 +24,7 @@ ANSIBLE_DIR = "config/ansible"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
-RAY_S3_SPILL_PATH = ["s3://multi-1/dir-{}".format(i) for i in range(NUM_S3_PATHS)]
+RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray/dir-0" # ["s3://multi-1/dir-{}".format(i) for i in range(NUM_S3_PATHS)]
 
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091

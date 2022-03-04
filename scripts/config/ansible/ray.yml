@@ -18,7 +18,7 @@
 
     - name: Enable multiple s3 directories
       copy:
-        src: ~/raysort/raysort/external_storage.py
+        src: /home/ubuntu/raysort/raysort/external_storage.py
         dest: /home/ubuntu/miniconda3/envs/raysort/lib/python3.9/site-packages/ray/external_storage.py
 
     - name: Clear tmpfs
