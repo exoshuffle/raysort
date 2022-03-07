@@ -4,7 +4,9 @@ import pandas as pd
 import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
-fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
+# Get fig_width_pt from LaTeX using \the\columnwidth
+# fig_width_pt = 241.14749  # SIGCONF (SIGCOMM)
+fig_width_pt = 241.02039  # USENIX (NSDI)
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
@@ -35,52 +37,18 @@ plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 sns.set_theme(style="ticks")
-sns.set_palette("Set2")
 sns.set(font_scale=1)
 
 
-def get_microbenchmark():
-    columns = ["settings", "operation", "time"]
-    # Data may not be correct.
-    df = pd.DataFrame(
-        [
-            ["Ray-default", "10 MB", 118.567094],
-            ["Ray-default", "100 KB", 141.655059],
-            ["Ray-default", "10 MB", 52.182254],
-            ["Ray-default", "1 MB", 100],
-            ["Ray-default", "100 KB", 100],
-            ["Ray-default", "10 KB", 100],
-            ["Ray-fusing-off", "10 MB", 118.547842],
-            ["Ray-fusing-off", "100 KB", 214.00119],
-            ["Ray-fusing-off", "10 MB", 52.228644],
-            ["Ray-fusing-off", "1 MB", 53.304679],
-            ["Ray-fusing-off", "100 KB", 59.523472],
-            ["Ray-fusing-off", "10 KB", 586],
-            ["Ray-prefetching-off", "Read", 0],
-            ["Ray-prefetching-off", "Write", 0],
-            ["Ray-prefetching-off", "10 MB", 130],
-            ["Ray-prefetching-off", "1 MB", 130],
-            ["Ray-prefetching-off", "0.1 MB", 130],
-        ],
-        columns=columns,
-    )
-    figname = "microbenchmark"
-    return (
-        df,
-        [],
-        figname,
-        columns[0],
-        columns[2],
-        columns[1],
-        "Block Size",
-        "",
-        "Run Time (s)",
-        None,
-        None,
-    )
+def lighten(c, amount=0.75):
+    import matplotlib.colors as mc
+    import colorsys
+
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
 
 
-def get_dask_comparison():
+def plot_dask_comparison():
     columns = ["data size", "setup", "time"]
     df = pd.DataFrame(
         [
@@ -104,7 +72,7 @@ def get_dask_comparison():
         columns=columns,
     )
     figname = "dask_on_ray_comp"
-    return (
+    return plot(
         df,
         [],
         figname,
@@ -114,24 +82,31 @@ def get_dask_comparison():
         "",
         "",
         "Job Completion Time (s)",
-        None,
-        None,
     )
 
 
-def get_obj_fusion_time():
+def plot_mb_all():
     columns = ["partition_size", "object_fusion", "time"]
     df = pd.DataFrame(
         [
-            #            ["1GB", "With fusion (default)", 0],
-            #            ["1GB", "Without fusion", 0],
-            ["2GB", "With fusion (default)", 758.968],
-            ["2GB", "Without fusion", 808.523],
+            ["100KB", "Write (default)", 185.589769],
+            ["100KB", "Write (no fusing)", 2352.518984],
+            ["100KB", "Read (default)", 812.961744],
+            ["100KB", "Read (no prefetching)", 1324.531656],
+            ["500KB", "Write (default)", 183.376729],
+            ["500KB", "Write (no fusing)", 454.441505],
+            ["500KB", "Read (default)", 206.52285],
+            ["500KB", "Read (no prefetching)", 371.689395],
+            ["1MB", "Write (default)", 182.478411],
+            ["1MB", "Write (no fusing)", 227.970836],
+            ["1MB", "Read (default)", 179.591311],
+            ["1MB", "Read (no prefetching)", 338.0764],
         ],
         columns=columns,
     )
-    figname = "obj_fusion_runtime"
-    return (
+    figname = "mb_all"
+    set2 = sns.color_palette("Set2")
+    return plot(
         df,
         [],
         figname,
@@ -139,65 +114,15 @@ def get_obj_fusion_time():
         columns[2],
         columns[1],
         "",
-        "",
-        "Job Completion Time (s)",
-        None,
-        28,
+        "Object Size",
+        "I/O Time (s)",
+        palette=sns.color_palette(
+            [set2[0], lighten(set2[0]), set2[1], lighten(set2[1])]
+        ),
     )
 
 
-def get_obj_fusion_throughput():
-    columns = ["partition_size", "object_fusion", "spill_throughput"]
-    df = pd.DataFrame(
-        [
-            #            ["1GB", "With fusion (default)", 0],
-            #            ["1GB", "Without fusion", 0],
-            ["2GB", "With fusion (default)", 1767],
-            ["2GB", "Without fusion", 1084],
-        ],
-        columns=columns,
-    )
-    figname = "obj_fusion_throughput"
-    return (
-        df,
-        [],
-        figname,
-        columns[0],
-        columns[2],
-        columns[1],
-        "",
-        "",
-        "Spill Throughput (MiB/s)",
-        None,
-        28,
-    )
-
-
-def get_pipelined_fetch():
-    columns = ["partition_size", "arg_pipelined", "runtime"]
-    df = pd.DataFrame(
-        [
-            ["2GB", "Pipelined (default)", 758.968],
-            ["2GB", "Not pipelined", 808.444],
-        ],
-        columns=columns,
-    )
-    figname = "arg_fetching"
-    return (
-        df,
-        [],
-        figname,
-        columns[0],
-        columns[2],
-        columns[1],
-        "Argument Fetching",
-        "",
-        "Job Completion Time (s)",
-        None,
-    )
-
-
-def get_data_ft():
+def plot_ft():
     df = pd.DataFrame(
         [
             ["Ray-Riffle", "No failure", 1002.35],
@@ -210,7 +135,7 @@ def get_data_ft():
         columns=["version", "fail_mode", "time"],
     )
     figname = "ft_comparison"
-    return (
+    return plot(
         df,
         [],
         figname,
@@ -220,12 +145,11 @@ def get_data_ft():
         "",
         "",
         "Job Completion Time (s)",
-        None,
     )
 
 
 # https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
-def get_data_ssd():
+def plot_ssd():
     df = pd.DataFrame(
         [
             ["Ray-simple", "2GB", 758.968],
@@ -247,7 +171,7 @@ def get_data_ssd():
         columns=["version", "partition_size", "time"],
     )
     theoretical = [813.802]
-    return (
+    return plot(
         df,
         theoretical,
         "shuffle_comparison",
@@ -257,11 +181,10 @@ def get_data_ssd():
         "Partition Size",
         "",
         "Job Completion Time (s)",
-        None,
     )
 
 
-def get_data_nvme():
+def plot_nvme():
     df = pd.DataFrame(
         [
             ["Ray-simple", "2GB", 392.003],
@@ -283,7 +206,7 @@ def get_data_nvme():
         columns=["version", "partition_size", "time"],
     )
     theoretical = [339.084]
-    return (
+    return plot(
         df,
         theoretical,
         "shuffle_comparison_nvme",
@@ -293,7 +216,6 @@ def get_data_nvme():
         "Partition Size",
         "",
         "Job Completion Time (s)",
-        None,
     )
 
 
@@ -307,7 +229,7 @@ def plot(
     legend_title,
     xtitle,
     ytitle,
-    palette,
+    palette="Set2",
     fontsize=None,
 ):
     if fontsize:
@@ -329,7 +251,7 @@ def plot(
         y=y,
         hue=hue,
         palette=palette,
-        height=3,
+        height=figheight,
         aspect=1 / golden_ratio,
     )
     fig = g.figure
@@ -357,5 +279,7 @@ def plot(
     g.savefig(filename)
 
 
-for data in [get_data_ssd(), get_data_nvme(), get_data_ft(), get_obj_fusion_time()]:
-    plot(*data)
+plot_ssd()
+plot_nvme()
+plot_ft()
+plot_mb_all()
