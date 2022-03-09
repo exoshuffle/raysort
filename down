@@ -1,0 +1,2 @@
+2022-03-08 08:56:42,306	INFO worker.py:852 -- Connecting to existing Ray cluster at address: 172.31.54.240:6379
+INFO 2022-03-08 08:56:42,627 ray_utils.py:149] Cluster resources: {'CPU': 72.0, 'node:172.31.48.34': 1.0, 'worker': 8.0, 'memory': 306564640768.0, 'object_store_memory': 250174859264.0, 'node:172.31.53.231': 1.0, 'node:172.31.56.245': 1.0, 'node:172.31.54.240': 1.0, 'head': 1.0, 'node:172.31.50.184': 1.0, 'node:172.31.60.77': 1.0, 'node:172.31.63.168': 1.0, 'node:172.31.57.40': 1.0, 'node:172.31.62.99': 1.0}

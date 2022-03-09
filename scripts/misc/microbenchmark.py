@@ -128,7 +128,7 @@ def init_ray(args):
     }
     if os.path.exists("/mnt/ebs0/tmp"):
         system_config.update(
-            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
+            object_spilling_config='{"type":"smart_open","params":{"uri":["/mnt/ebs0/tmp/ray", "/mnt/ebs0/tmp/ray2"]}}'
         )
     if args.no_fusing:
         system_config.update(

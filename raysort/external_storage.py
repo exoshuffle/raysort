@@ -405,18 +405,20 @@ class ExternalStorageSmartOpenImpl(ExternalStorage):
             uri = [uri]
         assert isinstance(uri, list), "uri must be a single string or list of strings."
         assert isinstance(buffer_size, int), "buffer_size must be an integer."
-        self._buffer_size = buffer_size
         
-        self._uris = [u.strip("/") for u in uri]
-        assert len(self._uris) == len(uri)
-        
-        s3 = [u.startswith("s3") for u in self._uris]
+        s3 = [u.startswith("s3") for u in uri]
         if (any(s3)):
             assert ( all(s3) ), "all uri's must be s3 or none can be s3."
         self.is_for_s3 = all(s3)
+        if self.is_for_s3:
+            self._uris = [u.strip("/") for u in uri]
+        else:
+            self._uris = uri
+        assert len(self._uris) == len(uri)
         self._current_uri_index = random.randrange(0, len(self._uris))
 
         self.prefix = prefix
+        self._buffer_size = buffer_size
         self.override_transport_params = override_transport_params or {}
 
         if self.is_for_s3:
