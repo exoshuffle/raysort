@@ -386,7 +386,7 @@ class ExternalStorageSmartOpenImpl(ExternalStorage):
         uri: str or list,
         prefix: str = DEFAULT_OBJECT_PREFIX,
         override_transport_params: dict = None,
-        buffer_size=1024*1024 # For remote spilling, at least 1MB is recommended.
+        buffer_size=50*1024*1024 # For remote spilling, at least 1MB is recommended.
     ):
         try:
             from smart_open import open  # noqa
@@ -431,6 +431,7 @@ class ExternalStorageSmartOpenImpl(ExternalStorage):
             # This will lead us to call a Object.get when it is not necessary,
             # so defer seek and call seek before reading objects instead.
             self.transport_params = {"defer_seek": True, "resource": self.s3, "buffer_size": self._buffer_size}
+            # self.transport_params = {"defer_seek": True, "resource": self.s3}
         else:
             self.transport_params = {}
 
@@ -449,6 +450,7 @@ class ExternalStorageSmartOpenImpl(ExternalStorage):
         first_ref = object_refs[0]
         key = f"{self.prefix}-{first_ref.hex()}-multi-{len(object_refs)}"
         url = f"{uri}/{key}"
+        #with open(url, mode="wb", transport_params=self.transport_params) as file_like:
         with open(url, mode="wb", buffering=self._buffer_size, transport_params=self.transport_params) as file_like:
             return self._write_multiple_objects(
                 file_like, object_refs, owner_addresses, url
