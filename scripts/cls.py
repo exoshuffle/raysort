@@ -23,7 +23,7 @@ ANSIBLE_DIR = "config/ansible"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
-RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray"
+RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray-{}"
 
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
@@ -322,13 +322,13 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd(s3_spill: bool) -> Tuple[str, Dict]:
+def get_ray_start_cmd(s3_spill: int) -> Tuple[str, Dict]:
     system_config = {}
-    if s3_spill:
+    if s3_spill > 0:
         system_config.update(
             **{
                 "object_spilling_config": json_dump_no_space(
-                    {"type": "smart_open", "params": {"uri": RAY_S3_SPILL_PATH}}
+                    {"type": "smart_open", "params": {"uri": [RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)]}}
                 ),
             }
         )
@@ -362,7 +362,7 @@ def restart_ray(
     inventory_path: pathlib.Path,
     clear_input_dir: bool,
     reinstall_ray: bool,
-    s3_spill: bool,
+    s3_spill: int,
 ) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
     run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
@@ -430,8 +430,9 @@ def setup_command_options(cli_fn):
         ),
         click.option(
             "--s3_spill",
-            default=False,
+            default=0,
             is_flag=True,
+            type=int,
             help="whether to ask Ray to spill to S3",
         ),
     ]
@@ -453,7 +454,7 @@ def up(
     yarn: bool,
     clear_input_dir: bool,
     reinstall_ray: bool,
-    s3_spill: bool,
+    s3_spill: int,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
@@ -481,7 +482,7 @@ def setup(
     yarn: bool,
     clear_input_dir: bool,
     reinstall_ray: bool,
-    s3_spill: bool,
+    s3_spill: int,
     no_common: bool,
 ):
     if no_common:
