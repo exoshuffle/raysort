@@ -8,13 +8,13 @@ import tempfile
 import time
 from typing import Iterable, List, Optional, Tuple
 
-import boto3
 import numpy as np
 import ray
 
 from raysort import constants
 from raysort import logging_utils
 from raysort import ray_utils
+from raysort import s3_utils
 from raysort import tracing_utils
 from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
@@ -46,56 +46,10 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
         return create_partition(args.input_part_size)
     if args.s3_bucket:
-        s3 = boto3.client("s3")
         buf = io.BytesIO()
-        s3.download_fileobj(args.s3_bucket, path, buf)
+        s3_utils.s3().download_fileobj(args.s3_bucket, path, buf)
         return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
     return np.fromfile(path, dtype=np.uint8)
-
-
-def _multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
-    s3 = boto3.client("s3")
-    mpu = s3.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
-    mpu_parts = []
-    mpu_part_id = 1
-
-    def upload_part(data):
-        nonlocal mpu_part_id
-        resp = s3.upload_part(
-            Body=data,
-            Bucket=args.s3_bucket,
-            Key=path,
-            PartNumber=mpu_part_id,
-            UploadId=mpu["UploadId"],
-        )
-        mpu_parts.append(
-            {
-                "ETag": resp["ETag"],
-                "PartNumber": mpu_part_id,
-            }
-        )
-        mpu_part_id += 1
-
-    tail = io.BytesIO()
-    for datachunk in merger:
-        if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
-            # There should never be large chunks once we start seeing
-            # small chunks towards the end.
-            assert tail.getbuffer().nbytes == 0
-            upload_part(datachunk.tobytes())
-        else:
-            tail.write(datachunk)
-
-    if tail.getbuffer().nbytes > 0:
-        tail.seek(0)
-        upload_part(tail)
-
-    s3.complete_multipart_upload(
-        Bucket=args.s3_bucket,
-        Key=path,
-        MultipartUpload={"Parts": mpu_parts},
-        UploadId=mpu["UploadId"],
-    )
 
 
 def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
@@ -113,7 +67,7 @@ def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None
                 )
             del datachunk
     elif args.s3_bucket:
-        _multipart_upload(args, path, merger)
+        s3_utils.multipart_upload(args, path, merger)
     else:
         with open(path, "wb", buffering=args.io_size) as fout:
             for datachunk in merger:
@@ -173,13 +127,6 @@ def _get_part_path(
     return os.path.join(prefix, kind, shard_str, filename)
 
 
-def _upload_s3(args: Args, src: Path, dst: Path, *, delete_src: bool = True) -> None:
-    s3 = boto3.client("s3")
-    s3.upload_file(src, args.s3_bucket, dst)
-    if delete_src:
-        os.remove(src)
-
-
 def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
     # gensort by default uses direct I/O unless `,buf` is specified.
     # tmpfs does not support direct I/O so we must disabled it.
@@ -203,7 +150,7 @@ def generate_part(
         path = pinfo.path
     _run_gensort(offset, size, path, args.s3_bucket)
     if args.s3_bucket:
-        _upload_s3(args, path, pinfo.path)
+        s3_utils.upload_s3(args, path, pinfo.path)
     logging.info(f"Generated input {pinfo}")
     return pinfo
 
@@ -267,9 +214,8 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 def validate_part(args: Args, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
     if args.s3_bucket:
-        s3 = boto3.client("s3")
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3.download_file(args.s3_bucket, pinfo.path, tmp_path)
+        s3_utils.s3().download_file(args.s3_bucket, pinfo.path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
