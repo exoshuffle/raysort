@@ -48,7 +48,7 @@ Notes:
 
 - `python scripts/cls.py up` launches a cluster via Terraform and configures it via Ansible. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
 - `python scripts/cls.py setup` skips Terraform and only runs Ansible for software setup. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
-- `python scripts/cls.py down` terminates the cluster via Terraform. Tip: when you're done for the day, run ``python scripts/cls.py down && sudo shutdown -h now` to terminate the cluster and stop your head node.
+- `python scripts/cls.py down` terminates the cluster via Terraform. Tip: when you're done for the day, run `python scripts/cls.py down && sudo shutdown -h now` to terminate the cluster and stop your head node.
 - `python scripts/cls.py start/stop/reboot` calls the AWS CLI tool to start/stop/reboot all your machines in the cluster. Useful when you want to stop the cluster but not terminate the machines.
 
 ### Spilling to S3
