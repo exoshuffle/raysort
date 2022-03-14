@@ -329,11 +329,13 @@ def get_ray_start_cmd(s3_spill: int) -> Tuple[str, Dict]:
             **{
                 "object_spilling_config": json_dump_no_space(
                     {
-                        "type": "smart_open", 
+                        "type": "smart_open",
                         "params": {
-                            "uri": [RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)], 
-                            "buffer_size": 100 * 1024 * 1024
-                        }
+                            "uri": [
+                                RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)
+                            ],
+                            "buffer_size": 100 * 1024 * 1024,
+                        },
                     }
                 ),
             }
