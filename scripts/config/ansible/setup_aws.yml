@@ -22,21 +22,21 @@
         label: gpt
         name: data0
         fs_type: ext4
+      when: data_disk | bool
 
     - name: Create a filesystem on the partition
       become: yes
       filesystem:
         fstype: ext4
         dev: "{{data_partition}}"
+      when: data_partition | bool
 
-    - name: Create mount points
+    - name: Create data disk mount point
       become: yes
       file:
-        path: "{{item}}"
+        path: "{{mnt_path}}"
         state: directory
-      loop:
-        - "{{mnt_path}}"
-        - "{{tmpfs_path}}"
+      when: mnt_path | bool
 
     - name: Mount the data disk
       become: yes
@@ -45,6 +45,13 @@
         src: "{{data_partition}}"
         fstype: ext4
         state: mounted
+      when: mnt_path and data_partition
+
+    - name: Create tmpfs mount point
+      become: yes
+      file:
+        path: "{{tmpfs_path}}"
+        state: directory
 
     - name: Mount tmpfs
       become: yes
@@ -70,6 +77,7 @@
       loop:
         - absent
         - directory
+      when: mnt_path
 
     - name: Sync aws directory
       synchronize:

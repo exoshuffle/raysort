@@ -88,6 +88,8 @@ def make_data_dirs(args: Args):
 
 
 def init(args: Args):
+    if args.s3_bucket:
+        return
     opts = [ray_utils.node_res(node) for node in args.worker_ips]
     opts.append({"resources": {"head": 1}})
     tasks = [make_data_dirs.options(**opt).remote(args) for opt in opts]

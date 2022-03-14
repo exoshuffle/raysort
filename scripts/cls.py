@@ -82,7 +82,7 @@ def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
     *,
-    vars: Dict[str, str] = {},
+    ev: Dict[str, str] = {},
     retries: int = 1,
     time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
@@ -90,8 +90,8 @@ def run_ansible_playbook(
         playbook += ".yml"
     playbook_path = SCRIPT_DIR / ANSIBLE_DIR / playbook
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
-    if len(vars) > 0:
-        cmd += f" --extra-vars '{json.dumps(vars)}'"
+    if len(ev) > 0:
+        cmd += f" --extra-vars '{json.dumps(ev)}'"
     return run(cmd, retries=retries, time_between_retries=time_between_retries)
 
 
@@ -300,7 +300,7 @@ def setup_grafana() -> None:
 # ------------------------------------------------------------
 
 
-def common_setup(cluster_name: str) -> pathlib.Path:
+def common_setup(cluster_name: str, no_ebs: bool) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
     ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
@@ -311,8 +311,9 @@ def common_setup(cluster_name: str) -> pathlib.Path:
         update_workers_file(ips)
         # TODO: Update core-site.xml and yarn-site.xml with head node IP
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    sleep(30, "worker nodes starting up")
-    run_ansible_playbook(inventory_path, "setup_aws", retries=10)
+    sleep(60, "worker nodes starting up")
+    ev = {"mnt_path": ""} if no_ebs else {}
+    run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(ips + [head_ip])
     setup_grafana()
     return inventory_path
@@ -322,7 +323,7 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd(s3_spill: int) -> Tuple[str, Dict]:
+def get_ray_start_cmd(s3_spill: int, no_ebs: bool) -> Tuple[str, Dict]:
     system_config = {}
     if s3_spill > 0:
         system_config.update(
@@ -341,6 +342,7 @@ def get_ray_start_cmd(s3_spill: int) -> Tuple[str, Dict]:
             }
         )
     else:
+        assert not no_ebs, "must have EBS attached or use S3 for spilling"
         system_config.update(
             **{
                 "object_spilling_config": json_dump_no_space(
@@ -371,20 +373,24 @@ def restart_ray(
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
+    no_ebs: bool,
 ) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
-    run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
+    if not no_ebs:
+        run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
     run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill)
+    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, no_ebs)
     run(ray_cmd)
-    vars = {
+    ev = {
         "head_ip": head_ip,
         "clear_input_dir": clear_input_dir,
         "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
     }
-    run_ansible_playbook(inventory_path, "ray", vars=vars)
+    if no_ebs:
+        ev["mnt_path"] = ""
+    run_ansible_playbook(inventory_path, "ray", ev=ev)
     sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
@@ -442,6 +448,12 @@ def setup_command_options(cli_fn):
             type=int,
             help="whether to ask Ray to spill to S3",
         ),
+        click.option(
+            "--no-ebs",
+            default=False,
+            is_flag=True,
+            help="whether to skip setting up an EBS drive",
+        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -462,15 +474,16 @@ def up(
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
+    no_ebs: bool,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
     terraform_provision(cluster_name)
-    inventory_path = common_setup(cluster_name)
+    inventory_path = common_setup(cluster_name, no_ebs)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)
@@ -490,14 +503,15 @@ def setup(
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
+    no_ebs: bool,
     no_common: bool,
 ):
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
-        inventory_path = common_setup(cluster_name)
+        inventory_path = common_setup(cluster_name, no_ebs)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill)
+        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)

@@ -29,10 +29,13 @@
         mode: "777"
       when: item.when
       loop:
-        - { dir: "{{mnt_path}}/tmp/input", when: "{{clear_input_dir}}" }
-        - { dir: "{{mnt_path}}/tmp/output", when: true }
-        - { dir: "{{mnt_path}}/tmp/ray", when: true }
-        - { dir: "{{mnt_path}}/tmp/temp", when: true }
+        - {
+            dir: "{{mnt_path}}/tmp/input",
+            when: "{{mnt_path}} and {{clear_input_dir}}",
+          }
+        - { dir: "{{mnt_path}}/tmp/output", when: "{{mnt_path}}" }
+        - { dir: "{{mnt_path}}/tmp/ray", when: "{{mnt_path}}" }
+        - { dir: "{{mnt_path}}/tmp/temp", when: "{{mnt_path}}" }
 
     - name: Restart Ray
       shell: >
