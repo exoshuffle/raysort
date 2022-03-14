@@ -23,7 +23,7 @@ ANSIBLE_DIR = "config/ansible"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
-RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray-{}"
+RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray-{:03d}"
 
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
@@ -328,7 +328,13 @@ def get_ray_start_cmd(s3_spill: int) -> Tuple[str, Dict]:
         system_config.update(
             **{
                 "object_spilling_config": json_dump_no_space(
-                    {"type": "smart_open", "params": {"uri": [RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)]}}
+                    {
+                        "type": "smart_open", 
+                        "params": {
+                            "uri": [RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)], 
+                            "buffer_size": 100 * 1024 * 1024
+                        }
+                    }
                 ),
             }
         )
@@ -431,7 +437,6 @@ def setup_command_options(cli_fn):
         click.option(
             "--s3_spill",
             default=0,
-            is_flag=True,
             type=int,
             help="whether to ask Ray to spill to S3",
         ),
