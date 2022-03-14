@@ -533,11 +533,14 @@ def reboot(cluster_name: str):
 
 @cli.command()
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-@click.argument("worker_id", type=int, default=0)
-def ssh(cluster_name: str, worker_id: int):
+@click.argument("worker_id_or_ip", type=str, default="0")
+def ssh(cluster_name: str, worker_id_or_ip: str):
     ips = get_tf_output(cluster_name, "instance_ips")
     click.echo(f"worker_ips = {ips}")
-    ip = ips[worker_id]
+    try:
+        ip = ips[int(worker_id_or_ip)]
+    except ValueError:
+        ip = worker_id_or_ip
     run(
         f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
