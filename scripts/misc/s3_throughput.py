@@ -189,11 +189,11 @@ def main():
     tasks = []
     repeat = 10
     for b in range(2):
-        num_buckets = 2 ** b
+        num_buckets = 2**b
         for n in range(6, 11):
-            num_objects = 2 ** n
+            num_objects = 2**n
             for c in range(8, 13):
-                num_conns = 2 ** c
+                num_conns = 2**c
                 for _ in range(repeat):
                     if num_conns % num_objects == 0 and num_objects % num_buckets == 0:
                         tasks.append(

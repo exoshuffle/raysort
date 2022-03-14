@@ -29,7 +29,7 @@ TMPFS_PATH = "/mnt/tmpfs/raysort"
 
 # S3
 S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024
-S3_SHARD_NUMBER = 16 ** 2  # 256, must be power of 16
+S3_SHARD_NUMBER = 16**2  # 256, must be power of 16
 S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 
 # Prometheus config
@@ -48,5 +48,5 @@ def merge_part_ids(*part_ids: List[PartId], skip_places: int = 4) -> PartId:
     mul = 1
     for p in reversed(part_ids):
         ret += p * mul
-        mul *= 16 ** skip_places
+        mul *= 16**skip_places
     return ret
