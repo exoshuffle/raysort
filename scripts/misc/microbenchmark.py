@@ -66,8 +66,22 @@ def drop_cache():
 
 @ray.remote
 def consume(*xs):
-    time.sleep(1)
+    # time.sleep(1)
     return sum(x.size for x in xs)
+
+
+@tracing_utils.timeit("consume_one_arg")
+def consume_one_arg(args, refs):
+    tasks = [
+        consume.remote(*refs[t : t + 1])
+        for t in range(args.num_tasks * args.num_objects_per_task)
+    ]
+    with tqdm.tqdm(total=len(tasks)) as pbar:
+        not_ready = tasks
+        while not_ready:
+            _, not_ready = ray.wait(not_ready, fetch_local=False)
+            pbar.update(1)
+    print(ray.get(tasks))
 
 
 @tracing_utils.timeit("consume_one_by_one")
@@ -119,6 +133,8 @@ def microbenchmark(args):
         consume_one_by_one(args, refs)
         drop_cache()
         consume_all(args, refs)
+        drop_cache()
+        consume_one_arg(args, refs)
 
 
 def init_ray(args):
