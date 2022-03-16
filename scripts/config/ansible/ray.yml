@@ -16,6 +16,11 @@
       shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
       when: reinstall_ray
 
+    - name: Sync Ray patches
+      synchronize:
+        src: "{{workdir}}/ray-patch/"
+        dest: "{{pythondir}}/../lib/python3.9/site-packages/ray/"
+
     - name: Clear tmpfs
       file:
         path: "{{tmpfs_path}}/raysort"

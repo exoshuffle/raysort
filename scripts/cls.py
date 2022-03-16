@@ -300,7 +300,7 @@ def setup_grafana() -> None:
 # ------------------------------------------------------------
 
 
-def common_setup(cluster_name: str, no_ebs: bool) -> pathlib.Path:
+def common_setup(cluster_name: str, cluster_exists: bool, no_ebs: bool) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
     ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
@@ -311,7 +311,8 @@ def common_setup(cluster_name: str, no_ebs: bool) -> pathlib.Path:
         update_workers_file(ips)
         # TODO: Update core-site.xml and yarn-site.xml with head node IP
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    sleep(60, "worker nodes starting up")
+    if not cluster_exists:
+        sleep(60, "worker nodes starting up")
     ev = {"mnt_path": ""} if no_ebs else {}
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(ips + [head_ip])
@@ -481,7 +482,7 @@ def up(
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
     terraform_provision(cluster_name)
-    inventory_path = common_setup(cluster_name, no_ebs)
+    inventory_path = common_setup(cluster_name, cluster_exists, no_ebs)
     if ray:
         restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
     if yarn:
@@ -509,7 +510,7 @@ def setup(
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
-        inventory_path = common_setup(cluster_name, no_ebs)
+        inventory_path = common_setup(cluster_name, True, no_ebs)
     if ray:
         restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
     if yarn:
