@@ -29,14 +29,14 @@
       filesystem:
         fstype: ext4
         dev: "{{data_partition}}"
-      when: data_partition | bool
+      when: data_partition
 
     - name: Create data disk mount point
       become: yes
       file:
         path: "{{mnt_path}}"
         state: directory
-      when: mnt_path | bool
+      when: mnt_path
 
     - name: Mount the data disk
       become: yes
