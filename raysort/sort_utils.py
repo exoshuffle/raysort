@@ -82,14 +82,14 @@ def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None
 @ray.remote
 def make_data_dirs(args: Args):
     os.makedirs(constants.TMPFS_PATH, exist_ok=True)
+    if args.s3_bucket:
+        return
     for prefix in args.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
 def init(args: Args):
-    if args.s3_bucket:
-        return
     opts = [ray_utils.node_res(node) for node in args.worker_ips]
     opts.append({"resources": {"head": 1}})
     tasks = [make_data_dirs.options(**opt).remote(args) for opt in opts]
