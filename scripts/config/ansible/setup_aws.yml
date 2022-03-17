@@ -22,7 +22,7 @@
         label: gpt
         name: data0
         fs_type: ext4
-      when: data_disk | bool
+      when: data_disk
 
     - name: Create a filesystem on the partition
       become: yes

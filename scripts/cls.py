@@ -115,7 +115,7 @@ def get_instances(filters: Dict[str, str]) -> List[Dict]:
     return [item["Instances"][0] for item in ret]
 
 
-def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) -> None:
+def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) -> bool:
     instances = get_instances(
         {
             "tag:ClusterName": [cluster_name],
@@ -127,8 +127,10 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
         }
     )
     cnt = len(instances)
-    if raise_if_exists and cnt > 0:
+    ret = cnt > 0
+    if raise_if_exists and ret:
         error(f"{cluster_name} must not exist (found {cnt} instances)")
+    return ret
 
 
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
@@ -314,6 +316,8 @@ def common_setup(cluster_name: str, cluster_exists: bool, no_ebs: bool) -> pathl
     if not cluster_exists:
         sleep(60, "worker nodes starting up")
     ev = {"mnt_path": ""} if no_ebs else {}
+    # ev["data_disk"] = ""
+    # ev["data_partition"] = "/dev/nvme0n1"
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(ips + [head_ip])
     setup_grafana()
@@ -478,7 +482,7 @@ def up(
     no_ebs: bool,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
-    config_exists = os.path.exists(SCRIPT_DIR / TERRAFORM_DIR / cluster_name)
+    config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
     terraform_provision(cluster_name)
