@@ -257,6 +257,10 @@ class FileSystemStorage(ExternalStorage):
         # -- File buffer size to spill objects --
         self._buffer_size = -1
 
+        import uuid
+
+        self.log_file = os.path.expanduser(f"~/restore-{uuid.uuid4().hex[:4]}.log")
+
         # Validation.
         assert (
             directory_path is not None
@@ -299,22 +303,25 @@ class FileSystemStorage(ExternalStorage):
         first_ref = object_refs[0]
         filename = f"{first_ref.hex()}-multi-{len(object_refs)}"
         url = f"{os.path.join(directory_path, filename)}"
-        with open(url, "wb", buffering=self._buffer_size) as f:
+        with open(url, "wb", buffering=256 * 1024) as f:
             return self._write_multiple_objects(f, object_refs, owner_addresses, url)
 
     def restore_spilled_objects(
         self, object_refs: List[ObjectRef], url_with_offset_list: List[str]
     ):
         total = 0
+        recs = []
         for i in range(len(object_refs)):
+            start = time.time()
             object_ref = object_refs[i]
             url_with_offset = url_with_offset_list[i].decode()
             # Retrieve the information needed.
             parsed_result = parse_url_with_offset(url_with_offset)
             base_url = parsed_result.base_url
             offset = parsed_result.offset
+            metadata_time = time.time() - start
             # Read a part of the file and recover the object.
-            with open(base_url, "rb") as f:
+            with open(base_url, "rb", buffering=256 * 1024) as f:
                 f.seek(offset)
                 address_len = int.from_bytes(f.read(8), byteorder="little")
                 metadata_len = int.from_bytes(f.read(8), byteorder="little")
@@ -327,6 +334,16 @@ class FileSystemStorage(ExternalStorage):
                 self._put_object_to_store(
                     metadata, buf_len, f, object_ref, owner_address
                 )
+            duration = time.time() - start
+            sz = parsed_result.size
+            throughput = sz / duration / 1000 / 1000
+            recs.append(
+                (object_ref.hex(), url_with_offset, throughput, duration, metadata_time)
+            )
+        with open(self.log_file, "a") as fout:
+            n = len(recs)
+            for rec in recs:
+                fout.write(",".join(str(x) for x in rec) + f",{n}\n")
         return total
 
     def delete_spilled_objects(self, urls: List[str]):
