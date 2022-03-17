@@ -1,6 +1,6 @@
 import io
 import os
-from typing import Iterable
+from typing import Iterable, Optional
 
 import botocore
 import boto3
@@ -24,19 +24,29 @@ def s3() -> botocore.client.BaseClient:
     )
 
 
-def upload_s3(args: Args, src: Path, dst: Path, *, delete_src: bool = True) -> None:
+def upload_s3(bucket: str, src: Path, dst: Path, *, delete_src: bool = True) -> None:
     try:
         s3().upload_file(
             src,
-            args.s3_bucket,
+            bucket,
             dst,
             Config=boto3.s3.transfer.TransferConfig(
-                multipart_chunksize=100 * 1024 * 1024
+                max_concurrency=10,
+                multipart_chunksize=32 * 1024 * 1024,
             ),
         )
     finally:
         if delete_src:
             os.remove(src)
+
+
+def download_s3(bucket: str, src: Path, dst: Optional[Path]) -> Optional[io.BytesIO]:
+    if dst:
+        s3().download_file(bucket, src, dst)
+        return
+    ret = io.BytesIO()
+    s3().download_fileobj(bucket, src, ret)
+    return ret
 
 
 @ray.remote(num_cpus=0)

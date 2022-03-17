@@ -46,8 +46,7 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
         return create_partition(args.input_part_size)
     if args.s3_bucket:
-        buf = io.BytesIO()
-        s3_utils.s3().download_fileobj(args.s3_bucket, path, buf)
+        buf = s3_utils.download_s3(args.s3_bucket, path, None)
         return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
     return np.fromfile(path, dtype=np.uint8)
 
@@ -152,7 +151,7 @@ def generate_part(
         path = pinfo.path
     _run_gensort(offset, size, path, args.s3_bucket)
     if args.s3_bucket:
-        s3_utils.upload_s3(args, path, pinfo.path)
+        s3_utils.upload_s3(args.s3_bucket, path, pinfo.path)
     logging.info(f"Generated input {pinfo}")
     return pinfo
 
@@ -217,7 +216,7 @@ def validate_part(args: Args, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
     if args.s3_bucket:
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3_utils.s3().download_file(args.s3_bucket, pinfo.path, tmp_path)
+        s3_utils.download_s3(args.s3_bucket, pinfo.path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
