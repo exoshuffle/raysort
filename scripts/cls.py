@@ -15,7 +15,7 @@ import click
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
 
-EBS_MNT = "/mnt/ebs0/tmp"
+DATA_MNT = "/mnt/data0/tmp"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
@@ -353,7 +353,7 @@ def get_ray_start_cmd(s3_spill: int, no_ebs: bool) -> Tuple[str, Dict]:
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "filesystem",
-                        "params": {"directory_path": [f"{EBS_MNT}/ray"]},
+                        "params": {"directory_path": [f"{DATA_MNT}/ray"]},
                     },
                 ),
             }
@@ -382,7 +382,7 @@ def restart_ray(
 ) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
     if not no_ebs:
-        run(f"sudo mkdir -p {EBS_MNT} && sudo chmod 777 {EBS_MNT}")
+        run(f"sudo mkdir -p {DATA_MNT} && sudo chmod 777 {DATA_MNT}")
     run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, no_ebs)
     run(ray_cmd)

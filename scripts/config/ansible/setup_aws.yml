@@ -4,7 +4,7 @@
   vars:
     data_disk: /dev/nvme1n1
     data_partition: /dev/nvme1n1p1
-    mnt_path: /mnt/ebs0
+    mnt_path: /mnt/data0
     tmpfs_path: /mnt/tmpfs
     awsdir: ~/.aws
     workdir: ~/raysort

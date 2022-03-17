@@ -81,7 +81,7 @@ export RAY_BACKEND_LOG_LEVEL=debug
   - If a partition table does not exist, create it with `mklabel gpt`.
   - Run `mkpart part0 ext4 0% 100%`. Make sure no warnings appear.
   - Exit `parted` and run `sudo mkfs.ext4 /dev/nvme1n1p1`. Note the extra **`p1`**.
-  - Run `sudo mount -o sync path_to_volume /mnt/ebs0`. Only use `-o sync` if you are running microbenchmarks.
+  - Run `sudo mount -o sync path_to_volume /mnt/data0`. Only use `-o sync` if you are running microbenchmarks.
 - Verify that the mounting worked with `lsblk`.
   - If the desired volume is not mounted, edit `/etc/fstab` to remove any conflicting lines. Then, restart your machine and remount.
 

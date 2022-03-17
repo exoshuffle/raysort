@@ -4,7 +4,7 @@
   vars:
     data_disk: /dev/disk/azure/scsi1/lun0
     ssd_device: /dev/disk/azure/scsi1/lun0-part1
-    mnt_path: /mnt/ebs0
+    mnt_path: /mnt/data0
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:

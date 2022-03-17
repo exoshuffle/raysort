@@ -2,7 +2,7 @@
 - hosts: all
   vars:
     head_ip: 0.0.0.0
-    mnt_path: /mnt/ebs0
+    mnt_path: /mnt/data0
     tmpfs_path: /mnt/tmpfs
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin

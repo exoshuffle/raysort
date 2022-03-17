@@ -23,8 +23,9 @@ void AssertSorted(const Array<Record> &array) {
   }
 }
 
-std::vector<ConstArray<Record>> MakeConstRecordArrays(
-    Record *const records, const std::vector<Partition> &parts) {
+std::vector<ConstArray<Record>>
+MakeConstRecordArrays(Record *const records,
+                      const std::vector<Partition> &parts) {
   std::vector<ConstArray<Record>> ret;
   ret.reserve(parts.size());
   for (const auto &part : parts) {
@@ -35,9 +36,10 @@ std::vector<ConstArray<Record>> MakeConstRecordArrays(
 
 void test_file_merger() {
   FileMerger merger(
-      {"/mnt/ebs0/tmp/temp/temp-00000000", "/mnt/ebs0/tmp/temp/temp-00000001",
-       "/mnt/ebs0/tmp/temp/temp-00000002", "/mnt/ebs0/tmp/temp/temp-00000003"},
-      "/mnt/ebs0/tmp/temp/test-output", 100 * 1024 * 1024, 1 * 1024 * 1024);
+      {"/mnt/data0/tmp/temp/temp-00000000", "/mnt/data0/tmp/temp/temp-00000001",
+       "/mnt/data0/tmp/temp/temp-00000002",
+       "/mnt/data0/tmp/temp/temp-00000003"},
+      "/mnt/data0/tmp/temp/test-output", 100 * 1024 * 1024, 1 * 1024 * 1024);
   merger.Run();
 }
 
@@ -69,7 +71,8 @@ int main() {
     const auto &parts = SortAndPartition({records, num_records}, boundaries);
     const auto stop1 = std::chrono::high_resolution_clock::now();
     printf("SortAndPartition,%ld\n",
-           std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1).count());
+           std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+               .count());
   }
   // const auto& record_arrays = MakeConstRecordArrays(records, parts);
   // const auto start2 = std::chrono::high_resolution_clock::now();
@@ -87,13 +90,16 @@ int main() {
   // }
   // printf("Execution time (ms):\n");
   // printf("SortAndPartition,%ld\n",
-  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop1 -
+  //        start1)
   //            .count());
   // printf("MergePartitions,%ld\n",
-  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start2)
+  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop2 -
+  //        start2)
   //            .count());
   // printf("Total,%ld\n",
-  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop2 - start1)
+  //        std::chrono::duration_cast<std::chrono::milliseconds>(stop2 -
+  //        start1)
   //            .count());
 
   return 0;

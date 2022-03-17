@@ -142,9 +142,9 @@ def init_ray(args):
         "max_io_workers": 1,
         "object_spilling_threshold": 1,
     }
-    if os.path.exists("/mnt/ebs0/tmp"):
+    if os.path.exists("/mnt/data0/tmp"):
         system_config.update(
-            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/ebs0/tmp/ray"]}}'
+            object_spilling_config='{"type":"filesystem","params":{"directory_path":["/mnt/data0/tmp/ray"]}}'
         )
     if args.no_fusing:
         system_config.update(
