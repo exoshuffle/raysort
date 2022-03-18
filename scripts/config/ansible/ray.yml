@@ -1,5 +1,6 @@
 ---
 - hosts: all
+  strategy: free
   vars:
     head_ip: 0.0.0.0
     mnt_path: /mnt/data0
