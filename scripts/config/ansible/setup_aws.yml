@@ -2,9 +2,9 @@
 - hosts: all
   strategy: free
   vars:
-    data_disk: /dev/nvme1n1
-    data_partition: /dev/nvme1n1p1
-    mnt_path: /mnt/data0
+    data_disks:
+      - /dev/nvme1n1
+    mnt_prefix: /mnt/data
     tmpfs_path: /mnt/tmpfs
     awsdir: ~/.aws
     workdir: ~/raysort
@@ -13,39 +13,31 @@
     hadoop_config_path: /opt/hadoop/etc/hadoop
     spark_config_path: /opt/spark/conf
   tasks:
-    - name: Create a partition table and a partition
-      become: yes
-      parted:
-        device: "{{data_disk}}"
-        number: 1
-        state: present
-        label: gpt
-        name: data0
-        fs_type: ext4
-      when: data_disk
-
-    - name: Create a filesystem on the partition
+    - name: Create a filesystem on each of the data disks
       become: yes
       filesystem:
         fstype: ext4
-        dev: "{{data_partition}}"
-      when: data_partition
+        dev: "{{item}}"
+      loop: "{{data_disks}}"
 
-    - name: Create data disk mount point
+    - name: Create data disk mount points
       become: yes
       file:
-        path: "{{mnt_path}}"
+        path: "{{mnt_prefix}}{{item}}"
         state: directory
-      when: mnt_path
+      loop: "{{ range(data_disks|length)|list }}"
 
-    - name: Mount the data disk
+    - name: Mount the data disks
       become: yes
       mount:
-        path: "{{mnt_path}}"
-        src: "{{data_partition}}"
+        path: "{{mnt_prefix}}{{idx}}"
+        src: "{{item}}"
         fstype: ext4
         state: mounted
-      when: mnt_path and data_partition
+      when: mnt_prefix and data_disks
+      loop: "{{data_disks}}"
+      loop_control:
+        index_var: idx
 
     - name: Create tmpfs mount point
       become: yes
@@ -71,13 +63,20 @@
     - name: Clear temp directories
       become: yes
       file:
-        path: "{{mnt_path}}/tmp"
-        state: "{{item}}"
+        path: "{{mnt_prefix}}{{item}}/tmp"
+        state: absent
         mode: "777"
-      loop:
-        - absent
-        - directory
-      when: mnt_path
+      when: mnt_prefix and data_disks
+      loop: "{{ range(data_disks|length)|list }}"
+
+    - name: Make temp directories
+      become: yes
+      file:
+        path: "{{mnt_prefix}}{{item}}/tmp"
+        state: directory
+        mode: "777"
+      when: mnt_prefix and data_disks
+      loop: "{{ range(data_disks|length)|list }}"
 
     - name: Sync aws directory
       synchronize:

@@ -3,7 +3,8 @@
   strategy: free
   vars:
     head_ip: 0.0.0.0
-    mnt_path: /mnt/data0
+    mnt_paths:
+      - /mnt/data0
     tmpfs_path: /mnt/tmpfs
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
@@ -30,18 +31,18 @@
     - name: Clear temp directories
       become: yes
       file:
-        path: "{{item.dir}}"
+        path: "{{item}}/tmp"
         state: absent
         mode: "777"
-      when: item.when
-      loop:
-        - {
-            dir: "{{mnt_path}}/tmp/input",
-            when: "{{mnt_path}} and {{clear_input_dir}}",
-          }
-        - { dir: "{{mnt_path}}/tmp/output", when: "{{mnt_path}}" }
-        - { dir: "{{mnt_path}}/tmp/ray", when: "{{mnt_path}}" }
-        - { dir: "{{mnt_path}}/tmp/temp", when: "{{mnt_path}}" }
+      loop: mnt_paths
+
+    - name: Make temp directories
+      become: yes
+      file:
+        path: "{{item}}/tmp"
+        state: directory
+        mode: "777"
+      loop: mnt_paths
 
     - name: Restart Ray
       shell: >

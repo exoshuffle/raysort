@@ -16,7 +16,7 @@ resource "aws_instance" "cluster" {
   count = 1
 
   ami           = "ami-0da5da6db44aaf267" # raysort-hadoop-spark-conda
-  instance_type = "r6i.2xlarge"
+  instance_type = var.instance_type
   key_name      = "login-us-west-2"
 
   ebs_block_device {
