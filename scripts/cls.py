@@ -14,7 +14,7 @@ import boto3
 import click
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
-DEFAULT_INSTANCE_TYPE = "r6i.2xlarge"
+DEFAULT_INSTANCE_TYPE = "i3.2xlarge"
 
 MNT_PATH_FMT = "/mnt/data{i}/tmp"
 PARALLELISM = os.cpu_count() * 4
@@ -117,6 +117,15 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     return ret
 
 
+def get_terraform_vars(cluster_name: str, instance_type: str) -> str:
+    return "".join(
+        [
+            f' -var="cluster_name={cluster_name}"',
+            f' -var="instance_type={instance_type}"',
+        ]
+    )
+
+
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
     tf_dir = get_tf_dir(cluster_name)
     if os.path.exists(tf_dir):
@@ -138,9 +147,9 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
 def terraform_provision(cluster_name: str, instance_type: str) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
     run("terraform init", cwd=tf_dir)
-    cmd = "terraform apply -auto-approve"
-    cmd += f' -var="cluster_name={cluster_name}"'
-    cmd += f' -var="instance_type={instance_type}"'
+    cmd = "terraform apply -auto-approve" + get_terraform_vars(
+        cluster_name, instance_type
+    )
     run(cmd, cwd=tf_dir)
 
 
@@ -583,10 +592,12 @@ def setup(
 
 @cli.command()
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def down(cluster_name: str):
+@click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE)
+def down(cluster_name: str, instance_type: str):
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
-    cmd = "terraform destroy -auto-approve"
-    cmd += f' -var="cluster_name={cluster_name}"'
+    cmd = "terraform destroy -auto-approve" + get_terraform_vars(
+        cluster_name, instance_type
+    )
     run(cmd, cwd=tf_dir)
     check_cluster_existence(cluster_name, raise_if_exists=True)
 

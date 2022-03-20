@@ -34,7 +34,7 @@
         path: "{{item}}/tmp"
         state: absent
         mode: "777"
-      loop: mnt_paths
+      loop: "{{mnt_paths}}"
 
     - name: Make temp directories
       become: yes
@@ -42,7 +42,7 @@
         path: "{{item}}/tmp"
         state: directory
         mode: "777"
-      loop: mnt_paths
+      loop: "{{mnt_paths}}"
 
     - name: Restart Ray
       shell: >
