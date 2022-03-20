@@ -9,12 +9,14 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
 
       - name: Install dependencies
-        run: ansible-galaxy collection install -r requirements/ansible.yml -p /github/home/.ansible/collections
+        run: ansible-galaxy collection install -r requirements/ansible.yml
 
       - name: Ansible Lint
         uses: ansible/ansible-lint-action@v6
