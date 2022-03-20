@@ -15,7 +15,7 @@
   tasks:
     - name: Create a filesystem on each of the data disks
       become: true
-      community.general.filesystem:
+      filesystem:
         fstype: ext4
         dev: "{{item}}"
       loop: "{{data_disks}}"
