@@ -14,8 +14,9 @@ import boto3
 import click
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
+DEFAULT_INSTANCE_TYPE = "i3.2xlarge"
 
-DATA_MNT = "/mnt/data0/tmp"
+MNT_PATH_FMT = "/mnt/data{i}/tmp"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
@@ -78,23 +79,6 @@ def run_output(cmd: str, **kwargs) -> str:
     )
 
 
-def run_ansible_playbook(
-    inventory_path: pathlib.Path,
-    playbook: str,
-    *,
-    ev: Dict[str, str] = {},
-    retries: int = 1,
-    time_between_retries: float = 10,
-) -> subprocess.CompletedProcess:
-    if not playbook.endswith(".yml"):
-        playbook += ".yml"
-    playbook_path = SCRIPT_DIR / ANSIBLE_DIR / playbook
-    cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
-    if len(ev) > 0:
-        cmd += f" --extra-vars '{json.dumps(ev)}'"
-    return run(cmd, retries=retries, time_between_retries=time_between_retries)
-
-
 # ------------------------------------------------------------
 #     Terraform and AWS
 # ------------------------------------------------------------
@@ -133,6 +117,15 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     return ret
 
 
+def get_terraform_vars(cluster_name: str, instance_type: str) -> str:
+    return "".join(
+        [
+            f' -var="cluster_name={cluster_name}"',
+            f' -var="instance_type={instance_type}"',
+        ]
+    )
+
+
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
     tf_dir = get_tf_dir(cluster_name)
     if os.path.exists(tf_dir):
@@ -151,11 +144,12 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     return tf_dir
 
 
-def terraform_provision(cluster_name: str) -> None:
+def terraform_provision(cluster_name: str, instance_type: str) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
     run("terraform init", cwd=tf_dir)
-    cmd = "terraform apply -auto-approve"
-    cmd += f' -var="cluster_name={cluster_name}"'
+    cmd = "terraform apply -auto-approve" + get_terraform_vars(
+        cluster_name, instance_type
+    )
     run(cmd, cwd=tf_dir)
 
 
@@ -215,6 +209,64 @@ def get_or_create_ansible_inventory(
         fout.write(get_ansible_inventory_content(ips))
     click.secho(f"Created {path}", fg="green")
     return path
+
+
+def run_ansible_playbook(
+    inventory_path: pathlib.Path,
+    playbook: str,
+    *,
+    ev: Dict[str, str] = {},
+    retries: int = 1,
+    time_between_retries: float = 10,
+) -> subprocess.CompletedProcess:
+    if not playbook.endswith(".yml"):
+        playbook += ".yml"
+    playbook_path = SCRIPT_DIR / ANSIBLE_DIR / playbook
+    cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
+    if len(ev) > 0:
+        cmd += f" --extra-vars '{json.dumps(ev)}'"
+    return run(cmd, retries=retries, time_between_retries=time_between_retries)
+
+
+def get_nvme_device_count(instance_type: str) -> int:
+    return {
+        "i3.4xlarge": 2,
+        "i3.8xlarge": 4,
+        "i3.16xlarge": 8,
+        "d3.xlarge": 3,
+        "d3.2xlarge": 6,
+        "d3.4xlarge": 12,
+        "d3.8xlarge": 24,
+        "m5d.4xlarge": 2,
+        "m5d.8xlarge": 2,
+        "m5d.12xlarge": 2,
+        "m5d.16xlarge": 4,
+        "m5d.24xlarge": 4,
+    }.get(instance_type, 1)
+
+
+def get_data_disks(instance_type: str) -> List[str]:
+    cnt = get_nvme_device_count(instance_type)
+    # NOTE: Adjust count if you have both EBS and NVMe devices mounted.
+    return [f"/dev/nvme{i + 1}n1" for i in range(cnt)]
+
+
+def get_mnt_paths(instance_type: str, no_disk: bool) -> List[str]:
+    cnt = 0 if no_disk else get_nvme_device_count(instance_type)
+    return [MNT_PATH_FMT.format(i=i) for i in range(cnt)]
+
+
+def get_ansible_vars(instance_type: str, no_disk: bool) -> Dict:
+    ret = {}
+    if no_disk:
+        ret["mnt_prefix"] = ""
+    ret["data_disks"] = get_data_disks(instance_type)
+    return ret
+
+
+# ------------------------------------------------------------
+#     YARN
+# ------------------------------------------------------------
 
 
 def update_hosts_file(ips: List[str]) -> None:
@@ -302,7 +354,9 @@ def setup_grafana() -> None:
 # ------------------------------------------------------------
 
 
-def common_setup(cluster_name: str, cluster_exists: bool, no_ebs: bool) -> pathlib.Path:
+def common_setup(
+    cluster_name: str, instance_type: str, cluster_exists: bool, no_disk: bool
+) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
     ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
@@ -315,9 +369,7 @@ def common_setup(cluster_name: str, cluster_exists: bool, no_ebs: bool) -> pathl
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
     if not cluster_exists:
         sleep(60, "worker nodes starting up")
-    ev = {"mnt_path": ""} if no_ebs else {}
-    # ev["data_disk"] = ""
-    # ev["data_partition"] = "/dev/nvme0n1"
+    ev = get_ansible_vars(instance_type, no_disk)
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(ips + [head_ip])
     setup_grafana()
@@ -328,7 +380,7 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd(s3_spill: int, no_ebs: bool) -> Tuple[str, Dict]:
+def get_ray_start_cmd(s3_spill: int, mnt_paths: List[str]) -> Tuple[str, Dict]:
     system_config = {}
     if s3_spill > 0:
         system_config.update(
@@ -347,13 +399,15 @@ def get_ray_start_cmd(s3_spill: int, no_ebs: bool) -> Tuple[str, Dict]:
             }
         )
     else:
-        assert not no_ebs, "must have EBS attached or use S3 for spilling"
+        assert mnt_paths, "must have disks mounted or use S3 for spilling"
         system_config.update(
             **{
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "filesystem",
-                        "params": {"directory_path": [f"{DATA_MNT}/ray"]},
+                        "params": {
+                            "directory_path": [f"{mnt}/ray" for mnt in mnt_paths]
+                        },
                     },
                 ),
             }
@@ -378,13 +432,13 @@ def restart_ray(
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
-    no_ebs: bool,
+    mnt_paths: List[str],
 ) -> None:
     head_ip = run_output("ec2metadata --local-ipv4")
-    if not no_ebs:
-        run(f"sudo mkdir -p {DATA_MNT} && sudo chmod 777 {DATA_MNT}")
+    for mnt in mnt_paths:
+        run(f"sudo mkdir -p {mnt} && sudo chmod 777 {mnt}")
     run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, no_ebs)
+    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, mnt_paths)
     run(ray_cmd)
     ev = {
         "head_ip": head_ip,
@@ -392,9 +446,8 @@ def restart_ray(
         "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
+        "mnt_paths": mnt_paths,
     }
-    if no_ebs:
-        ev["mnt_path"] = ""
     run_ansible_playbook(inventory_path, "ray", ev=ev)
     sleep(3, "waiting for Ray nodes to connect")
     run("ray status")
@@ -423,6 +476,7 @@ def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
         click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
+        click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE),
         click.option(
             "--ray",
             default=False,
@@ -454,10 +508,10 @@ def setup_command_options(cli_fn):
             help="whether to ask Ray to spill to S3",
         ),
         click.option(
-            "--no-ebs",
+            "--no-disk",
             default=False,
             is_flag=True,
-            help="whether to skip setting up an EBS drive",
+            help="whether to skip setting up local disks",
         ),
     ]
     ret = cli_fn
@@ -474,21 +528,28 @@ def cli():
 @setup_command_options
 def up(
     cluster_name: str,
+    instance_type: str,
     ray: bool,
     yarn: bool,
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
-    no_ebs: bool,
+    no_disk: bool,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
-    terraform_provision(cluster_name)
-    inventory_path = common_setup(cluster_name, cluster_exists, no_ebs)
+    terraform_provision(cluster_name, instance_type)
+    inventory_path = common_setup(cluster_name, instance_type, cluster_exists, no_disk)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
+        restart_ray(
+            inventory_path,
+            clear_input_dir,
+            reinstall_ray,
+            s3_spill,
+            get_mnt_paths(instance_type, no_disk),
+        )
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)
@@ -503,20 +564,27 @@ def up(
 )
 def setup(
     cluster_name: str,
+    instance_type: str,
     ray: bool,
     yarn: bool,
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
-    no_ebs: bool,
+    no_disk: bool,
     no_common: bool,
 ):
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
-        inventory_path = common_setup(cluster_name, True, no_ebs)
+        inventory_path = common_setup(cluster_name, instance_type, True, no_disk)
     if ray:
-        restart_ray(inventory_path, clear_input_dir, reinstall_ray, s3_spill, no_ebs)
+        restart_ray(
+            inventory_path,
+            clear_input_dir,
+            reinstall_ray,
+            s3_spill,
+            get_mnt_paths(instance_type, no_disk),
+        )
     if yarn:
         restart_yarn()
     print_after_setup(cluster_name)
@@ -524,10 +592,12 @@ def setup(
 
 @cli.command()
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def down(cluster_name: str):
+@click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE)
+def down(cluster_name: str, instance_type: str):
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
-    cmd = "terraform destroy -auto-approve"
-    cmd += f' -var="cluster_name={cluster_name}"'
+    cmd = "terraform destroy -auto-approve" + get_terraform_vars(
+        cluster_name, instance_type
+    )
     run(cmd, cwd=tf_dir)
     check_cluster_existence(cluster_name, raise_if_exists=True)
 

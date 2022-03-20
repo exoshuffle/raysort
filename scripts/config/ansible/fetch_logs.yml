@@ -2,7 +2,7 @@
 - hosts: all
   tasks:
     - name: Fetch Ray logs
-      synchronize:
+      ansible.posix.synchronize:
         src: /tmp/ray/session_latest/logs
-        dest: /tmp/ray/session_latest/{{inventory_hostname}}
+        dest: /tmp/ray/session_latest/{{ inventory_hostname }}
         mode: pull

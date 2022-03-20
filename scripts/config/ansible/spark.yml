@@ -4,6 +4,6 @@
     hadoop_dir: /mnt/data0/tmp/hadoop/
   tasks:
     - name: Remove any existing data directory
-      file:
+      ansible.builtin.file:
         state: absent
-        path: "{{hadoop_dir}}/dfs/data"
+        path: "{{ hadoop_dir }}/dfs/data"

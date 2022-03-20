@@ -1,4 +1,4 @@
-name: Format Python
+name: Format Python Code
 on:
   push:
     branches:

@@ -1,0 +1,24 @@
+name: Ansible Lint
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    env:
+      ANSIBLE_COLLECTIONS_PATH: ./collections
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: ansible-galaxy collection install -r requirements/ansible.yml -p ./collections
+
+      - name: Ansible Lint
+        uses: ansible/ansible-lint-action@v6
+        with:
+          targets: scripts/config/ansible/*.yml
