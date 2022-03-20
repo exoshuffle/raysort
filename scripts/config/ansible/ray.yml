@@ -12,52 +12,55 @@
     reinstall_ray: false
     ray_object_manager_port: 8076
     ray_merics_export_port: 8090
-    ray_object_store_memory: "{{28 * 1024 * 1024 * 1024}}"
+    ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
   tasks:
     - name: Install nightly Ray
-      shell: "{{pythondir}}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl"
+      ansible.builtin.shell: >
+        {{ pythondir }}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
+      changed_when: true
       when: reinstall_ray
 
     - name: Sync Ray patches
-      synchronize:
-        src: "{{workdir}}/ray-patch/"
-        dest: "{{pythondir}}/../lib/python3.9/site-packages/ray/"
+      ansible.posix.synchronize:
+        src: "{{ workdir }}/ray-patch/"
+        dest: "{{ pythondir }}/../lib/python3.9/site-packages/ray/"
 
     - name: Clear tmpfs
-      file:
-        path: "{{tmpfs_path}}/raysort"
+      ansible.builtin.file:
+        path: "{{ tmpfs_path }}/raysort"
         state: absent
 
     - name: Clear temp directories
       become: true
-      file:
-        path: "{{item}}/tmp"
+      ansible.builtin.file:
+        path: "{{ item }}/tmp"
         state: absent
-        mode: "777"
-      loop: "{{mnt_paths}}"
+        mode: 0777
+      loop: "{{ mnt_paths }}"
 
     - name: Make temp directories
-      become: true
-      file:
-        path: "{{item}}/tmp"
+      ansible.builtin.file:
+        path: "{{ item }}/tmp"
         state: directory
-        mode: "777"
-      loop: "{{mnt_paths}}"
+        mode: 0777
+      loop: "{{ mnt_paths }}"
 
     - name: Restart Ray
-      shell: >
-        {{pythondir}}/ray stop -f &&
+      ansible.builtin.shell: >
+        {{ pythondir }}/ray stop -f &&
         sleep 3 &&
         nohup
-        {{pythondir}}/ray start
-        --address={{head_ip}}:6379
-        --object-manager-port={{ray_object_manager_port}}
-        --metrics-export-port={{ray_merics_export_port}}
+        {{ pythondir }}/ray start
+        --address={{ head_ip }}:6379
+        --object-manager-port={{ ray_object_manager_port }}
+        --metrics-export-port={{ ray_merics_export_port }}
         --resources='{"worker":1}'
-        --object-store-memory={{ray_object_store_memory}}
+        --object-store-memory={{ ray_object_store_memory }}
+      changed_when: true
 
     - name: Start Node Exporter
-      shell: >
+      ansible.builtin.shell: >
         nohup
-        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        {{ workdir }}/raysort/bin/node_exporter/node_exporter
         --web.listen-address 0.0.0.0:8091 &
+      changed_when: true

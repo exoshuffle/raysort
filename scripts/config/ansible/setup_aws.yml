@@ -15,97 +15,99 @@
   tasks:
     - name: Create a filesystem on each of the data disks
       become: true
-      filesystem:
+      community.general.filesystem:
         fstype: ext4
-        dev: "{{item}}"
-      loop: "{{data_disks}}"
+        dev: "{{ item }}"
+      loop: "{{ data_disks }}"
 
     - name: Create data disk mount points
       become: true
-      file:
-        path: "{{mnt_prefix}}{{item}}"
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}"
         state: directory
+        mode: 0777
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Mount the data disks
       become: true
-      mount:
-        path: "{{mnt_prefix}}{{idx}}"
-        src: "{{item}}"
+      ansible.posix.mount:
+        path: "{{ mnt_prefix }}{{ idx }}"
+        src: "{{ item }}"
         fstype: ext4
         state: mounted
       when: mnt_prefix and data_disks
-      loop: "{{data_disks}}"
+      loop: "{{ data_disks }}"
       loop_control:
         index_var: idx
 
     - name: Create tmpfs mount point
       become: true
-      file:
-        path: "{{tmpfs_path}}"
+      ansible.builtin.file:
+        path: "{{ tmpfs_path }}"
         state: directory
+        mode: 0777
 
     - name: Mount tmpfs
       become: true
-      mount:
-        path: "{{tmpfs_path}}"
+      ansible.posix.mount:
+        path: "{{ tmpfs_path }}"
         src: tmpfs
         fstype: tmpfs
         state: mounted
 
     - name: Set tmpfs permission
       become: true
-      file:
-        path: "{{tmpfs_path}}"
+      ansible.builtin.file:
+        path: "{{ tmpfs_path }}"
         state: directory
-        mode: "777"
+        mode: 0777
 
     - name: Clear temp directories
-      become: true
-      file:
-        path: "{{mnt_prefix}}{{item}}/tmp"
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}/tmp"
         state: absent
-        mode: "777"
       when: mnt_prefix and data_disks
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Make temp directories
-      become: true
-      file:
-        path: "{{mnt_prefix}}{{item}}/tmp"
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}/tmp"
         state: directory
-        mode: "777"
+        mode: 0777
       when: mnt_prefix and data_disks
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Sync aws directory
-      synchronize:
-        src: "{{awsdir}}/"
-        dest: "{{awsdir}}"
+      ansible.posix.synchronize:
+        src: "{{ awsdir }}/"
+        dest: "{{ awsdir }}"
         delete: true
 
     - name: Sync workdir
-      synchronize:
-        src: "{{workdir}}/"
-        dest: "{{workdir}}"
+      ansible.posix.synchronize:
+        src: "{{ workdir }}/"
+        dest: "{{ workdir }}"
         delete: true
         rsync_opts:
           - --exclude=.git
           - --exclude=data
 
     - name: Install Python dependencies
-      shell: "{{pythondir}}/pip install -Ur {{workdir}}/requirements/worker.txt"
+      ansible.builtin.shell: |
+        {{ pythondir }}/pip install -Ur {{ workdir }}/requirements/worker.txt
+      changed_when: true
 
     - name: Install project packages
-      shell: |
-        cd {{workdir}} && {{pythondir}}/pip install -e .
-        cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
+      ansible.builtin.shell: |
+        cd {{ workdir }} && {{ pythondir }}/pip install -e .
+        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
+      changed_when: true
 
     - name: Set soft and hard ulimit
       become: true
       community.general.pam_limits:
         domain: "*"
-        limit_type: "{{item}}"
+        limit_type: "{{ item }}"
         limit_item: nofile
         value: 65535
       loop:
@@ -114,31 +116,35 @@
 
     - name: Check Hadoop files exist
       delegate_to: localhost
-      stat:
-        path: "{{hadoop_config_path}}"
+      ansible.builtin.stat:
+        path: "{{ hadoop_config_path }}"
       register: hadoop
 
     - name: Sync hosts file
       become: true
-      copy:
-        src: "{{hosts_path}}"
-        dest: "{{hosts_path}}"
+      ansible.builtin.copy:
+        src: "{{ hosts_path }}"
+        dest: "{{ hosts_path }}"
+        mode: 0644
       when: hadoop
 
     - name: Copy Hadoop core-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/core-site.xml"
-        dest: "{{hadoop_config_path}}/core-site.xml"
+      ansible.builtin.copy:
+        src: "{{ hadoop_config_path }}/core-site.xml"
+        dest: "{{ hadoop_config_path }}/core-site.xml"
+        mode: 0644
       when: hadoop
 
     - name: Copy Hadoop yarn-site.xml
-      copy:
-        src: "{{hadoop_config_path}}/yarn-site.xml"
-        dest: "{{hadoop_config_path}}/yarn-site.xml"
+      ansible.builtin.copy:
+        src: "{{ hadoop_config_path }}/yarn-site.xml"
+        dest: "{{ hadoop_config_path }}/yarn-site.xml"
+        mode: 0644
       when: hadoop
 
     - name: Start Node Exporter
-      shell: >
+      ansible.builtin.shell: >
         nohup
-        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        {{ workdir }}/raysort/bin/node_exporter/node_exporter
         --web.listen-address 0.0.0.0:8091 &
+      changed_when: true

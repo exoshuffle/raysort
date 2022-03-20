@@ -10,8 +10,8 @@
   tasks:
     - name: Create a new ext4 partition
       become: true
-      parted:
-        device: "{{data_disk}}"
+      community.general.parted:
+        device: "{{ data_disk }}"
         number: 1
         state: present
         label: gpt
@@ -20,56 +20,59 @@
 
     - name: Create filesystem on nvme
       become: true
-      filesystem:
+      community.general.filesystem:
         fstype: ext4
-        dev: "{{ssd_device}}"
+        dev: "{{ ssd_device }}"
 
     - name: Create mount directory
       become: true
-      file:
-        path: "{{mnt_path}}"
+      ansible.builtin.file:
+        path: "{{ mnt_path }}"
         state: directory
+        mode: 0777
 
     - name: Mount nvme
       become: true
-      mount:
-        path: "{{mnt_path}}"
-        src: "{{ssd_device}}"
+      ansible.posix.mount:
+        path: "{{ mnt_path }}"
+        src: "{{ ssd_device }}"
         fstype: ext4
         state: mounted
 
     - name: Clear nvme temp directory
-      become: true
-      file:
-        path: "{{mnt_path}}/tmp"
-        state: "{{item}}"
-        mode: "777"
+      ansible.builtin.file:
+        path: "{{ mnt_path }}/tmp"
+        state: "{{ item }}"
+        mode: 0777
       loop:
         - absent
         - directory
 
     - name: Sync workdir
-      synchronize:
-        src: "{{workdir}}/"
-        dest: "{{workdir}}"
+      ansible.posix.synchronize:
+        src: "{{ workdir }}/"
+        dest: "{{ workdir }}"
         delete: true
         rsync_opts:
           - --exclude=.git
           - --exclude=data
 
     - name: Install Python dependencies
-      shell: "{{pythondir}}/pip install -Ur {{workdir}}/requirements/worker.txt"
+      ansible.builtin.shell: |
+        {{ pythondir }}/pip install -Ur {{ workdir }}/requirements/worker.txt
+      changed_when: true
 
     - name: Install project packages
-      shell: |
-        cd {{workdir}} && {{pythondir}}/pip install -e .
-        cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
+      ansible.builtin.shell: |
+        cd {{ workdir }} && {{ pythondir }}/pip install -e .
+        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
+      changed_when: true
 
     - name: Set soft and hard ulimit
       become: true
       community.general.pam_limits:
         domain: "*"
-        limit_type: "{{item}}"
+        limit_type: "{{ item }}"
         limit_item: nofile
         value: 65535
       loop:
@@ -77,7 +80,8 @@
         - soft
 
     - name: Start Node Exporter
-      shell: >
+      ansible.builtin.shell: >
         nohup
-        {{workdir}}/raysort/bin/node_exporter/node_exporter
+        {{ workdir }}/raysort/bin/node_exporter/node_exporter
         --web.listen-address 0.0.0.0:8091 &
+      changed_when: true
