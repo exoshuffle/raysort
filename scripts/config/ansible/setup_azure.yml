@@ -9,7 +9,7 @@
     pythondir: ~/miniconda3/envs/raysort/bin
   tasks:
     - name: Create a new ext4 partition
-      become: yes
+      become: true
       parted:
         device: "{{data_disk}}"
         number: 1
@@ -19,19 +19,19 @@
         fs_type: ext4
 
     - name: Create filesystem on nvme
-      become: yes
+      become: true
       filesystem:
         fstype: ext4
         dev: "{{ssd_device}}"
 
     - name: Create mount directory
-      become: yes
+      become: true
       file:
         path: "{{mnt_path}}"
         state: directory
 
     - name: Mount nvme
-      become: yes
+      become: true
       mount:
         path: "{{mnt_path}}"
         src: "{{ssd_device}}"
@@ -39,7 +39,7 @@
         state: mounted
 
     - name: Clear nvme temp directory
-      become: yes
+      become: true
       file:
         path: "{{mnt_path}}/tmp"
         state: "{{item}}"
@@ -52,7 +52,7 @@
       synchronize:
         src: "{{workdir}}/"
         dest: "{{workdir}}"
-        delete: yes
+        delete: true
         rsync_opts:
           - --exclude=.git
           - --exclude=data
@@ -66,7 +66,7 @@
         cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
 
     - name: Set soft and hard ulimit
-      become: yes
+      become: true
       community.general.pam_limits:
         domain: "*"
         limit_type: "{{item}}"

@@ -14,21 +14,21 @@
     spark_config_path: /opt/spark/conf
   tasks:
     - name: Create a filesystem on each of the data disks
-      become: yes
+      become: true
       filesystem:
         fstype: ext4
         dev: "{{item}}"
       loop: "{{data_disks}}"
 
     - name: Create data disk mount points
-      become: yes
+      become: true
       file:
         path: "{{mnt_prefix}}{{item}}"
         state: directory
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Mount the data disks
-      become: yes
+      become: true
       mount:
         path: "{{mnt_prefix}}{{idx}}"
         src: "{{item}}"
@@ -40,13 +40,13 @@
         index_var: idx
 
     - name: Create tmpfs mount point
-      become: yes
+      become: true
       file:
         path: "{{tmpfs_path}}"
         state: directory
 
     - name: Mount tmpfs
-      become: yes
+      become: true
       mount:
         path: "{{tmpfs_path}}"
         src: tmpfs
@@ -54,14 +54,14 @@
         state: mounted
 
     - name: Set tmpfs permission
-      become: yes
+      become: true
       file:
         path: "{{tmpfs_path}}"
         state: directory
         mode: "777"
 
     - name: Clear temp directories
-      become: yes
+      become: true
       file:
         path: "{{mnt_prefix}}{{item}}/tmp"
         state: absent
@@ -70,7 +70,7 @@
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Make temp directories
-      become: yes
+      become: true
       file:
         path: "{{mnt_prefix}}{{item}}/tmp"
         state: directory
@@ -82,13 +82,13 @@
       synchronize:
         src: "{{awsdir}}/"
         dest: "{{awsdir}}"
-        delete: yes
+        delete: true
 
     - name: Sync workdir
       synchronize:
         src: "{{workdir}}/"
         dest: "{{workdir}}"
-        delete: yes
+        delete: true
         rsync_opts:
           - --exclude=.git
           - --exclude=data
@@ -102,7 +102,7 @@
         cd {{workdir}}/raysort/sortlib && {{pythondir}}/python setup.py build_ext --inplace
 
     - name: Set soft and hard ulimit
-      become: yes
+      become: true
       community.general.pam_limits:
         domain: "*"
         limit_type: "{{item}}"
@@ -113,11 +113,13 @@
         - soft
 
     - name: Check Hadoop files exist
-      local_action: stat path={{hadoop_config_path}}
+      delegate_to: localhost
+      stat:
+        path: "{{hadoop_config_path}}"
       register: hadoop
 
     - name: Sync hosts file
-      become: yes
+      become: true
       copy:
         src: "{{hosts_path}}"
         dest: "{{hosts_path}}"

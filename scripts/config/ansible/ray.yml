@@ -29,7 +29,7 @@
         state: absent
 
     - name: Clear temp directories
-      become: yes
+      become: true
       file:
         path: "{{item}}/tmp"
         state: absent
@@ -37,7 +37,7 @@
       loop: "{{mnt_paths}}"
 
     - name: Make temp directories
-      become: yes
+      become: true
       file:
         path: "{{item}}/tmp"
         state: directory
