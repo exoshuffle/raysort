@@ -10,7 +10,7 @@
   tasks:
     - name: Create a new ext4 partition
       become: true
-      parted:
+      community.general.parted:
         device: "{{data_disk}}"
         number: 1
         state: present
@@ -20,7 +20,7 @@
 
     - name: Create filesystem on nvme
       become: true
-      filesystem:
+      community.general.filesystem:
         fstype: ext4
         dev: "{{ssd_device}}"
 
