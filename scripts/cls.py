@@ -358,7 +358,6 @@ def setup_grafana() -> None:
 def common_setup(
     cluster_name: str, instance_type: str, cluster_exists: bool, no_disk: bool
 ) -> pathlib.Path:
-    run(f"rsync -a ~/raysort/ray-patch/ {ray.__path__[0]}")
     head_ip = run_output("ec2metadata --local-ipv4")
     ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
@@ -439,6 +438,7 @@ def restart_ray(
     head_ip = run_output("ec2metadata --local-ipv4")
     for mnt in mnt_paths:
         run(f"sudo mkdir -p {mnt} && sudo chmod 777 {mnt}")
+    run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, mnt_paths)
     run(ray_cmd)
