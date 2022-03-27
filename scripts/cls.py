@@ -12,6 +12,7 @@ import yaml
 
 import boto3
 import click
+import ray
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
 DEFAULT_INSTANCE_TYPE = "i3.2xlarge"
@@ -437,6 +438,7 @@ def restart_ray(
     head_ip = run_output("ec2metadata --local-ipv4")
     for mnt in mnt_paths:
         run(f"sudo mkdir -p {mnt} && sudo chmod 777 {mnt}")
+    run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, mnt_paths)
     run(ray_cmd)
