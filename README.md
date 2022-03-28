@@ -60,7 +60,7 @@ To configure Ray to spill to S3 buckets and run, use the following:
 
 ### Configuring Ray
 
-- All of Ray's system configuration parameters can be found in [`ray_config_defs.h`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h)
+- All of Ray's system configuration parameters can be found in [`ray_config_defs.h`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h).
 - You only need to specify the config on the head node. All worker nodes will use the same config.
 - There are two ways to specify a configuration value. Suppose you want to set [`min_spilling_size`](https://github.com/ray-project/ray/blob/master/src/ray/common/ray_config_def.h#L409) to 0, then:
   1. You can set it in Python, where you do `ray.init(..., _system_config={"min_spilling_size": 0, ...})`
@@ -84,6 +84,14 @@ export RAY_BACKEND_LOG_LEVEL=debug
   - Run `sudo mount -o sync path_to_volume /mnt/data0`. Only use `-o sync` if you are running microbenchmarks.
 - Verify that the mounting worked with `lsblk`.
   - If the desired volume is not mounted, edit `/etc/fstab` to remove any conflicting lines. Then, restart your machine and remount.
+
+### Setting up Grafana
+
+- After launching a cluster via `cls.py up`, forward port 3000 from the head node to your laptop, then go to http://localhost:3000/.
+- Default login is username `admin` and password `admin`.
+- Add a new data source here: http://localhost:3000/datasources/new. Select `Prometheus`, set URL to be `http://localhost:9090`, then select `Save & Test`.
+- Import the dashboard here: http://localhost:3000/dashboard/import. Use the JSON file here: https://github.com/franklsf95/raysort/tree/master/scripts/config/grafana/Exoshuffle-AWS.json. Select the Prometheus data source in Options.
+- You should see CPU, memory, disk, network activities in the dashboard. The Application Progress only shows up when you are running Exoshuffle jobs.
 
 ### Troubleshooting
 
