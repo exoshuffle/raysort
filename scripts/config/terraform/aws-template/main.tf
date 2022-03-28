@@ -15,7 +15,7 @@ provider "aws" {
 resource "aws_instance" "cluster" {
   count = 1
 
-  ami           = "ami-0da5da6db44aaf267" # raysort-hadoop-spark-conda
+  ami           = "ami-01cc0c9e866d3322b" # raysort-spark-worker-20220328
   instance_type = var.instance_type
   key_name      = "login-us-west-2"
 
