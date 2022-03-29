@@ -1,5 +1,4 @@
 import csv
-import io
 import logging
 import os
 import random
@@ -48,7 +47,8 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.s3_bucket:
         buf = s3_utils.download_s3(args.s3_bucket, path, None)
         return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
-    return np.fromfile(path, dtype=np.uint8)
+    with open(path, "rb", buffering=args.io_size) as fin:
+        return np.fromfile(fin, dtype=np.uint8)
 
 
 def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
@@ -106,10 +106,7 @@ def part_info(args: Args, part_id: PartId, *, kind="input", s3=False) -> PartInf
         shard = part_id & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
-    if len(args.data_dirs) > 1:
-        prefix = random.choice(args.data_dirs)
-    else:
-        prefix = args.data_dirs[0]
+    prefix = random.choice(args.data_dirs)
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
     return PartInfo(node, filepath)
