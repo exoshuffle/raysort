@@ -10,8 +10,7 @@
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
-    hadoop_config_path: /opt/hadoop/etc/hadoop
-    spark_config_path: /opt/spark/conf
+    hadoop_config_dir: /opt/hadoop/etc/hadoop
   tasks:
     - name: Create a filesystem on each of the data disks
       become: true
@@ -117,7 +116,7 @@
     - name: Check Hadoop files exist
       delegate_to: localhost
       ansible.builtin.stat:
-        path: "{{ hadoop_config_path }}"
+        path: "{{ hadoop_config_dir }}"
       register: hadoop
 
     - name: Sync hosts file
@@ -128,18 +127,15 @@
         mode: 0644
       when: hadoop
 
-    - name: Copy Hadoop core-site.xml
+    - name: Sync Hadoop config files
       ansible.builtin.copy:
-        src: "{{ hadoop_config_path }}/core-site.xml"
-        dest: "{{ hadoop_config_path }}/core-site.xml"
+        src: "{{ hadoop_config_dir }}/{{ item }}"
+        dest: "{{ hadoop_config_dir }}/{{ item }}"
         mode: 0644
-      when: hadoop
-
-    - name: Copy Hadoop yarn-site.xml
-      ansible.builtin.copy:
-        src: "{{ hadoop_config_path }}/yarn-site.xml"
-        dest: "{{ hadoop_config_path }}/yarn-site.xml"
-        mode: 0644
+      loop:
+        - core-site.xml
+        - hdfs-site.xml
+        - yarn-site.xml
       when: hadoop
 
     - name: Start Node Exporter

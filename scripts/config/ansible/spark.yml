@@ -1,7 +1,7 @@
 ---
 - hosts: all
   vars:
-    hadoop_dir: /mnt/data0/tmp/hadoop/
+    hadoop_dir: /mnt/data0/hadoop/
   tasks:
     - name: Remove any existing data directory
       ansible.builtin.file:

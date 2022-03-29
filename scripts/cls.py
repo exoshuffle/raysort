@@ -15,8 +15,9 @@ import click
 import ray
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
-DEFAULT_INSTANCE_TYPE = "i3.2xlarge"
+DEFAULT_INSTANCE_TYPE = "d3.2xlarge"
 
+MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}/tmp"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
@@ -27,11 +28,13 @@ TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray-{:03d}"
 
+GRAFANA_SERVER_PORT = 3000
 PROMETHEUS_SERVER_PORT = 9090
 PROMETHEUS_NODE_EXPORTER_PORT = 8091
 RAY_METRICS_EXPORT_PORT = 8090
 RAY_OBJECT_MANAGER_PORT = 8076
-GRAFANA_SERVER_PORT = 3000
+
+MB = 1024 * 1024
 
 
 def error(*args, **kwargs):
@@ -104,7 +107,7 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     instances = get_instances(
         {
             "tag:ClusterName": [cluster_name],
-            # Exclude "Terminated" state (0x30).
+            # Excluding the "Terminated" state (0x30).
             # https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html
             "instance-state-code": [
                 str(code) for code in [0x00, 0x10, 0x20, 0x40, 0x50]
@@ -359,7 +362,7 @@ def common_setup(
     cluster_name: str, instance_type: str, cluster_exists: bool, no_disk: bool
 ) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
-    ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
+    ips = get_tf_output(cluster_name, "instance_ips")
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
     if not os.environ.get("HADOOP_HOME"):
         click.secho("$HADOOP_HOME not set, skipping Hadoop setup", color="yellow")
@@ -381,7 +384,11 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd(s3_spill: int, mnt_paths: List[str]) -> Tuple[str, Dict]:
+def get_ray_start_cmd(
+    s3_spill: int,
+    is_hdd: bool,
+    mnt_paths: List[str],
+) -> Tuple[str, Dict]:
     system_config = {}
     if s3_spill > 0:
         system_config.update(
@@ -393,7 +400,7 @@ def get_ray_start_cmd(s3_spill: int, mnt_paths: List[str]) -> Tuple[str, Dict]:
                             "uri": [
                                 RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)
                             ],
-                            "buffer_size": 100 * 1024 * 1024,
+                            "buffer_size": 100 * MB,
                         },
                     }
                 ),
@@ -407,7 +414,8 @@ def get_ray_start_cmd(s3_spill: int, mnt_paths: List[str]) -> Tuple[str, Dict]:
                     {
                         "type": "filesystem",
                         "params": {
-                            "directory_path": [f"{mnt}/ray" for mnt in mnt_paths]
+                            "directory_path": [f"{mnt}/ray" for mnt in mnt_paths],
+                            "buffer_size": 10 * MB if is_hdd else -1,
                         },
                     },
                 ),
@@ -430,18 +438,22 @@ def write_ray_system_config(config: Dict, path: str) -> None:
 
 def restart_ray(
     inventory_path: pathlib.Path,
+    instance_type: str,
     clear_input_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
-    mnt_paths: List[str],
+    no_disk: bool,
 ) -> None:
-    head_ip = run_output("ec2metadata --local-ipv4")
+    mnt_paths = get_mnt_paths(instance_type, no_disk)
+    run(f"sudo rm -rf {MNT_PATH_PATTERN}")
     for mnt in mnt_paths:
-        run(f"sudo mkdir -p {mnt} && sudo chmod 777 {mnt}")
+        run(f"sudo mkdir -m 777 -p {mnt}")
     run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, mnt_paths)
+    is_hdd = instance_type.startswith("d3.")
+    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, is_hdd, mnt_paths)
     run(ray_cmd)
+    head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
         "clear_input_dir": clear_input_dir,
@@ -547,10 +559,11 @@ def up(
     if ray:
         restart_ray(
             inventory_path,
+            instance_type,
             clear_input_dir,
             reinstall_ray,
             s3_spill,
-            get_mnt_paths(instance_type, no_disk),
+            no_disk,
         )
     if yarn:
         restart_yarn()
@@ -582,10 +595,11 @@ def setup(
     if ray:
         restart_ray(
             inventory_path,
+            instance_type,
             clear_input_dir,
             reinstall_ray,
             s3_spill,
-            get_mnt_paths(instance_type, no_disk),
+            no_disk,
         )
     if yarn:
         restart_yarn()
