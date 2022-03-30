@@ -5,6 +5,7 @@ import pathlib
 import psutil
 import signal
 import shutil
+import string
 import subprocess
 import time
 from typing import Dict, List, Tuple, Union
@@ -23,6 +24,7 @@ PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
 ANSIBLE_DIR = "config/ansible"
+HADOOP_TEMPLATE_DIR = "config/hadoop"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
@@ -251,8 +253,8 @@ def get_nvme_device_count(instance_type: str) -> int:
 
 def get_data_disks(instance_type: str) -> List[str]:
     cnt = get_nvme_device_count(instance_type)
-    # NOTE: Adjust count if you have both EBS and NVMe devices mounted.
-    return [f"/dev/nvme{i + 1}n1" for i in range(cnt)]
+    offset = 0 if instance_type.startswith("i3.") else 1
+    return [f"/dev/nvme{i + offset}n1" for i in range(cnt)]
 
 
 def get_mnt_paths(instance_type: str, no_disk: bool) -> List[str]:
@@ -297,6 +299,25 @@ def update_workers_file(ips: List[str]) -> None:
     with open(PATH, "w") as fout:
         fout.write("\n".join(ips))
     click.secho(f"Updated {PATH}", fg="green")
+
+
+def update_hadoop_xml(filename: str, head_ip: str, mnt_paths: List[str]) -> None:
+    with open(SCRIPT_DIR / HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
+        template = string.Template(fin.read())
+    content = template.substitute(
+        HEAD_IP=head_ip,
+        DATA_DIRS=",".join(os.path.join(p, "hadoop/dfs/data") for p in mnt_paths),
+        LOCAL_DIRS=",".join(os.path.join(p, "hadoop/yarn/local") for p in mnt_paths),
+    )
+    output_path = os.path.join(os.getenv("HADOOP_HOME"), "etc/hadoop", filename)
+    with open(output_path, "w") as fout:
+        fout.write(content)
+    click.secho(f"Updated {output_path}", fg="green")
+
+
+def update_hadoop_config(head_ip: str, mnt_paths: List[str]) -> None:
+    for filename in ["core-site.xml", "hdfs-site.xml", "yarn-site.xml"]:
+        update_hadoop_xml(filename, head_ip, mnt_paths)
 
 
 # ------------------------------------------------------------
@@ -369,7 +390,7 @@ def common_setup(
     else:
         update_hosts_file(ips)
         update_workers_file(ips)
-        # TODO: Update core-site.xml and yarn-site.xml with head node IP
+        update_hadoop_config(head_ip, get_mnt_paths(instance_type, no_disk))
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
     if not cluster_exists:
         sleep(60, "worker nodes starting up")

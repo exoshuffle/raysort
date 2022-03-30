@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<configuration>
+    <property>
+        <name>fs.defaultFS</name>
+        <value>hdfs://$HEAD_IP:9000</value>
+    </property>
+    <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/mnt/data0/hadoop</value>
+    </property>
+</configuration>
