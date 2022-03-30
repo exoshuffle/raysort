@@ -87,11 +87,17 @@ def make_data_dirs(args: Args):
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
-def init(args: Args):
+def run_on_all_workers(
+    args: Args, fn: ray.remote_function.RemoteFunction, include_head: bool = False
+) -> List[ray.ObjectRef]:
     opts = [ray_utils.node_res(node) for node in args.worker_ips]
-    opts.append({"resources": {"head": 1}})
-    tasks = [make_data_dirs.options(**opt).remote(args) for opt in opts]
-    ray.get(tasks)
+    if include_head:
+        opts.append({"resources": {"head": 1}})
+    return [fn.options(**opt).remote(args) for opt in opts]
+
+
+def init(args: Args):
+    ray.get(run_on_all_workers(args, make_data_dirs, include_head=True))
     logging.info("Created data directories on all nodes")
 
 
@@ -106,14 +112,12 @@ def part_info(
     *,
     kind: str = "input",
     s3: bool = False,
-    data_dir_idx: int = -1,
 ) -> PartInfo:
     if s3:
         shard = part_id & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
-    if data_dir_idx == -1:
-        data_dir_idx = np.random.randint(len(args.data_dirs))
+    data_dir_idx = part_id % len(args.data_dirs)
     prefix = args.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
@@ -134,8 +138,7 @@ def _get_part_path(
 
 
 def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
-    # gensort by default uses direct I/O unless `,buf` is specified.
-    # tmpfs does not support direct I/O so we must disabled it.
+    # Add `,buf` to use buffered I/O instead of direct I/O (for tmpfs).
     if buf:
         path += ",buf"
     subprocess.run(
@@ -147,7 +150,6 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
 def generate_part(
     args: Args,
     part_id: PartId,
-    data_dir_idx: int,
     size: RecordCount,
     offset: RecordCount,
 ) -> PartInfo:
@@ -156,13 +158,19 @@ def generate_part(
         pinfo = part_info(args, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
-        pinfo = part_info(args, part_id, data_dir_idx=data_dir_idx)
+        pinfo = part_info(args, part_id)
         path = pinfo.path
     _run_gensort(offset, size, path, args.s3_bucket)
     if args.s3_bucket:
         s3_utils.upload_s3(args.s3_bucket, path, pinfo.path)
     logging.info(f"Generated input {pinfo}")
     return pinfo
+
+
+@ray.remote
+def drop_fs_cache(_):
+    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+    logging.info("Dropped filesystem cache")
 
 
 def generate_input(args: Args):
@@ -172,22 +180,21 @@ def generate_input(args: Args):
     size = constants.bytes_to_records(args.input_part_size)
     offset = 0
     tasks = []
-    data_dir_idx = [0] * args.num_workers
-    for part_id in range(args.num_mappers):
-        node_i = part_id % args.num_workers
-        idx = data_dir_idx[node_i]
-        tasks.append(
-            generate_part.options(**ray_utils.node_i(args, node_i)).remote(
-                args, part_id, idx, min(size, total_size - offset), offset
+    for m in range(args.num_mappers_per_worker):
+        for w in range(args.num_workers):
+            part_id = constants.merge_part_ids(w, m)
+            tasks.append(
+                generate_part.options(**ray_utils.node_i(args, w)).remote(
+                    args, part_id, min(size, total_size - offset), offset
+                )
             )
-        )
-        offset += size
-        data_dir_idx[node_i] = (idx + 1) % len(args.data_dirs)
+            offset += size
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
     with open(get_manifest_file(args), "w") as fout:
         writer = csv.writer(fout)
         writer.writerows(parts)
+    ray.get(run_on_all_workers(args, drop_fs_cache))
 
 
 def create_partition(part_size: int) -> np.ndarray:

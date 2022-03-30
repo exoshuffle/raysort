@@ -161,6 +161,7 @@ def derive_app_args(args: Args):
     args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
+    args.num_mappers_per_worker = args.num_mappers // args.num_workers
     if args.riffle:
         assert args.merge_factor % args.map_parallelism == 0, args
         args.merge_parallelism = 1
