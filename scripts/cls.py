@@ -335,9 +335,9 @@ def free_port(port: int):
             continue
 
 
-def get_prometheus_sd_content(ips: List[str]) -> str:
-    def get_addrs(port):
-        return [f"{ip}:{port}" for ip in ips]
+def get_prometheus_sd_content(head_ip: str, ips: List[str]) -> str:
+    def get_addrs(port, include_head=True):
+        return [f"{ip}:{port}" for ip in (ips if not include_head else ips + [head_ip])]
 
     return json.dumps(
         [
@@ -347,19 +347,19 @@ def get_prometheus_sd_content(ips: List[str]) -> str:
             },
             {
                 "labels": {"job": "node"},
-                "targets": get_addrs(PROMETHEUS_NODE_EXPORTER_PORT),
+                "targets": get_addrs(PROMETHEUS_NODE_EXPORTER_PORT, include_head=False),
             },
         ]
     )
 
 
-def setup_prometheus(ips: List[str]) -> None:
+def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     prometheus_data_path = "/tmp/prometheus"
     if os.path.exists(prometheus_data_path):
         shutil.rmtree(prometheus_data_path)
     os.makedirs(prometheus_data_path, exist_ok=True)
     with open("/tmp/prometheus/service_discovery.json", "w") as fout:
-        fout.write(get_prometheus_sd_content(ips))
+        fout.write(get_prometheus_sd_content(head_ip, ips))
     free_port(PROMETHEUS_SERVER_PORT)
     cmd = str(SCRIPT_DIR.parent / "raysort/bin/prometheus/prometheus")
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
@@ -396,7 +396,7 @@ def common_setup(
         sleep(60, "worker nodes starting up")
     ev = get_ansible_vars(instance_type, no_disk)
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
-    setup_prometheus(ips + [head_ip])
+    setup_prometheus(head_ip, ips)
     setup_grafana()
     return inventory_path
 
