@@ -1,7 +1,6 @@
 import csv
 import logging
 import os
-import random
 import subprocess
 import tempfile
 import time
@@ -101,12 +100,21 @@ def init(args: Args):
 # ------------------------------------------------------------
 
 
-def part_info(args: Args, part_id: PartId, *, kind="input", s3=False) -> PartInfo:
+def part_info(
+    args: Args,
+    part_id: PartId,
+    *,
+    kind: str = "input",
+    s3: bool = False,
+    data_dir_idx: int = -1,
+) -> PartInfo:
     if s3:
         shard = part_id & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
-    prefix = random.choice(args.data_dirs)
+    if data_dir_idx == -1:
+        data_dir_idx = np.random.randint(len(args.data_dirs))
+    prefix = args.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
     return PartInfo(node, filepath)
@@ -137,14 +145,18 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
 
 @ray.remote
 def generate_part(
-    args: Args, part_id: PartId, size: RecordCount, offset: RecordCount
+    args: Args,
+    part_id: PartId,
+    data_dir_idx: int,
+    size: RecordCount,
+    offset: RecordCount,
 ) -> PartInfo:
     logging_utils.init()
     if args.s3_bucket:
         pinfo = part_info(args, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
-        pinfo = part_info(args, part_id)
+        pinfo = part_info(args, part_id, data_dir_idx=data_dir_idx)
         path = pinfo.path
     _run_gensort(offset, size, path, args.s3_bucket)
     if args.s3_bucket:
@@ -160,14 +172,17 @@ def generate_input(args: Args):
     size = constants.bytes_to_records(args.input_part_size)
     offset = 0
     tasks = []
+    data_dir_idx = [0] * args.num_workers
     for part_id in range(args.num_mappers):
-        node = args.worker_ips[part_id % args.num_workers]
+        node_i = part_id % args.num_workers
+        idx = data_dir_idx[node_i]
         tasks.append(
-            generate_part.options(**ray_utils.node_res(node)).remote(
-                args, part_id, min(size, total_size - offset), offset
+            generate_part.options(**ray_utils.node_i(args, node_i)).remote(
+                args, part_id, idx, min(size, total_size - offset), offset
             )
         )
         offset += size
+        data_dir_idx[node_i] = (idx + 1) % len(args.data_dirs)
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
     with open(get_manifest_file(args), "w") as fout:
