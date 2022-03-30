@@ -30,7 +30,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 # Memory usage: input_part_size = 2GB
 # Plasma usage: input_part_size = 2GB
-@ray.remote
+@ray.remote(num_cpus=0)
 @tracing_utils.timeit("map")
 def mapper(
     args: Args,
@@ -73,7 +73,7 @@ def _dummy_merge(
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
-@ray.remote
+@ray.remote(num_cpus=0)
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
     args: Args,
@@ -110,7 +110,8 @@ def merge_mapper_blocks(
             # ray.put() should only use shared memory. Need to investigate.
             del datachunk
         else:
-            # TODO(@lsf): support S3 for manual_spilling
+            # TODO(@lsf): support S3 for manual_spilling.
+            # TODO(@lsf): make sure we write to all mounted disks.
             part_id = constants.merge_part_ids(worker_id, merge_id, i)
             pinfo = sort_utils.part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
