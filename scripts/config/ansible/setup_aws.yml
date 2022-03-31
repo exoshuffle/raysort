@@ -39,6 +39,14 @@
       loop_control:
         index_var: idx
 
+    - name: Set permission for disk mount points
+      become: true
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}"
+        state: directory
+        mode: "0777"
+      loop: "{{ range(data_disks|length)|list }}"
+
     - name: Create tmpfs mount point
       become: true
       ansible.builtin.file:
