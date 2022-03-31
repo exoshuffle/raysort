@@ -432,6 +432,7 @@ def get_ray_start_cmd(
         assert mnt_paths, "must have disks mounted or use S3 for spilling"
         system_config.update(
             **{
+                "max_io_workers": max(4, len(mnt_paths) * 2),
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "filesystem",
