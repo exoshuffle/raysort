@@ -24,7 +24,7 @@
       ansible.builtin.file:
         path: "{{ mnt_prefix }}{{ item }}"
         state: directory
-        mode: 0777
+        mode: "0777"
       loop: "{{ range(data_disks|length)|list }}"
 
     - name: Mount the data disks
@@ -44,7 +44,7 @@
       ansible.builtin.file:
         path: "{{ tmpfs_path }}"
         state: directory
-        mode: 0777
+        mode: "0777"
 
     - name: Mount tmpfs
       become: true
@@ -53,28 +53,6 @@
         src: tmpfs
         fstype: tmpfs
         state: mounted
-
-    - name: Set tmpfs permission
-      become: true
-      ansible.builtin.file:
-        path: "{{ tmpfs_path }}"
-        state: directory
-        mode: 0777
-
-    - name: Clear temp directories
-      ansible.builtin.file:
-        path: "{{ mnt_prefix }}{{ item }}/tmp"
-        state: absent
-      when: mnt_prefix and data_disks
-      loop: "{{ range(data_disks|length)|list }}"
-
-    - name: Make temp directories
-      ansible.builtin.file:
-        path: "{{ mnt_prefix }}{{ item }}/tmp"
-        state: directory
-        mode: 0777
-      when: mnt_prefix and data_disks
-      loop: "{{ range(data_disks|length)|list }}"
 
     - name: Sync aws directory
       ansible.posix.synchronize:
@@ -124,21 +102,21 @@
       ansible.builtin.copy:
         src: "{{ hosts_path }}"
         dest: "{{ hosts_path }}"
-        mode: 0644
+        mode: "0644"
       when: hadoop
 
     - name: Sync Hadoop config files
       ansible.builtin.copy:
         src: "{{ hadoop_config_dir }}/{{ item }}"
         dest: "{{ hadoop_config_dir }}/{{ item }}"
-        mode: 0644
+        mode: "0644"
       loop:
         - core-site.xml
         - hdfs-site.xml
         - yarn-site.xml
       when: hadoop
 
-    - name: Start Node Exporter
+    - name: Start node_exporter
       ansible.builtin.shell: >
         nohup
         {{ workdir }}/raysort/bin/node_exporter/node_exporter

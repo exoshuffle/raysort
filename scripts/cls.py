@@ -462,7 +462,7 @@ def write_ray_system_config(config: Dict, path: str) -> None:
 def restart_ray(
     inventory_path: pathlib.Path,
     instance_type: str,
-    clear_input_dir: bool,
+    clear_data_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
     no_disk: bool,
@@ -480,7 +480,7 @@ def restart_ray(
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
-        "clear_input_dir": clear_input_dir,
+        "clear_data_dir": clear_data_dir,
         "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
@@ -492,9 +492,34 @@ def restart_ray(
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
 
 
-def restart_yarn() -> None:
-    # TODO: convert this to Python
-    run(str(SCRIPT_DIR / "config/ansible/start_spark.sh"))
+def restart_yarn(
+    inventory_path: pathlib.Path,
+    instance_type: str,
+    no_disk: bool,
+) -> None:
+    mnt_paths = get_mnt_paths(instance_type, no_disk)
+    env = dict(
+        os.environ,
+        HADOOP_SSH_OPTS="-i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
+    )
+    HADOOP_HOME = os.getenv("HADOOP_HOME")
+    SPARK_HOME = os.getenv("SPARK_HOME")
+    SPARK_EVENTS_DIR = "/spark-logs"
+    run(f"{SPARK_HOME}/sbin/stop-history-server.sh")
+    run(f"{HADOOP_HOME}/sbin/stop-yarn.sh", env=env)
+    run(f"{HADOOP_HOME}/sbin/stop-dfs.sh", env=env)
+    run(f"{HADOOP_HOME}/bin/hdfs namenode -format -force")
+    run_ansible_playbook(inventory_path, "yarn", ev={"mnt_paths": mnt_paths})
+    run(f"{HADOOP_HOME}/sbin/start-dfs.sh", env=env)
+    run(f"{HADOOP_HOME}/sbin/start-yarn.sh", env=env)
+    run(f"{HADOOP_HOME}/bin/hdfs dfs -mkdir {SPARK_EVENTS_DIR}")
+    run(
+        f"{SPARK_HOME}/sbin/start-history-server.sh",
+        env=dict(
+            env,
+            SPARK_HISTORY_OPTS=f"-Dspark.history.fs.logDirectory=hdfs://{SPARK_EVENTS_DIR}",
+        ),
+    )
 
 
 def print_after_setup(cluster_name: str) -> None:
@@ -528,7 +553,7 @@ def setup_command_options(cli_fn):
             help="start a YARN cluster",
         ),
         click.option(
-            "--clear_input_dir",
+            "--clear_data_dir",
             default=False,
             is_flag=True,
             help="whether to remove input data directory",
@@ -569,7 +594,7 @@ def up(
     instance_type: str,
     ray: bool,
     yarn: bool,
-    clear_input_dir: bool,
+    clear_data_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
     no_disk: bool,
@@ -584,13 +609,13 @@ def up(
         restart_ray(
             inventory_path,
             instance_type,
-            clear_input_dir,
+            clear_data_dir,
             reinstall_ray,
             s3_spill,
             no_disk,
         )
     if yarn:
-        restart_yarn()
+        restart_yarn(inventory_path, instance_type, no_disk)
     print_after_setup(cluster_name)
 
 
@@ -606,7 +631,7 @@ def setup(
     instance_type: str,
     ray: bool,
     yarn: bool,
-    clear_input_dir: bool,
+    clear_data_dir: bool,
     reinstall_ray: bool,
     s3_spill: int,
     no_disk: bool,
@@ -620,13 +645,13 @@ def setup(
         restart_ray(
             inventory_path,
             instance_type,
-            clear_input_dir,
+            clear_data_dir,
             reinstall_ray,
             s3_spill,
             no_disk,
         )
     if yarn:
-        restart_yarn()
+        restart_yarn(inventory_path, instance_type, no_disk)
     print_after_setup(cluster_name)
 
 

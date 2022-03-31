@@ -1,0 +1,12 @@
+---
+- hosts: all
+  strategy: free
+  vars:
+    mnt_paths:
+      - /mnt/data0
+  tasks:
+    - name: Remove HDFS data directories
+      ansible.builtin.file:
+        state: absent
+        path: "{{ item }}/hadoop"
+      loop: "{{ mnt_paths }}"

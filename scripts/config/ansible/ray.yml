@@ -30,7 +30,7 @@
         path: "{{ tmpfs_path }}/raysort"
         state: absent
 
-    - name: Clear Raysort directories
+    - name: Clear raysort directories
       become: true
       ansible.builtin.file:
         path: "{{ item }}/raysort"
@@ -49,11 +49,4 @@
         --metrics-export-port={{ ray_merics_export_port }}
         --resources='{"worker":1}'
         --object-store-memory={{ ray_object_store_memory }}
-      changed_when: true
-
-    - name: Start Node Exporter
-      ansible.builtin.shell: >
-        nohup
-        {{ workdir }}/raysort/bin/node_exporter/node_exporter
-        --web.listen-address 0.0.0.0:8091 &
       changed_when: true
