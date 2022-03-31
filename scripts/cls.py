@@ -251,8 +251,9 @@ def get_nvme_device_count(instance_type: str) -> int:
 
 def get_data_disks(instance_type: str) -> List[str]:
     cnt = get_nvme_device_count(instance_type)
+    offset = 0 if instance_type.startswith("i3.") else 1
     # NOTE: Adjust count if you have both EBS and NVMe devices mounted.
-    return [f"/dev/nvme{i + 1}n1" for i in range(cnt)]
+    return [f"/dev/nvme{i + offset}n1" for i in range(cnt)]
 
 
 def get_mnt_paths(instance_type: str, no_disk: bool) -> List[str]:
