@@ -8,7 +8,7 @@
     tmpfs_path: /mnt/tmpfs
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
-    clear_input_dir: false
+    clear_data_dir: false
     reinstall_ray: false
     ray_object_manager_port: 8076
     ray_merics_export_port: 8090
@@ -30,20 +30,13 @@
         path: "{{ tmpfs_path }}/raysort"
         state: absent
 
-    - name: Clear temp directories
+    - name: Clear Raysort directories
       become: true
       ansible.builtin.file:
-        path: "{{ item }}/tmp"
+        path: "{{ item }}/raysort"
         state: absent
-        mode: 0777
       loop: "{{ mnt_paths }}"
-
-    - name: Make temp directories
-      ansible.builtin.file:
-        path: "{{ item }}/tmp"
-        state: directory
-        mode: 0777
-      loop: "{{ mnt_paths }}"
+      when: clear_data_dir
 
     - name: Restart Ray
       ansible.builtin.shell: >

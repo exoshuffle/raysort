@@ -138,7 +138,7 @@ def _get_data_dirs():
     if os.path.exists(mnt):
         ret = sorted(
             [
-                os.path.join(mnt, d, "tmp")
+                os.path.join(mnt, d, "raysort")
                 for d in os.listdir(mnt)
                 if d.startswith("data")
             ]

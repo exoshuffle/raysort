@@ -19,7 +19,7 @@ DEFAULT_CLUSTER_NAME = "raysort-lsf"
 DEFAULT_INSTANCE_TYPE = "d3.2xlarge"
 
 MNT_PATH_PATTERN = "/mnt/data*"
-MNT_PATH_FMT = "/mnt/data{i}/tmp"
+MNT_PATH_FMT = "/mnt/data{i}"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
@@ -355,6 +355,7 @@ def get_prometheus_sd_content(head_ip: str, ips: List[str]) -> str:
 
 def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     prometheus_data_path = "/tmp/prometheus"
+    # TODO: only remove this when data is too big
     if os.path.exists(prometheus_data_path):
         shutil.rmtree(prometheus_data_path)
     os.makedirs(prometheus_data_path, exist_ok=True)
@@ -466,6 +467,7 @@ def restart_ray(
     no_disk: bool,
 ) -> None:
     mnt_paths = get_mnt_paths(instance_type, no_disk)
+    # Clear all mounts in case the previous setup has more mounts than we have.
     run(f"sudo rm -rf {MNT_PATH_PATTERN}")
     for mnt in mnt_paths:
         run(f"sudo mkdir -m 777 -p {mnt}")
