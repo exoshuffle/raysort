@@ -17,7 +17,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--input_part_size",
-        default=2000 * 1000 * 1000,
+        default=1000 * 1000 * 1000,
         type=ByteCount,
         help="size in bytes of each map partition",
     )
@@ -29,7 +29,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--map_parallelism",
-        default=2,
+        default=4,
         type=int,
         help="each round has `map_parallelism` map tasks per node",
     )
