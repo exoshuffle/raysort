@@ -36,7 +36,8 @@ PROMETHEUS_NODE_EXPORTER_PORT = 8091
 RAY_METRICS_EXPORT_PORT = 8090
 RAY_OBJECT_MANAGER_PORT = 8076
 
-MB = 1024 * 1024
+KB = 1024
+MB = KB * 1024
 
 
 def error(*args, **kwargs):
@@ -234,6 +235,10 @@ def run_ansible_playbook(
     return run(cmd, retries=retries, time_between_retries=time_between_retries)
 
 
+def is_hdd(instance_type: str) -> bool:
+    return instance_type.startswith("d3.")
+
+
 def get_nvme_device_count(instance_type: str) -> int:
     return {
         "i3.4xlarge": 2,
@@ -301,11 +306,15 @@ def update_workers_file(ips: List[str]) -> None:
     click.secho(f"Updated {PATH}", fg="green")
 
 
-def update_hadoop_xml(filename: str, head_ip: str, mnt_paths: List[str]) -> None:
+def update_hadoop_xml(
+    filename: str, head_ip: str, mnt_paths: List[str], is_hdd: bool
+) -> None:
     with open(SCRIPT_DIR / HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
         template = string.Template(fin.read())
     content = template.substitute(
+        DEFAULT_FS=f"hdfs://{head_ip}:9000",
         HEAD_IP=head_ip,
+        IO_BUFFER_SIZE=128 * KB if is_hdd else 4 * KB,
         DATA_DIRS=",".join(os.path.join(p, "hadoop/dfs/data") for p in mnt_paths),
         LOCAL_DIRS=",".join(os.path.join(p, "hadoop/yarn/local") for p in mnt_paths),
     )
@@ -315,9 +324,9 @@ def update_hadoop_xml(filename: str, head_ip: str, mnt_paths: List[str]) -> None
     click.secho(f"Updated {output_path}", fg="green")
 
 
-def update_hadoop_config(head_ip: str, mnt_paths: List[str]) -> None:
+def update_hadoop_config(head_ip: str, mnt_paths: List[str], is_hdd: bool) -> None:
     for filename in ["core-site.xml", "hdfs-site.xml", "yarn-site.xml"]:
-        update_hadoop_xml(filename, head_ip, mnt_paths)
+        update_hadoop_xml(filename, head_ip, mnt_paths, is_hdd)
 
 
 # ------------------------------------------------------------
@@ -391,7 +400,9 @@ def common_setup(
     else:
         update_hosts_file(ips)
         update_workers_file(ips)
-        update_hadoop_config(head_ip, get_mnt_paths(instance_type, no_disk))
+        update_hadoop_config(
+            head_ip, get_mnt_paths(instance_type, no_disk), is_hdd(instance_type)
+        )
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
     if not cluster_exists:
         sleep(60, "worker nodes starting up")
@@ -474,8 +485,9 @@ def restart_ray(
         run(f"sudo mkdir -m 777 -p {mnt}")
     run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
-    is_hdd = instance_type.startswith("d3.")
-    ray_cmd, ray_system_config = get_ray_start_cmd(s3_spill, is_hdd, mnt_paths)
+    ray_cmd, ray_system_config = get_ray_start_cmd(
+        s3_spill, is_hdd(instance_type), mnt_paths
+    )
     run(ray_cmd)
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
@@ -501,10 +513,11 @@ def restart_yarn(
     env = dict(
         os.environ,
         HADOOP_SSH_OPTS="-i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
+        HADOOP_OPTIONAL_TOOLS="hadoop-aws",
     )
     HADOOP_HOME = os.getenv("HADOOP_HOME")
     SPARK_HOME = os.getenv("SPARK_HOME")
-    SPARK_EVENTS_DIR = "/spark-logs"
+    SPARK_EVENTS_DIR = "hdfs:///spark-events"
     run(f"{SPARK_HOME}/sbin/stop-history-server.sh")
     run(f"{HADOOP_HOME}/sbin/stop-yarn.sh", env=env)
     run(f"{HADOOP_HOME}/sbin/stop-dfs.sh", env=env)
@@ -517,7 +530,7 @@ def restart_yarn(
         f"{SPARK_HOME}/sbin/start-history-server.sh",
         env=dict(
             env,
-            SPARK_HISTORY_OPTS=f"-Dspark.history.fs.logDirectory=hdfs://{SPARK_EVENTS_DIR}",
+            SPARK_HISTORY_OPTS=f"-Dspark.history.fs.logDirectory={SPARK_EVENTS_DIR}",
         ),
     )
 

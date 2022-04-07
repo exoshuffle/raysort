@@ -20,6 +20,10 @@
         <name>spark.shuffle.push.server.mergedShuffleFileManagerImpl</name>
         <value>org.apache.spark.network.shuffle.RemoteBlockPushResolver</value>
     </property>
+    <!-- <property>
+        <name>spark.shuffle.push.server.minChunkSizeInMergedShuffleFile</name>
+        <value>10m</value>
+    </property> -->
     <property>
         <name>yarn.log-aggregation-enable</name>
         <value>true</value>
