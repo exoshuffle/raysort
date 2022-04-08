@@ -141,6 +141,12 @@ def get_args(*args, **kwargs):
         type=float,
         help="fail a node this many seconds into execution if fail_node is nonempty",
     )
+    parser.add_argument(
+        "--pin_tasks",
+        default=False,
+        action="store_true",
+        help="if set, will pin tasks to specific nodes",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if none is specified, will run all steps"
