@@ -41,15 +41,15 @@ sns.set_palette("Set2")
 def get_data_large():
     df = pd.DataFrame(
         [
-            ["Spark", "10TB", 3140.228 / SECS_PER_HR],
-            [r"\textsf{Exoshuffle}", "10TB", 1469.88 / SECS_PER_HR],
+#            ["Spark", "10TB", 3140.228 / SECS_PER_HR],
             ["(Theoretical)", "10TB", 1271.566 / SECS_PER_HR],
-            ["Spark", "50TB", 10741.151 / SECS_PER_HR],
-            [r"\textsf{Exoshuffle}", "50TB", 8042.029 / SECS_PER_HR],
+            [r"\textsf{Exoshuffle (Ray-Cosco)}", "10TB", 1469.88 / SECS_PER_HR],
+#            ["Spark", "50TB", 10741.151 / SECS_PER_HR],
             ["(Theoretical)", "50TB", 6357.829 / SECS_PER_HR],
-            ["Spark", "100TB", 0 / SECS_PER_HR],
-            [r"\textsf{Exoshuffle}", "100TB", 15593.347 / SECS_PER_HR],
+            [r"\textsf{Exoshuffle (Ray-Cosco)}", "50TB", 8042.029 / SECS_PER_HR],
+#            ["Spark", "100TB", 0 / SECS_PER_HR],
             ["(Theoretical)", "100TB", 12715.658 / SECS_PER_HR],
+            [r"\textsf{Exoshuffle (Ray-Cosco)}", "100TB", 15593.347 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
     )
