@@ -1,0 +1,14 @@
+---
+- hosts: all
+  strategy: free
+  tasks:
+    - name: Remove fstab line
+      become: yes
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '^\/dev\/nvme0n1.*'
+        state: absent
+    - name: Reboot machine
+      become: yes
+      reboot:
+        reboot_timeout: 3600

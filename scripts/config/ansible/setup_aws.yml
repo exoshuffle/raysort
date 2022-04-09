@@ -2,7 +2,7 @@
 - hosts: all
   strategy: free
   vars:
-    data_disk: /dev/nvme1n1
+    data_disk: /dev/nvme0n1
     data_partition: /dev/nvme1n1p1
     mnt_path: /mnt/ebs0
     tmpfs_path: /mnt/tmpfs
@@ -13,53 +13,74 @@
     hadoop_config_path: /opt/hadoop/etc/hadoop
     spark_config_path: /opt/spark/conf
   tasks:
-    - name: Create a partition table and a partition
-      become: yes
-      parted:
-        device: "{{data_disk}}"
-        number: 1
-        state: present
-        label: gpt
-        name: data0
-        fs_type: ext4
+    # - name: Create a partition table and a partition
+    #   become: yes
+    #   parted:
+    #     device: "{{data_disk}}"
+    #     number: 1
+    #     state: present
+    #     label: gpt
+    #     name: data0
+    #     fs_type: ext4
 
-    - name: Create a filesystem on the partition
+    # - name: Create a filesystem on the partition
+    #   become: yes
+    #   filesystem:
+    #     fstype: ext4
+    #     dev: "{{data_partition}}"
+
+    # - name: Create mount points
+    #   become: yes
+    #   file:
+    #     path: "{{item}}"
+    #     state: directory
+    #   loop:
+    #     - "{{mnt_path}}"
+    #     - "{{tmpfs_path}}"
+
+    # - name: Mount the data disk
+    #   become: yes
+    #   mount:
+    #     path: "{{mnt_path}}"
+    #     src: "{{data_partition}}"
+    #     fstype: ext4
+    #     state: mounted
+
+    # - name: Mount tmpfs
+    #   become: yes
+    #   mount:
+    #     path: "{{tmpfs_path}}"
+    #     src: tmpfs
+    #     fstype: tmpfs
+    #     state: mounted
+
+    # - name: Set tmpfs permission
+    #   become: yes
+    #   file:
+    #     path: "{{tmpfs_path}}"
+    #     state: directory
+    #     mode: "777"
+
+
+    - name: Create filesystem on nvme
       become: yes
       filesystem:
         fstype: ext4
-        dev: "{{data_partition}}"
+        dev: "{{data_disk}}"
 
-    - name: Create mount points
+    - name: Create mount directory
       become: yes
       file:
-        path: "{{item}}"
+        path: "{{mnt_path}}"
         state: directory
-      loop:
-        - "{{mnt_path}}"
-        - "{{tmpfs_path}}"
 
-    - name: Mount the data disk
+    - name: Mount nvme
       become: yes
       mount:
         path: "{{mnt_path}}"
-        src: "{{data_partition}}"
+        src: "{{data_disk}}"
         fstype: ext4
         state: mounted
-
-    - name: Mount tmpfs
-      become: yes
-      mount:
-        path: "{{tmpfs_path}}"
-        src: tmpfs
-        fstype: tmpfs
-        state: mounted
-
-    - name: Set tmpfs permission
-      become: yes
-      file:
-        path: "{{tmpfs_path}}"
-        state: directory
-        mode: "777"
 
     - name: Clear temp directories
       become: yes
@@ -130,6 +151,12 @@
         dest: "{{hadoop_config_path}}/yarn-site.xml"
       when: hadoop
 
+    - name: Copy Hadoop hadoop-env.sh
+      copy:
+        src: "{{hadoop_config_path}}/hadoop-env.sh"
+        dest: "{{hadoop_config_path}}/hadoop-env.sh"
+      when: hadoop
+  
     - name: Start Node Exporter
       shell: >
         nohup

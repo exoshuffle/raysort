@@ -13,7 +13,7 @@ import yaml
 import boto3
 import click
 
-DEFAULT_CLUSTER_NAME = "raysort-lsf"
+DEFAULT_CLUSTER_NAME = "raysort-sean-yarn-i3"
 
 EBS_MNT = "/mnt/ebs0/tmp"
 PARALLELISM = os.cpu_count() * 4
@@ -303,6 +303,7 @@ def setup_grafana() -> None:
 def common_setup(cluster_name: str) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
     ids, ips = get_tf_output(cluster_name, ["instance_ids", "instance_ips"])
+    print(ips)
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
     if not os.environ.get("HADOOP_HOME"):
         click.secho("$HADOOP_HOME not set, skipping Hadoop setup", color="yellow")

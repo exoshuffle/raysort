@@ -13,19 +13,13 @@ provider "aws" {
 }
 
 resource "aws_instance" "cluster" {
-  count = 1
+  count = 10
 
   ami           = "ami-0da5da6db44aaf267" # raysort-hadoop-spark-conda
-  instance_type = "r6i.2xlarge"
+  instance_type = "i3.2xlarge"
   key_name      = "login-us-west-2"
 
-  ebs_block_device {
-    device_name = "sdb"
-    iops        = 3000
-    throughput  = 300
-    volume_size = 1000
-    volume_type = "gp3"
-  }
+
 
   tags = {
     ClusterName = var.cluster_name
