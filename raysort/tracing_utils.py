@@ -1,5 +1,6 @@
 import collections
 import functools
+import glob
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ import yaml
 
 import ray
 from ray.util import metrics
+import requests
 import wandb
 
 from raysort import constants
@@ -225,7 +227,16 @@ class ProgressTracker:
             json.dump(ret, fout)
         wandb.save(filename, base_path="/tmp")
 
+    def save_prometheus_snapshot(self):
+        snapshot_json = requests.post(
+            "http://localhost:9090/api/v1/admin/tsdb/snapshot"
+        ).json()
+        snapshot_glob = f"/tmp/prometheus/snapshots/{snapshot_json['data']['name']}/**"
+        for filename in glob.glob(snapshot_glob, recursive=True):
+            wandb.save(filename, base_path="/tmp")
+
     def performance_report(self):
         self.save_trace()
+        self.save_prometheus_snapshot()
         self.report_spilling()
         self.report()
