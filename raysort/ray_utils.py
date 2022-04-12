@@ -46,11 +46,11 @@ def _fail_and_restart_remote_node(worker_ip: str):
     local_ip = socket.gethostbyname(hostname)
     object_store = 28 * 1024 * 1024 * 1024
     python_dir = "~/miniconda3/envs/raysort/bin"
-    start_cmd = """{python_dir}/ray start --address={local_ip}:6379
-            --object-manager-port=8076
-            --metrics-export-port=8090
-            --resources={{\"node:{worker_ip}\": 1}}
-            --object-store-memory={obj_st_mem}""".format(
+    start_cmd = """{python_dir}/ray start --address={local_ip}:6379 \
+    --object-manager-port=8076 \
+    --metrics-export-port=8090 \
+    --resources=\\'{{\\"node:{worker_ip}\\": 1}}\\' \
+    --object-store-memory={obj_st_mem}""".format(
         python_dir=python_dir,
         local_ip=local_ip,
         worker_ip=worker_ip,
