@@ -228,12 +228,17 @@ class ProgressTracker:
         wandb.save(filename, base_path="/tmp")
 
     def save_prometheus_snapshot(self):
-        snapshot_json = requests.post(
-            "http://localhost:9090/api/v1/admin/tsdb/snapshot"
-        ).json()
-        snapshot_glob = f"/tmp/prometheus/snapshots/{snapshot_json['data']['name']}/**"
-        for filename in glob.glob(snapshot_glob, recursive=True):
-            wandb.save(filename, base_path="/tmp")
+        try:
+            snapshot_json = requests.post(
+                "http://localhost:9090/api/v1/admin/tsdb/snapshot"
+            ).json()
+            snapshot_glob = (
+                f"/tmp/prometheus/snapshots/{snapshot_json['data']['name']}/**"
+            )
+            for filename in glob.glob(snapshot_glob, recursive=True):
+                wandb.save(filename, base_path="/tmp")
+        except requests.exceptions.ConnectionError:
+            logging.info("Prometheus not running, skipping snapshot save")
 
     def performance_report(self):
         self.save_trace()
