@@ -16,6 +16,7 @@ import click
 import ray
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
+DEFAULT_INSTANCE_COUNT = 10
 DEFAULT_INSTANCE_TYPE = "d3.2xlarge"
 
 MNT_PATH_PATTERN = "/mnt/data*"
@@ -124,13 +125,8 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     return ret
 
 
-def get_terraform_vars(cluster_name: str, instance_type: str) -> str:
-    return "".join(
-        [
-            f' -var="cluster_name={cluster_name}"',
-            f' -var="instance_type={instance_type}"',
-        ]
-    )
+def get_terraform_vars(**kwargs: Dict) -> str:
+    return "".join([f' -var="{k}={v}"' for k, v in kwargs.items()])
 
 
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
@@ -151,11 +147,15 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     return tf_dir
 
 
-def terraform_provision(cluster_name: str, instance_type: str) -> None:
+def terraform_provision(
+    cluster_name: str, instance_count: int, instance_type: str
+) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
     run("terraform init", cwd=tf_dir)
     cmd = "terraform apply -auto-approve" + get_terraform_vars(
-        cluster_name, instance_type
+        cluster_name=cluster_name,
+        instance_count=instance_count,
+        instance_type=instance_type,
     )
     run(cmd, cwd=tf_dir)
 
@@ -552,6 +552,7 @@ def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
         click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
+        click.argument("instance_count", default=DEFAULT_INSTANCE_COUNT),
         click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE),
         click.option(
             "--ray",
@@ -604,6 +605,7 @@ def cli():
 @setup_command_options
 def up(
     cluster_name: str,
+    instance_count: int,
     instance_type: str,
     ray: bool,
     yarn: bool,
@@ -616,7 +618,7 @@ def up(
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
-    terraform_provision(cluster_name, instance_type)
+    terraform_provision(cluster_name, instance_count, instance_type)
     inventory_path = common_setup(cluster_name, instance_type, cluster_exists, no_disk)
     if ray:
         restart_ray(
@@ -641,6 +643,7 @@ def up(
 )
 def setup(
     cluster_name: str,
+    _: int,  # unused: instance_count
     instance_type: str,
     ray: bool,
     yarn: bool,
@@ -670,11 +673,10 @@ def setup(
 
 @cli.command()
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-@click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE)
-def down(cluster_name: str, instance_type: str):
+def down(cluster_name: str):
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     cmd = "terraform destroy -auto-approve" + get_terraform_vars(
-        cluster_name, instance_type
+        cluster_name=cluster_name
     )
     run(cmd, cwd=tf_dir)
     check_cluster_existence(cluster_name, raise_if_exists=True)
