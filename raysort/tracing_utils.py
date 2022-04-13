@@ -1,10 +1,10 @@
 import collections
 import functools
-import glob
 import json
 import logging
 import os
 import re
+import shutil
 import time
 from typing import Dict
 import yaml
@@ -232,11 +232,13 @@ class ProgressTracker:
             snapshot_json = requests.post(
                 "http://localhost:9090/api/v1/admin/tsdb/snapshot"
             ).json()
-            snapshot_glob = (
-                f"/tmp/prometheus/snapshots/{snapshot_json['data']['name']}/**"
+            snapshot_name = snapshot_json["data"]["name"]
+            shutil.make_archive(
+                f"/tmp/prometheus-{snapshot_name}",
+                "zip",
+                f"/tmp/prometheus/snapshots/{snapshot_name}",
             )
-            for filename in glob.glob(snapshot_glob, recursive=True):
-                wandb.save(filename, base_path="/tmp")
+            wandb.save(f"/tmp/prometheus-{snapshot_name}.zip", base_path="/tmp")
         except requests.exceptions.ConnectionError:
             logging.info("Prometheus not running, skipping snapshot save")
 
