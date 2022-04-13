@@ -4,12 +4,14 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 from typing import Dict
 import yaml
 
 import ray
 from ray.util import metrics
+import requests
 import wandb
 
 from raysort import constants
@@ -225,7 +227,23 @@ class ProgressTracker:
             json.dump(ret, fout)
         wandb.save(filename, base_path="/tmp")
 
+    def save_prometheus_snapshot(self):
+        try:
+            snapshot_json = requests.post(
+                "http://localhost:9090/api/v1/admin/tsdb/snapshot"
+            ).json()
+            snapshot_name = snapshot_json["data"]["name"]
+            shutil.make_archive(
+                f"/tmp/prometheus-{snapshot_name}",
+                "zip",
+                f"/tmp/prometheus/snapshots/{snapshot_name}",
+            )
+            wandb.save(f"/tmp/prometheus-{snapshot_name}.zip", base_path="/tmp")
+        except requests.exceptions.ConnectionError:
+            logging.info("Prometheus not running, skipping snapshot save")
+
     def performance_report(self):
         self.save_trace()
+        self.save_prometheus_snapshot()
         self.report_spilling()
         self.report()

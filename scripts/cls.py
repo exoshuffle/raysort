@@ -372,6 +372,7 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
         fout.write(get_prometheus_sd_content(head_ip, ips))
     free_port(PROMETHEUS_SERVER_PORT)
     cmd = str(SCRIPT_DIR.parent / "raysort/bin/prometheus/prometheus")
+    cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
     subprocess.Popen(cmd, shell=True)
