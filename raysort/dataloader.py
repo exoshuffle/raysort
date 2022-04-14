@@ -22,6 +22,7 @@ def mapper(
     path: Path,
 ) -> List[np.ndarray]:
     start_time = time.time()
+    tracing_utils.record_value("map_arrive", start_time)
     part = sort_utils.load_partition(args, path)
 #    assert part.size == args.input_part_size, (part.shape, path, args)
     load_duration = time.time() - start_time
@@ -41,8 +42,8 @@ class Reducer:
     def consume(self, map_result):
         t = time.time()
         self.arrival_times.append(t)
-        print("consumed reduce partition", len(self.arrival_times), t)
-        tracing_utils.record_value("reduce_timestamp", t) 
+#        print("consumed reduce partition", len(self.arrival_times), t)
+        tracing_utils.record_value("reduce_arrive", t) 
 
 @ray.remote
 def final_merge(args: Args,
@@ -83,38 +84,44 @@ def sort(args: Args, streaming=True):
     # May have to modify to schedule tasks in rounds for performance later on
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
-    all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
 
-    for part_id in range(args.num_mappers):
-        pinfo = parts[part_id]
-        opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
-        all_map_out[part_id, :] = mapper.options(**opt).remote(
-                args, part_id, bounds, pinfo.path
-        )
+    map_round = 10
+    map_scheduled = 0
+    reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
+    while map_scheduled < args.num_mappers:
+        last_map = min(args.num_mappers, map_round + map_scheduled)
+        all_map_out = np.empty((last_map - map_scheduled, args.num_reducers), dtype=object)
+        for part_id in range(map_scheduled, last_map):
+            pinfo = parts[part_id]
+            opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
+            all_map_out[part_id, :] = mapper.options(**opt).remote(
+                    args, part_id, bounds, pinfo.path
+            )
+            print(opt)
 
-    reducers = [Reducer.remote() for _ in range(args.num_reducers)]
-    map_out_to_id = {r[0]: i for i, r in enumerate(all_map_out)}
+        map_out_to_id = {r[0]: i for i, r in enumerate(all_map_out)}
 
-    print("Reducers:", len(reducers))
-    print("Mappers:", len(all_map_out))
-    
-    map_out_remaining = list(map_out_to_id)
-    futures = []
-    if streaming:
-        # Process one map block per loop iteration
-        while len(map_out_remaining) > 0:
-            ready, map_out_remaining = ray.wait(map_out_remaining)
-            map_out = all_map_out[map_out_to_id[ready[0]]]
-            for result, reducer in zip(map_out, reducers):
-                f = reducer.consume.remote(result)
-                futures.append(f)
-    else:
-        # For non-streaming case
-        ray_utils.wait(all_map_out)
-        for result_list in all_map_out:
-            for result in result_list:
-                reducer.consume.remote(result)
-
+        print("Reducers:", len(reducers))
+        print("Mappers:", len(map_out_to_id))
+        
+        map_out_remaining = list(map_out_to_id)
+        futures = []
+        if streaming:
+            # Process one map block per loop iteration
+            while len(map_out_remaining) > 0:
+                ready, map_out_remaining = ray.wait(map_out_remaining)
+                map_out = all_map_out[map_out_to_id[ready[0]]]
+                for result, reducer in zip(map_out, reducers):
+                    f = reducer.consume.remote(result)
+                    futures.append(f)
+        else:
+            # For non-streaming case
+            ray_utils.wait(all_map_out)
+            for result_list in all_map_out:
+                for result in result_list:
+                    reducer.consume.remote(result)
+        ray_utils.wait(futures, wait_all=True)
+        map_scheduled += map_round
     # Finish the final merge (we're not timing this operation, it's just
     # to check for correctness at the end with sort_utils.validate_output)
 #    print("WAITING FOR MAP OUTPUT")
