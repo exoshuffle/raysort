@@ -90,7 +90,7 @@ def sort(args: Args, streaming=True):
     reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
     print("Reduce options:", ray_utils.node_i(args, 0))
     print("Ray resources:", ray.available_resources())
-    map_prev = []
+    reduce_prev = []
     while map_scheduled < args.num_mappers:
         last_map = min(args.num_mappers, map_round + map_scheduled)
         all_map_out = np.empty((last_map - map_scheduled, args.num_reducers), dtype=object)
@@ -100,15 +100,10 @@ def sort(args: Args, streaming=True):
             all_map_out[part_id - map_scheduled, :] = mapper.options(**opt).remote(
                     args, part_id, bounds, pinfo.path
             )
-            if (len(map_prev) > 0) and part_id > 0 and part_id % map_round == 0:
-                # Wait for at least one map task from this round to finish before
-                # scheduling the next round.
-                ray_utils.wait(
-                        map_prev[:, 0], num_returns=1
-                )
-
-        map_prev = all_map_out
-#            print(opt)
+        if (len(reduce_prev) > 0):
+            # Wait for at least one reduce task from the last round to finish before
+            # scheduling the next round.
+            ray.wait(reduce_prev)
 
         map_out_to_id = {r[0]: i for i, r in enumerate(all_map_out)}
 
@@ -118,20 +113,14 @@ def sort(args: Args, streaming=True):
 
         map_out_remaining = list(map_out_to_id)
         futures = []
-        if streaming:
-            # Process one map block per loop iteration
-            while len(map_out_remaining) > 0:
-                ready, map_out_remaining = ray.wait(map_out_remaining)
-                map_out = all_map_out[map_out_to_id[ready[0]]]
-                for result, reducer in zip(map_out, reducers):
-                    f = reducer.consume.remote(result)
-                    futures.append(f)
-        else:
-            # For non-streaming case
-            ray_utils.wait(all_map_out)
-            for result_list in all_map_out:
-                for result in result_list:
-                    reducer.consume.remote(result)
+        # Process one map block per loop iteration
+        while len(map_out_remaining) > 0:
+            ready, map_out_remaining = ray.wait(map_out_remaining)
+            map_out = all_map_out[map_out_to_id[ready[0]]]
+            for result, reducer in zip(map_out, reducers):
+                f = reducer.consume.remote(result)
+                futures.append(f)
+        reduce_prev = futures
         map_scheduled += map_round
     # Finish the final merge (we're not timing this operation, it's just
     # to check for correctness at the end with sort_utils.validate_output)
