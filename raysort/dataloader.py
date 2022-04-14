@@ -33,7 +33,7 @@ def mapper(
     print("length of mapper return", len(ret))
     return ret if len(ret) > 1 else ret[0]
 
-@ray.remote
+@ray.remote(num_cpus=0)
 class Reducer:
     def __init__(self):
         self.arrival_times = []
@@ -85,25 +85,37 @@ def sort(args: Args, streaming=True):
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
 
-    map_round = 10
+    map_round = 40
     map_scheduled = 0
     reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
+    print("Reduce options:", ray_utils.node_i(args, 0))
+    print("Ray resources:", ray.available_resources())
+    map_prev = []
     while map_scheduled < args.num_mappers:
         last_map = min(args.num_mappers, map_round + map_scheduled)
         all_map_out = np.empty((last_map - map_scheduled, args.num_reducers), dtype=object)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
-            all_map_out[part_id, :] = mapper.options(**opt).remote(
+            all_map_out[part_id - map_scheduled, :] = mapper.options(**opt).remote(
                     args, part_id, bounds, pinfo.path
             )
-            print(opt)
+            if (len(map_prev) > 0) and part_id > 0 and part_id % map_round == 0:
+                # Wait for at least one map task from this round to finish before
+                # scheduling the next round.
+                ray_utils.wait(
+                        map_prev[:, 0], num_returns=1
+                )
+
+        map_prev = all_map_out
+#            print(opt)
 
         map_out_to_id = {r[0]: i for i, r in enumerate(all_map_out)}
 
         print("Reducers:", len(reducers))
         print("Mappers:", len(map_out_to_id))
-        
+        print("Ray resources:", ray.available_resources())
+
         map_out_remaining = list(map_out_to_id)
         futures = []
         if streaming:
@@ -120,7 +132,6 @@ def sort(args: Args, streaming=True):
             for result_list in all_map_out:
                 for result in result_list:
                     reducer.consume.remote(result)
-        ray_utils.wait(futures, wait_all=True)
         map_scheduled += map_round
     # Finish the final merge (we're not timing this operation, it's just
     # to check for correctness at the end with sort_utils.validate_output)
@@ -140,6 +151,7 @@ def sort(args: Args, streaming=True):
 #        ]
 #    return ray.get(reduce_results.flatten().tolist())
 
+    ray_utils.wait(futures, wait_all=True)
     print("OK")
 
 
