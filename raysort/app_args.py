@@ -147,6 +147,12 @@ def get_args(*args, **kwargs):
         action="store_true",
         help="if set, will pin tasks to specific nodes",
     )
+    parser.add_argument(
+        "--dataloader_mode",
+        default=None,
+        type=str,
+        help="if not set, will run non-streaming sort; valid values are \"streaming\" and \"partial\"",
+    )
     # Which steps to run?
     steps_grp = parser.add_argument_group(
         "steps to run", "if none is specified, will run all steps"

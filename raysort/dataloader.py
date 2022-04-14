@@ -2,6 +2,7 @@ import collections
 import ray
 import time
 import numpy as np
+import random
 from typing import Callable, Dict, Iterable, List, Tuple, Union
 from raysort import app_args
 from raysort import constants
@@ -45,40 +46,59 @@ class Reducer:
 #        print("consumed reduce partition", len(self.arrival_times), t)
         tracing_utils.record_value("reduce_arrive", t) 
 
-@ray.remote
-def final_merge(args: Args,
-    worker_id: PartId,
-    reducer_id: PartId,
-    *parts: List,
-) -> PartInfo:
-    M = len(parts)
+    @tracing_utils.timeit("reduce")
+    def consume_and_shuffle(self, *map_results: List):
+        random.shuffle(map_results)
 
-    def get_block(i: int, d: int) -> np.ndarray:
-        if i >= M or d > 0:
-            return None
-        part = parts[i]
-        if part is None:
-            return None
-        if isinstance(part, np.ndarray):
-            return None if part.size == 0 else part
-        if isinstance(part, ray.ObjectRef):
-            ret = ray.get(part)
-            assert ret is None or isinstance(ret, np.ndarray), type(ret)
-            return ret
-        assert isinstance(part, PartInfo), part
-        with open(part.path, "rb", buffering=args.io_size) as fin:
-            ret = np.fromfile(fin, dtype=np.uint8)
-        os.remove(part.path)
-        return None if ret.size == 0 else ret
+def sort(args: Args):
+    parts = sort_utils.load_manifest(args)
+    print("Number of partitions", len(parts))
+    # May have to modify to schedule tasks in rounds for performance later on
+    bounds, _ = sort_main.get_boundaries(args.num_reducers)
+    mapper_opt = {"num_returns": args.num_reducers}
 
-    part_id = constants.merge_part_ids(worker_id, reducer_id)
-    pinfo = sort_utils.part_info(args, part_id, kind="output", s3=args.s3_bucket)
-    merge_fn = _dummy_merge if args.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block)
-    sort_utils.save_partition(args, pinfo.path, merger)
-    return pinfo
+    map_round = 40
+    map_scheduled = 0
+    all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
+    while map_scheduled < args.num_mappers:
+        last_map = min(args.num_mappers, map_round + map_scheduled)
+#        all_map_out = np.empty((last_map - map_scheduled, args.num_reducers), dtype=object)
+        for part_id in range(map_scheduled, last_map):
+            pinfo = parts[part_id]
+            opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
+            all_map_out[part_id, :] = mapper.options(**opt).remote(
+                    args, part_id, bounds, pinfo.path
+            )
+            if part_id > 0 and part_id % map_round == 0:
+                # Wait for at least one map task from this round to finish before
+                # scheduling the next round.
+                ray_utils.wait(
+                    all_map_out[:, 0], num_returns=part_id - map_round + 1
+                )
+        map_scheduled += map_round
+        
+    reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
+    
+    print("Ray resources:", ray.available_resources())
 
-def sort(args: Args, streaming=True):
+    futures = []
+    reduce_round = 40
+    reduce_scheduled = 0
+    while reduce_scheduled < args.num_reducers:
+        last_reduce = min(args.num_reducers, reduce_round + reduce_scheduled)
+        for r in range(reduce_scheduled, last_reduce):
+            f = reducers[r].consume_and_shuffle.remote(*all_map_out[:, r])
+            futures.append(f)
+            if r > 0 and r % reduce_round == 0:
+                # Let at least one reduce task from this round complete
+                # before scheduling next round
+                print("Waiting for a reduce task to complete")
+                ray.wait(futures, num_returns=r - reduce_round + 1)
+        reduce_scheduled += reduce_round
+    ray_utils.wait(futures, wait_all=True)
+    print("OK")
+
+def sort_streaming(args: Args):
     parts = sort_utils.load_manifest(args)
     print("Number of partitions", len(parts))
     # May have to modify to schedule tasks in rounds for performance later on
@@ -122,24 +142,6 @@ def sort(args: Args, streaming=True):
                 futures.append(f)
         reduce_prev = futures
         map_scheduled += map_round
-    # Finish the final merge (we're not timing this operation, it's just
-    # to check for correctness at the end with sort_utils.validate_output)
-#    print("WAITING FOR MAP OUTPUT")
-#    ray.wait(futures)
-#
-#    reduce_results = np.empty(
-#        (args.num_workers, args.num_reducers_per_worker), dtype=object
-#    )
-#
-#    for r in range(args.num_reducers_per_worker):
-#        reduce_results[:, r] = [
-#                final_merge.options(
-#                **ray_utils.node_i(args, w, args.reduce_parallelism)
-#            ).remote(args, w, r, *all_map_out[:, w * args.num_reducers_per_worker + r])
-#            for w in range(args.num_workers)
-#        ]
-#    return ray.get(reduce_results.flatten().tolist())
-
     ray_utils.wait(futures, wait_all=True)
     print("OK")
 
@@ -148,10 +150,13 @@ def main(args: Args):
     tracker = sort_main.init(args)
     try:
         sort_utils.generate_input(args)
-
-        sort(args)
-        print("VALIDATING OUTPUT")
-#        sort_utils.validate_output(args)
+        if (args.dataloader_mode):
+            if args.dataloader_mode == "streaming":
+                sort_streaming(args)
+            elif args.dataloader_mode == "partial":
+                sort_partial_streaming(args)
+        else:
+            sort(args)
     finally:
         ray.get(tracker.performance_report.remote())
    
