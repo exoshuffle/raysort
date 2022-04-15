@@ -13,6 +13,7 @@ from raysort import constants
 from raysort import logging_utils
 from raysort import ray_utils
 from raysort import s3_utils
+from raysort import sortlib
 from raysort import tracing_utils
 from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 
@@ -204,6 +205,14 @@ def create_partition(part_size: int) -> np.ndarray:
         np.random.default_rng().bytes(num_records * 10), dtype=np.uint8
     ).reshape((num_records, -1))
     return mat.flatten()
+
+def create_partition_records(part_size: int) -> np.ndarray:
+    num_records = part_size // 100
+    mat = np.empty((num_records, 100), dtype=np.uint8)
+    mat[:, :10] = np.frombuffer(
+        np.random.default_rng().bytes(num_records * 10), dtype=np.uint8
+    ).reshape((num_records, -1))
+    return np.asarray([arr.astype(sortlib.RecordT) for arr in mat])
 
 
 # ------------------------------------------------------------

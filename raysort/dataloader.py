@@ -2,7 +2,6 @@ import collections
 import ray
 import time
 import numpy as np
-import random
 from typing import Callable, Dict, Iterable, List, Tuple, Union
 from raysort import app_args
 from raysort import constants
@@ -47,9 +46,13 @@ class Reducer:
         tracing_utils.record_value("reduce_arrive", t) 
 
     @tracing_utils.timeit("reduce")
-    def consume_and_shuffle(self, *map_results: List):
-        random.shuffle(map_results)
+    def consume_and_shuffle(self, *map_results):
+#        print("MAP_RESULTS TYPE", type(map_results))
+#        print(len(map_results))
+        np.random.shuffle(sort_utils.create_partition_records(len(map_results)*100))
+#        np.random.shuffle(np.concatenate([arr.astype(sortlib.RecordT) for arr in map_results]))
 
+@tracing_utils.timeit("sort")
 def sort(args: Args):
     parts = sort_utils.load_manifest(args)
     print("Number of partitions", len(parts))
@@ -57,7 +60,7 @@ def sort(args: Args):
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
 
-    map_round = 40
+    map_round = 20
     map_scheduled = 0
     all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
     while map_scheduled < args.num_mappers:
@@ -82,7 +85,7 @@ def sort(args: Args):
     print("Ray resources:", ray.available_resources())
 
     futures = []
-    reduce_round = 40
+    reduce_round = 20
     reduce_scheduled = 0
     while reduce_scheduled < args.num_reducers:
         last_reduce = min(args.num_reducers, reduce_round + reduce_scheduled)
@@ -98,6 +101,54 @@ def sort(args: Args):
     ray_utils.wait(futures, wait_all=True)
     print("OK")
 
+@tracing_utils.timeit("sort")
+def sort_partial_streaming(args: Args):
+    parts = sort_utils.load_manifest(args)
+    print("Number of partitions", len(parts))
+    # May have to modify to schedule tasks in rounds for performance later on
+    bounds, _ = sort_main.get_boundaries(args.num_reducers)
+    mapper_opt = {"num_returns": args.num_reducers}
+
+    map_round = 40
+    map_scheduled = 0
+    all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
+    reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
+    while map_scheduled < args.num_mappers:
+        last_map = min(args.num_mappers, map_round + map_scheduled)
+        for part_id in range(map_scheduled, last_map):
+            pinfo = parts[part_id]
+            opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
+            all_map_out[part_id, :] = mapper.options(**opt).remote(
+                    args, part_id, bounds, pinfo.path
+            )
+            if part_id > 0 and part_id % map_round == 0:
+                # Wait for at least one map task from this round to finish before
+                # scheduling the next round.
+                ray_utils.wait(
+                    all_map_out[:, 0], num_returns=part_id - map_round + 1
+                )
+        
+        print("Ray resources:", ray.available_resources())
+
+        futures = []
+        reduce_round = 20
+        reduce_scheduled = 0
+        while reduce_scheduled < args.num_reducers:
+            last_reduce = min(args.num_reducers, reduce_round + reduce_scheduled)
+            for r in range(reduce_scheduled, last_reduce):
+                f = reducers[r].consume_and_shuffle.remote(*all_map_out[map_scheduled:last_map, r])
+                futures.append(f)
+                if r > 0 and r % reduce_round == 0:
+                    # Let at least one reduce task from this round complete
+                    # before scheduling next round
+                    print("Waiting for a reduce task to complete")
+                    ray.wait(futures, num_returns=r - reduce_round + 1)
+            reduce_scheduled += reduce_round
+        map_scheduled += map_round
+    ray_utils.wait(futures, wait_all=True)
+    print("OK")
+
+@tracing_utils.timeit("sort")
 def sort_streaming(args: Args):
     parts = sort_utils.load_manifest(args)
     print("Number of partitions", len(parts))
