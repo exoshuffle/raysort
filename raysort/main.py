@@ -277,6 +277,9 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             map_results_to_merge = np.concatenate(
                 all_map_results[merge_start:merge_end], axis=1
             )
+            # Release map result references.
+            for i in range(merge_start, merge_end):
+                all_map_results[i] = []
             m = round
             for w in range(args.num_workers):
                 map_blocks = map_results_to_merge[w, :]
