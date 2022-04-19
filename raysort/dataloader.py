@@ -41,16 +41,33 @@ class Reducer:
     @tracing_utils.timeit("reduce")
     def consume(self, map_result):
         t = time.time()
+#        print(t)
         self.arrival_times.append(t)
 #        print("consumed reduce partition", len(self.arrival_times), t)
-        tracing_utils.record_value("reduce_arrive", t) 
+        tracing_utils.record_value("reduce_arrive", t)
+#        print(time.time() - t)
 
     @tracing_utils.timeit("reduce")
     def consume_and_shuffle(self, *map_results):
 #        print("MAP_RESULTS TYPE", type(map_results))
-#        print(len(map_results))
-        np.random.shuffle(sort_utils.create_partition_records(len(map_results)*100))
+#        print(len(map_results), len(map_results[0]))
+#        sort_utils.create_partition_records(sum([arr.size for arr in map_results]))
+#        np.random.shuffle(sort_utils.create_partition_records(sum([arr.size for arr in map_results])))
+#        start = time.time()
+#        print("Start:", start)
+#        indices = np.arange(0, (int)(sum([len(arr) for arr in map_results])//100))
+#        print("Num indices:", len(indices))
+#        np.random.shuffle(indices)
+#        print("Shuffled indices")
+#        flattened = map_results.flatten().astype(sortlib.RecordT, copy=False)
+        catted = np.concatenate(map_results)
+        tmp = catted.reshape((-1, 100))
+        np.random.shuffle(tmp)
+#        print("Catted length:", catted.size)
+#        catted[indices]
+#        print("End:", time.time() - start)
 #        np.random.shuffle(np.concatenate([arr.astype(sortlib.RecordT) for arr in map_results]))
+#        time.sleep(10)
 
 @tracing_utils.timeit("sort")
 def sort(args: Args):
@@ -85,7 +102,7 @@ def sort(args: Args):
     print("Ray resources:", ray.available_resources())
 
     futures = []
-    reduce_round = 20
+    reduce_round = 10
     reduce_scheduled = 0
     while reduce_scheduled < args.num_reducers:
         last_reduce = min(args.num_reducers, reduce_round + reduce_scheduled)
@@ -109,7 +126,7 @@ def sort_partial_streaming(args: Args):
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
 
-    map_round = 40
+    map_round = 80
     map_scheduled = 0
     all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
     reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
