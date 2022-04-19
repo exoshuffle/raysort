@@ -148,74 +148,102 @@ def plot_ft():
     )
 
 
-# https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
-def plot_ssd():
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=945817794
+def plot_hdd():
     df = pd.DataFrame(
         [
-            ["Ray-simple", "2GB", 758.968],
-            ["Ray-simple", "0.5GB", 1308.5],
-            ["Ray-simple", "0.1GB", 0],
-            ["Ray-Riffle", "2GB", 1002.35],
-            ["Ray-Riffle", "0.5GB", 1031.096],
-            ["Ray-Riffle", "0.1GB", 1141.065],
-            ["Ray-Magnet", "2GB", 988.296],
-            ["Ray-Magnet", "0.5GB", 984.41],
-            ["Ray-Magnet", "0.1GB", 1112.63],
-            ["Ray-Cosco", "2GB", 827.059],
-            ["Ray-Cosco", "0.5GB", 779.383],
-            ["Ray-Cosco", "0.1GB", 988.836],
-            ["Spark", "2GB", 925.232],
-            ["Spark", "0.5GB", 995.099],
-            ["Spark", "0.1GB", 850.577],
+            ["ES-simple", "2K", 2799],
+            ["ES-simple", "1K", 1929],
+            ["ES-simple", "500", 1297],
+            ["ES-merge", "2K", 2163],
+            ["ES-merge", "1K", 1334],
+            ["ES-merge", "500", 1409],
+            ["ES-push", "2K", 748],
+            ["ES-push", "1K", 700],
+            ["ES-push", "500", 761],
+            ["ES-push", "500[F]", 775],
+            ["ES-push-opt", "2K", 743],
+            ["ES-push-opt", "1K", 634],
+            ["ES-push-opt", "500", 702],
+            ["ES-push-opt", "500[F]", 757],
+            ["Spark", "2K", 1609],
+            ["Spark", "1K", 1701],
+            ["Spark", "500", 1558],
         ],
-        columns=["version", "partition_size", "time"],
+        columns=["version", "partitions", "time"],
     )
-    theoretical = [813.802]
+    theoretical = [339]
     return plot(
         df,
         theoretical,
         "shuffle_comparison",
         "version",
         "time",
-        "partition_size",
-        "Partition Size",
+        "partitions",
+        "Partitions",
         "",
         "Job Completion Time (s)",
     )
 
 
-def plot_nvme():
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=173105676
+def plot_ssd():
     df = pd.DataFrame(
         [
-            ["Ray-simple", "2GB", 392.003],
-            ["Ray-simple", "0.5GB", 609.277],
-            ["Ray-simple", "0.1GB", 0],
-            ["Ray-Riffle", "2GB", 482.203],
-            ["Ray-Riffle", "0.5GB", 489.848],
-            ["Ray-Riffle", "0.1GB", 0],
-            ["Ray-Magnet", "2GB", 415.271],
-            ["Ray-Magnet", "0.5GB", 461.591],
-            ["Ray-Magnet", "0.1GB", 557.691],
-            ["Ray-Cosco", "2GB", 378.239],
-            ["Ray-Cosco", "0.5GB", 399.196],
-            ["Ray-Cosco", "0.1GB", 511.533],
-            ["Spark", "2GB", 833.298],
-            ["Spark", "0.5GB", 846.917],
-            ["Spark", "0.1GB", 861.462],
+            ["ES-simple", "2K", 1085],
+            ["ES-simple", "1K", 628],
+            ["ES-simple", "500", 570],
+            ["ES-merge", "2K", 728],
+            ["ES-merge", "1K", 660],
+            ["ES-merge", "500", 711],
+            ["ES-push", "2K", 626],
+            ["ES-push", "1K", 580],
+            ["ES-push", "500", 602],
+            ["ES-push", "500[F]", 666],
+            ["ES-push-opt", "2K", 553],
+            ["ES-push-opt", "1K", 533],
+            ["ES-push-opt", "500", 596],
+            ["ES-push-opt", "500[F]", 657],
+            ["Spark", "2K", 1498],
+            ["Spark", "1K", 1533],
+            ["Spark", "500", 1614],
         ],
-        columns=["version", "partition_size", "time"],
+        columns=["version", "partitions", "time"],
     )
-    theoretical = [339.084]
+    theoretical = [543]
     return plot(
         df,
         theoretical,
-        "shuffle_comparison_nvme",
+        "shuffle_comparison_ssd",
         "version",
         "time",
-        "partition_size",
-        "Partition Size",
+        "partitions",
+        "Partitions",
         "",
         "Job Completion Time (s)",
+    )
+
+
+def plot_large():
+    df = pd.DataFrame(
+        [
+            ["Spark", "100TB", 30240 / SECS_PER_HR],
+            ["Spark-push", "100TB", 19293 / SECS_PER_HR],
+            ["Exoshuffle", "100TB", 10707 / SECS_PER_HR],
+        ],
+        columns=["version", "data_size", "time"],
+    )
+    theoretical = [3390 / SECS_PER_HR]
+    return plot(
+        df,
+        theoretical,
+        "shuffle_comparison_large",
+        "version",
+        "time",
+        None,
+        "",
+        "",
+        "Job Completion Time (h)",
     )
 
 
@@ -273,13 +301,16 @@ def plot(
         )
     g.despine(left=True)
     g.set_axis_labels(xtitle, ytitle)
-    g.legend.set_title(legend_title)
+    plt.xticks(rotation=90)
+    if g.legend:
+        g.legend.set_title(legend_title)
     filename = figname + ".pdf"
     print(filename)
     g.savefig(filename)
 
 
+plot_hdd()
 plot_ssd()
-plot_nvme()
-plot_ft()
-plot_mb_all()
+plot_large()
+# plot_ft()
+# plot_mb_all()
