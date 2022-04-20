@@ -28,6 +28,9 @@ SMALL_SIZE = 8
 MEDIUM_SIZE = 10
 BIG_SIZE = 12
 
+SYS = "S"
+SYS_FULL = "Scramble"
+
 plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
 plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
 plt.rc("axes", labelsize=SMALL_SIZE)  # fontsize of the x and y labels
@@ -122,50 +125,24 @@ def plot_mb_all():
     )
 
 
-def plot_ft():
-    df = pd.DataFrame(
-        [
-            ["Ray-Riffle", "No failure", 1002.35],
-            ["Ray-Riffle", "With failure", 1556.876],
-            ["Ray-Magnet", "No failure", 988.296],
-            ["Ray-Magnet", "With failure", 1026.939],
-            ["Ray-Cosco", "No failure", 827.059],
-            ["Ray-Cosco", "With failure", 881.596],
-        ],
-        columns=["version", "fail_mode", "time"],
-    )
-    figname = "ft_comparison"
-    return plot(
-        df,
-        [],
-        figname,
-        "version",
-        "time",
-        "fail_mode",
-        "",
-        "",
-        "Job Completion Time (s)",
-    )
-
-
 # https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=945817794
 def plot_hdd():
     df = pd.DataFrame(
         [
-            ["ES-simple", "2K", 2799],
-            ["ES-simple", "1K", 1929],
-            ["ES-simple", "500", 1297],
-            ["ES-merge", "2K", 2163],
-            ["ES-merge", "1K", 1334],
-            ["ES-merge", "500", 1409],
-            ["ES-push", "2K", 748],
-            ["ES-push", "1K", 700],
-            ["ES-push", "500", 761],
-            ["ES-push", "500[F]", 775],
-            ["ES-push-opt", "2K", 743],
-            ["ES-push-opt", "1K", 634],
-            ["ES-push-opt", "500", 702],
-            ["ES-push-opt", "500[F]", 757],
+            [f"{SYS}-simple", "2K", 2799],
+            [f"{SYS}-simple", "1K", 1929],
+            [f"{SYS}-simple", "500", 1297],
+            [f"{SYS}-merge", "2K", 2163],
+            [f"{SYS}-merge", "1K", 1334],
+            [f"{SYS}-merge", "500", 1409],
+            [f"{SYS}-push", "2K", 748],
+            [f"{SYS}-push", "1K", 700],
+            [f"{SYS}-push", "500", 761],
+            [f"{SYS}-push", "500[F]", 775],
+            [f"{SYS}-push-opt", "2K", 743],
+            [f"{SYS}-push-opt", "1K", 634],
+            [f"{SYS}-push-opt", "500", 702],
+            [f"{SYS}-push-opt", "500[F]", 757],
             ["Spark-default", "2K", 1609],
             ["Spark-default", "1K", 1701],
             ["Spark-default", "500", 1558],
@@ -190,20 +167,20 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            ["ES-simple", "2K", 1085],
-            ["ES-simple", "1K", 628],
-            ["ES-simple", "500", 570],
-            ["ES-merge", "2K", 728],
-            ["ES-merge", "1K", 660],
-            ["ES-merge", "500", 711],
-            ["ES-push", "2K", 626],
-            ["ES-push", "1K", 580],
-            ["ES-push", "500", 602],
-            ["ES-push", "500[F]", 666],
-            ["ES-push-opt", "2K", 553],
-            ["ES-push-opt", "1K", 533],
-            ["ES-push-opt", "500", 596],
-            ["ES-push-opt", "500[F]", 657],
+            [f"{SYS}-simple", "2K", 1085],
+            [f"{SYS}-simple", "1K", 628],
+            [f"{SYS}-simple", "500", 570],
+            [f"{SYS}-merge", "2K", 728],
+            [f"{SYS}-merge", "1K", 660],
+            [f"{SYS}-merge", "500", 711],
+            [f"{SYS}-push", "2K", 626],
+            [f"{SYS}-push", "1K", 580],
+            [f"{SYS}-push", "500", 602],
+            [f"{SYS}-push", "500[F]", 666],
+            [f"{SYS}-push-opt", "2K", 553],
+            [f"{SYS}-push-opt", "1K", 533],
+            [f"{SYS}-push-opt", "500", 596],
+            [f"{SYS}-push-opt", "500[F]", 657],
             ["Spark-default", "2K", 1498],
             ["Spark-default", "1K", 1533],
             ["Spark-default", "500", 1614],
@@ -229,7 +206,7 @@ def plot_large():
         [
             ["Spark-default", "100TB", 30240 / SECS_PER_HR],
             ["Spark-push", "100TB", 19293 / SECS_PER_HR],
-            ["Exoshuffle", "100TB", 10707 / SECS_PER_HR],
+            [f"{SYS_FULL}", "100TB", 10707 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
     )
@@ -313,5 +290,4 @@ def plot(
 plot_hdd()
 plot_ssd()
 plot_large()
-# plot_ft()
 # plot_mb_all()
