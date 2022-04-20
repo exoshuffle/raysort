@@ -166,9 +166,9 @@ def plot_hdd():
             ["ES-push-opt", "1K", 634],
             ["ES-push-opt", "500", 702],
             ["ES-push-opt", "500[F]", 757],
-            ["Spark", "2K", 1609],
-            ["Spark", "1K", 1701],
-            ["Spark", "500", 1558],
+            ["Spark-default", "2K", 1609],
+            ["Spark-default", "1K", 1701],
+            ["Spark-default", "500", 1558],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -204,9 +204,9 @@ def plot_ssd():
             ["ES-push-opt", "1K", 533],
             ["ES-push-opt", "500", 596],
             ["ES-push-opt", "500[F]", 657],
-            ["Spark", "2K", 1498],
-            ["Spark", "1K", 1533],
-            ["Spark", "500", 1614],
+            ["Spark-default", "2K", 1498],
+            ["Spark-default", "1K", 1533],
+            ["Spark-default", "500", 1614],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -227,7 +227,7 @@ def plot_ssd():
 def plot_large():
     df = pd.DataFrame(
         [
-            ["Spark", "100TB", 30240 / SECS_PER_HR],
+            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
             ["Spark-push", "100TB", 19293 / SECS_PER_HR],
             ["Exoshuffle", "100TB", 10707 / SECS_PER_HR],
         ],
@@ -283,8 +283,9 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
-    ax = fig.gca()
     # # Add hatches to bars.
+    # import itertools
+    # ax = fig.gca()
     # hatches = itertools.cycle(["", "/", "\\"])
     # for i, bar in enumerate(ax.patches):
     #     if i % 3 == 0:
@@ -301,7 +302,7 @@ def plot(
         )
     g.despine(left=True)
     g.set_axis_labels(xtitle, ytitle)
-    plt.xticks(rotation=90)
+    plt.xticks(rotation=45, horizontalalignment="right")
     if g.legend:
         g.legend.set_title(legend_title)
     filename = figname + ".pdf"
