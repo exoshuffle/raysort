@@ -11,7 +11,7 @@ def get_args(*args, **kwargs):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--total_gb",
-        default=1,
+        default=1000,
         type=float,
         help="total data size in GB (10^9 bytes)",
     )
