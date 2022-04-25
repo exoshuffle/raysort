@@ -151,13 +151,14 @@ def final_merge(
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
             return ret
         assert isinstance(part, PartInfo), part
-        ret = None
         if args.spilling == SpillingMode.DISK:
             with open(part.path, "rb", buffering=args.io_size) as fin:
                 ret = np.fromfile(fin, dtype=np.uint8)
             os.remove(part.path)
         elif args.spilling == SpillingMode.S3:
             ret = s3_utils.download_s3(args.s3_bucket, part.path)
+        else:
+            raise RuntimeError(f"{args}")
         return None if ret.size == 0 else ret
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
