@@ -11,10 +11,11 @@ from raysort import app_args
 from raysort import constants
 from raysort import logging_utils
 from raysort import ray_utils
+from raysort import s3_utils
 from raysort import sortlib
 from raysort import sort_utils
 from raysort import tracing_utils
-from raysort.typing import Args, BlockInfo, PartId, PartInfo, Path
+from raysort.typing import Args, BlockInfo, PartId, PartInfo, Path, SpillingMode
 
 
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
@@ -99,7 +100,7 @@ def merge_mapper_blocks(
 
     ret = []
     for i, datachunk in enumerate(merger):
-        if not args.manual_spilling:
+        if args.spilling == SpillingMode.RAY:
             if args.use_put:
                 ret.append(ray.put(datachunk))
             else:
@@ -109,14 +110,16 @@ def merge_mapper_blocks(
             # memory usage is still high. This does not make sense since
             # ray.put() should only use shared memory. Need to investigate.
             del datachunk
-        else:
-            # TODO(@lsf): support S3 for manual_spilling.
+            continue
+        part_id = constants.merge_part_ids(worker_id, merge_id, i)
+        pinfo = sort_utils.part_info(args, part_id, kind="temp")
+        if args.spilling == SpillingMode.DISK:
             # TODO(@lsf): make sure we write to all mounted disks.
-            part_id = constants.merge_part_ids(worker_id, merge_id, i)
-            pinfo = sort_utils.part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
                 datachunk.tofile(fout)
-            ret.append(pinfo)
+        elif args.spilling == SpillingMode.S3:
+            s3_utils.upload_s3_buffer(args, datachunk, pinfo.path)
+        ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
     del blocks
@@ -148,9 +151,14 @@ def final_merge(
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
             return ret
         assert isinstance(part, PartInfo), part
-        with open(part.path, "rb", buffering=args.io_size) as fin:
-            ret = np.fromfile(fin, dtype=np.uint8)
-        os.remove(part.path)
+        if args.spilling == SpillingMode.DISK:
+            with open(part.path, "rb", buffering=args.io_size) as fin:
+                ret = np.fromfile(fin, dtype=np.uint8)
+            os.remove(part.path)
+        elif args.spilling == SpillingMode.S3:
+            ret = s3_utils.download_s3(args.s3_bucket, part.path)
+        else:
+            raise RuntimeError(f"{args}")
         return None if ret.size == 0 else ret
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)

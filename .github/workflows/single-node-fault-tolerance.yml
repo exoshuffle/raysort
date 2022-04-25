@@ -39,7 +39,7 @@ jobs:
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --simple_shuffle --skip_input --sort --fail_node=0 --local
 
       - name: 1GB two stage shuffle with manual spilling
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --manual_spilling --skip_input --sort --fail_node=0 --local
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --skip_input --sort --fail_node=0 --local
 
       - name: 1GB Ray native shuffle
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --skip_input --sort --fail_node=0 --local
