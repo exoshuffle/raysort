@@ -151,6 +151,7 @@ def final_merge(
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
             return ret
         assert isinstance(part, PartInfo), part
+        ret = None
         if args.spilling == SpillingMode.DISK:
             with open(part.path, "rb", buffering=args.io_size) as fin:
                 ret = np.fromfile(fin, dtype=np.uint8)
