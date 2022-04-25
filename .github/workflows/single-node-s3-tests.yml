@@ -51,4 +51,4 @@ jobs:
         run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --ray_spill_path=s3://raysort-tmp/ray
 
       - name: 0.1GB Ray native shuffle, input/output and manual spilling on S3
-        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --spilling=s3
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=10_000_000 --local --s3_bucket=$S3_BUCKET --spilling=s3
