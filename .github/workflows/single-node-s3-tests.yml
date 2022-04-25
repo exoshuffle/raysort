@@ -42,10 +42,13 @@ jobs:
         run: scripts/installers/install_binaries.sh gensort
 
       - name: 1GB Ray native shuffle, spilling on S3
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --spill_path=s3://$S3_BUCKET/ray
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local --ray_spill_path=s3://$S3_BUCKET/ray
 
       - name: 0.1GB Ray native shuffle, input/output on S3
         run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET
 
       - name: 0.1GB Ray native shuffle, input/output and spilling on S3
-        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --spill_path=s3://raysort-tmp/ray
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --ray_spill_path=s3://raysort-tmp/ray
+
+      - name: 0.1GB Ray native shuffle, input/output and manual spilling on S3
+        run: python raysort/main.py --total_gb=0.1 --input_part_size=1_000_000 --local --s3_bucket=$S3_BUCKET --spilling=s3

@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from raysort.typing import Args, ByteCount
+from raysort.typing import Args, ByteCount, SpillingMode
 
 STEPS = ["generate_input", "sort", "validate_output"]
 
@@ -82,10 +82,10 @@ def get_args(*args, **kwargs):
         help="output will be consumed instead of being written to disk",
     )
     parser.add_argument(
-        "--manual_spilling",
+        "--spilling",
         default=False,
-        action="store_true",
-        help="if set, will not use object store for 2nd-stage reduce",
+        type=SpillingMode,
+        help="can be 'ray' (default), 'disk' or 's3'",
     )
     parser.add_argument(
         "--use_put",
@@ -124,7 +124,7 @@ def get_args(*args, **kwargs):
         help="if set, will use a locally emulated Ray cluster",
     )
     parser.add_argument(
-        "--spill_path",
+        "--ray_spill_path",
         default=None,
         type=str,
         help="[only used in local cluster setup] can be a local path or S3",
@@ -157,7 +157,7 @@ def derive_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
-    assert args.local or args.spill_path is None, args
+    assert args.local or args.ray_spill_path is None, args
     args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
