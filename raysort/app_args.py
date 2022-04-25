@@ -83,7 +83,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--spilling",
-        default=False,
+        default=SpillingMode.RAY,
         type=SpillingMode,
         help="can be 'ray' (default), 'disk' or 's3'",
     )
