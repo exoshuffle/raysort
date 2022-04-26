@@ -100,6 +100,8 @@ def wait(
     futures, wait_all: bool = False, **kwargs
 ) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
     to_wait = [f for f in futures if f is not None]
+    if len(to_wait) == 0:
+        return [], []
     default_kwargs = dict(fetch_local=False)
     if wait_all:
         default_kwargs.update(num_returns=len(to_wait))

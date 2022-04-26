@@ -64,6 +64,11 @@ def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
 
 
 @ray.remote(num_cpus=0)
+def upload_s3_buffer_remote(*args, **kwargs):
+    return upload_s3_buffer_remote(*args, **kwargs)
+
+
+@ray.remote(num_cpus=0)
 def upload_part_remote(**kwargs):
     # TODO: Make sure that this never gets scheduled to a different node.
     return s3().upload_part(**kwargs)

@@ -99,6 +99,7 @@ def merge_mapper_blocks(
     merger = merge_fn(M, get_block, num_records, False, bounds)
 
     ret = []
+    tasks = []
     for i, datachunk in enumerate(merger):
         if args.spilling == SpillingMode.RAY:
             if args.use_put:
@@ -118,11 +119,14 @@ def merge_mapper_blocks(
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
                 datachunk.tofile(fout)
         elif args.spilling == SpillingMode.S3:
-            s3_utils.upload_s3_buffer(args, datachunk, pinfo.path)
+            tasks.append(
+                s3_utils.upload_s3_buffer_remote.remote(args, datachunk, pinfo.path)
+            )
         ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
     del blocks
+    ray_utils.wait(tasks, wait_all=True)
     return ret
 
 
