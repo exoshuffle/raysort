@@ -186,6 +186,8 @@ class ProgressTracker:
         self.spans.append(span)
         if record_value:
             self.record_value(span.event, span.duration, log_to_wandb=log_to_wandb)
+        if len(self.spans) % 10 == 0:
+            self.save_trace()
 
     def record_start_time(self):
         self.start_time = time.time()
@@ -219,13 +221,14 @@ class ProgressTracker:
             v0 = self.initial_spilling_stats.get(k, 0)
             wandb.log({k: v - v0})
 
-    def save_trace(self):
+    def save_trace(self, save_to_wandb=False):
         self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
-        wandb.save(filename, base_path="/tmp")
+        if save_to_wandb:
+            wandb.save(filename, base_path="/tmp")
 
     def save_prometheus_snapshot(self):
         try:
@@ -243,7 +246,7 @@ class ProgressTracker:
             logging.info("Prometheus not running, skipping snapshot save")
 
     def performance_report(self):
-        self.save_trace()
+        self.save_trace(save_to_wandb=True)
         self.save_prometheus_snapshot()
         self.report_spilling()
         self.report()
