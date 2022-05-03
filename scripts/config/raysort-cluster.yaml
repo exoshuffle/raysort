@@ -1,0 +1,32 @@
+cluster_name: raysort-cluster
+
+max_workers: 4
+
+provider:
+    type: aws
+    region: us-west-2
+
+auth:
+    ssh_user: ubuntu
+    ssh_private_key: ../../login-us-west-2.pem
+
+available_node_types:
+    ray.head.default:
+        resources: {}
+        node_config:
+            InstanceType: r6i.2xlarge
+            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
+            KeyName: login-us-west-2
+
+    ray.worker.default:
+        resources: {}
+        node_config:
+            InstanceType: d3.2xlarge
+            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
+            KeyName: login-us-west-2
+            InstanceMarketOptions:
+                MarketType: spot
+
+setup_commands:
+  - echo 'export PATH="$HOME/miniconda/envs/raysort/bin:$PATH"' >> ~/.bashrc
+  - pip install -U ray
