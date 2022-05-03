@@ -24,7 +24,7 @@ plt.rcParams.update(
 SECS_PER_MIN = 60
 SECS_PER_HR = 3600
 
-SMALL_SIZE = 8
+SMALL_SIZE = 8 
 MEDIUM_SIZE = 10
 BIG_SIZE = 12
 
@@ -36,9 +36,11 @@ plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
 plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
-sns.set_theme(style="ticks")
-sns.set(font_scale=1)
-
+#sns.set_theme(style="ticks")
+sns.set_palette("Set2")
+sns.set(font_scale=0.75)
+sns.set_style("whitegrid")
+sns.set_style("ticks")
 
 def lighten(c, amount=0.75):
     import matplotlib.colors as mc
@@ -55,19 +57,19 @@ def plot_dask_comparison():
             ["1 GB", "Dask: 32 procs x 1 thread", 9.257539613],
             ["1 GB", "Dask: 8 procs x 4 threads", 9.152182102],
             ["1 GB", "Dask: 1 proc x 32 threads", 29.10137018],
-            ["1 GB", "Dask-on-Ray", 8.962659121],
+            ["1 GB", "Dask-on-Ray (32 procs)", 8.962659121],
             ["10 GB", "Dask: 32 procs x 1 thread", 117.7881519],
             ["10 GB", "Dask: 8 procs x 4 threads", 112.825515],
             ["10 GB", "Dask: 1 proc x 32 threads", 356.3388017],
-            ["10 GB", "Dask-on-Ray", 98.41430688],
+            ["10 GB", "Dask-on-Ray (32 procs)", 98.41430688],
             ["20 GB", "Dask: 32 procs x 1 thread", 0],
             ["20 GB", "Dask: 8 procs x 4 threads", 252.654465],
             ["20 GB", "Dask: 1 proc x 32 threads", 1327.135815],
-            ["20 GB", "Dask-on-Ray", 186.0701251],
+            ["20 GB", "Dask-on-Ray (32 procs)", 186.0701251],
             ["100 GB", "Dask: 32 procs x 1 thread", 0],
             ["100 GB", "Dask: 8 procs x 4 threads", 0],
             ["100 GB", "Dask: 1 proc x 32 threads", 14221.8383],
-            ["100 GB", "Dask-on-Ray", 1588.793045],
+            ["100 GB", "Dask-on-Ray (32 procs)", 1588.793045],
         ],
         columns=columns,
     )
@@ -80,7 +82,7 @@ def plot_dask_comparison():
         columns[2],
         columns[1],
         "",
-        "",
+        "Data Size",
         "Job Completion Time (s)",
     )
 
@@ -244,6 +246,7 @@ def plot(
         plt.rc("legend", fontsize=SMALL_SIZE)
         plt.rcParams.update({"font.size": fontsize})
 
+
     g = sns.catplot(
         data=df,
         kind="bar",
@@ -271,7 +274,9 @@ def plot(
             linestyle="--",
             label="theoretical",
         )
+#    plt.xticks(rotation=45)
     g.despine(left=True)
+    ax.set_yscale("log")
     g.set_axis_labels(xtitle, ytitle)
     g.legend.set_title(legend_title)
     filename = figname + ".pdf"
@@ -279,7 +284,8 @@ def plot(
     g.savefig(filename)
 
 
-plot_ssd()
-plot_nvme()
-plot_ft()
-plot_mb_all()
+plot_dask_comparison()
+#plot_ssd()
+#plot_nvme()
+#plot_ft()
+#plot_mb_all()
