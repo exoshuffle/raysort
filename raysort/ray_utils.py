@@ -12,6 +12,7 @@ from raysort.typing import Args
 
 local_cluster = None
 
+
 def current_node_res(parallelism: int = 1000) -> Dict[str, float]:
     return node_res(ray.util.get_node_ip_address(), parallelism)
 
