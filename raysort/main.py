@@ -130,7 +130,7 @@ def merge_mapper_blocks(
     return ret
 
 
-# Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 1GB
+# Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
 @ray.remote
 @tracing_utils.timeit("reduce")
@@ -226,11 +226,11 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     for r in range(args.num_reducers_per_worker):
         # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
+        # tasks are queued. The extra one is for task arguments prefetching.
         if r > args.reduce_parallelism:
             ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
+                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                wait_all=True,
             )
         reduce_results[:, r] = [
             final_merge.options(
@@ -323,11 +323,11 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     for r in range(args.num_reducers_per_worker):
         # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
+        # tasks are queued. The extra one is for task arguments prefetching.
         if r > args.reduce_parallelism:
             ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
+                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                wait_all=True,
             )
         reduce_results[:, r] = [
             final_merge.options(
@@ -412,11 +412,11 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     )
     for r in range(args.num_reducers_per_worker):
         # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
+        # tasks are queued. The extra one is for task arguments prefetching.
         if r > args.reduce_parallelism:
             ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
+                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                wait_all=True,
             )
         reduce_results[:, r] = [
             final_merge.options(
