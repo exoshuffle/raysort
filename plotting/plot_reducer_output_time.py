@@ -16,7 +16,8 @@ def get_json_input(fname):
             map_times.append(row["ts"])
         elif row["name"] == "reduce":
             reduce_times.append(row["ts"])
-    return (map_times, reduce_times) 
+    return (map_times, reduce_times)
+
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth

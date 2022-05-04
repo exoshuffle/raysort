@@ -24,7 +24,7 @@ plt.rcParams.update(
 SECS_PER_MIN = 60
 SECS_PER_HR = 3600
 
-SMALL_SIZE = 8 
+SMALL_SIZE = 8
 MEDIUM_SIZE = 10
 BIG_SIZE = 12
 
@@ -36,11 +36,12 @@ plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
 plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
-#sns.set_theme(style="ticks")
+# sns.set_theme(style="ticks")
 sns.set_palette("Set2")
 sns.set(font_scale=0.75)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
+
 
 def lighten(c, amount=0.75):
     import matplotlib.colors as mc
@@ -246,7 +247,6 @@ def plot(
         plt.rc("legend", fontsize=SMALL_SIZE)
         plt.rcParams.update({"font.size": fontsize})
 
-
     g = sns.catplot(
         data=df,
         kind="bar",
@@ -274,7 +274,7 @@ def plot(
             linestyle="--",
             label="theoretical",
         )
-#    plt.xticks(rotation=45)
+    #    plt.xticks(rotation=45)
     g.despine(left=True)
     ax.set_yscale("log")
     g.set_axis_labels(xtitle, ytitle)
@@ -285,7 +285,7 @@ def plot(
 
 
 plot_dask_comparison()
-#plot_ssd()
-#plot_nvme()
-#plot_ft()
-#plot_mb_all()
+# plot_ssd()
+# plot_nvme()
+# plot_ft()
+# plot_mb_all()

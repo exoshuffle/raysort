@@ -206,6 +206,7 @@ def create_partition(part_size: int) -> np.ndarray:
     ).reshape((num_records, -1))
     return mat.flatten()
 
+
 def create_partition_records(part_size: int) -> np.ndarray:
     num_records = part_size // 100
     mat = np.empty((num_records, 100), dtype=np.uint8)

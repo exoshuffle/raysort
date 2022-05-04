@@ -30,7 +30,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 # Memory usage: input_part_size = 2GB
 # Plasma usage: input_part_size = 2GB
-#@ray.remote(scheduling_strategy="SPREAD")
+# @ray.remote(scheduling_strategy="SPREAD")
 @ray.remote(num_cpus=0)
 @tracing_utils.timeit("map")
 def mapper(
@@ -74,7 +74,7 @@ def _dummy_merge(
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
-#@ray.remote(scheduling_strategy="SPREAD")
+# @ray.remote(scheduling_strategy="SPREAD")
 @ray.remote(num_cpus=0)
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
@@ -385,8 +385,8 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
         # Wait for at least one map task from this round to finish before
         # scheduling the next round.
-#        completed, timed_out = ray.wait(map_results, timeout=0.001) # good value of timeout?
-#       if len(completed) == 0:
+        #        completed, timed_out = ray.wait(map_results, timeout=0.001) # good value of timeout?
+        #       if len(completed) == 0:
         start = time.time()
         ray_utils.wait(map_results[:, 0])
         print("Waited for", time.time() - start)
