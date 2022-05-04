@@ -59,7 +59,7 @@ def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
 
 @ray.remote(num_cpus=0)
 def upload_s3_buffer_remote(*args, **kwargs):
-    return upload_s3_buffer_remote(*args, **kwargs)
+    return upload_s3_buffer(*args, **kwargs)
 
 
 @ray.remote(num_cpus=0)

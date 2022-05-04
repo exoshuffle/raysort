@@ -120,7 +120,9 @@ def merge_mapper_blocks(
                 datachunk.tofile(fout)
         elif args.spilling == SpillingMode.S3:
             tasks.append(
-                s3_utils.upload_s3_buffer_remote.remote(args, datachunk, pinfo.path)
+                s3_utils.upload_s3_buffer_remote.options(
+                    **ray_utils.current_node_res()
+                ).remote(args, datachunk, pinfo.path)
             )
         ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
