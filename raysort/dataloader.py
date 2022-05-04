@@ -24,7 +24,6 @@ def mapper(
     start_time = time.time()
     tracing_utils.record_value("map_arrive", start_time)
     part = sort_utils.load_partition(args, path)
-#    assert part.size == args.input_part_size, (part.shape, path, args)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = sortlib.sort_and_partition; 
@@ -40,40 +39,24 @@ class Reducer:
 
     @tracing_utils.timeit("reduce")
     def consume(self, map_result):
+        # For fine-grained pipelining
         t = time.time()
-#        print(t)
         self.arrival_times.append(t)
-#        print("consumed reduce partition", len(self.arrival_times), t)
         tracing_utils.record_value("reduce_arrive", t)
-#        print(time.time() - t)
 
     @tracing_utils.timeit("reduce")
     def consume_and_shuffle(self, *map_results):
-#        print("MAP_RESULTS TYPE", type(map_results))
-#        print(len(map_results), len(map_results[0]))
-#        sort_utils.create_partition_records(sum([arr.size for arr in map_results]))
-#        np.random.shuffle(sort_utils.create_partition_records(sum([arr.size for arr in map_results])))
-#        start = time.time()
-#        print("Start:", start)
-#        indices = np.arange(0, (int)(sum([len(arr) for arr in map_results])//100))
-#        print("Num indices:", len(indices))
-#        np.random.shuffle(indices)
-#        print("Shuffled indices")
-#        flattened = map_results.flatten().astype(sortlib.RecordT, copy=False)
+        # Intra-partition shuffle
         catted = np.concatenate(map_results)
-        tmp = catted.reshape((-1, 100))
-        np.random.shuffle(tmp)
-#        print("Catted length:", catted.size)
-#        catted[indices]
-#        print("End:", time.time() - start)
-#        np.random.shuffle(np.concatenate([arr.astype(sortlib.RecordT) for arr in map_results]))
-#        time.sleep(10)
+        reshaped = catted.reshape((-1, 100)) # 100 is the number of bytes in a record
+        np.random.shuffle(reshaped)
 
 @tracing_utils.timeit("sort")
 def sort(args: Args):
+    # Traditional unpipelined sort
+
     parts = sort_utils.load_manifest(args)
     print("Number of partitions", len(parts))
-    # May have to modify to schedule tasks in rounds for performance later on
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
 
@@ -82,7 +65,6 @@ def sort(args: Args):
     all_map_out = np.empty((args.num_mappers, args.num_reducers), dtype=object)
     while map_scheduled < args.num_mappers:
         last_map = min(args.num_mappers, map_round + map_scheduled)
-#        all_map_out = np.empty((last_map - map_scheduled, args.num_reducers), dtype=object)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **sort_main._get_node_res(args, pinfo, part_id))
@@ -112,7 +94,6 @@ def sort(args: Args):
             if r > 0 and r % reduce_round == 0:
                 # Let at least one reduce task from this round complete
                 # before scheduling next round
-                print("Waiting for a reduce task to complete")
                 ray.wait(futures, num_returns=r - reduce_round + 1)
         reduce_scheduled += reduce_round
     ray_utils.wait(futures, wait_all=True)
@@ -120,6 +101,8 @@ def sort(args: Args):
 
 @tracing_utils.timeit("sort")
 def sort_partial_streaming(args: Args):
+    # Medium-grained pipelining: shuffle within small batches
+
     parts = sort_utils.load_manifest(args)
     print("Number of partitions", len(parts))
     # May have to modify to schedule tasks in rounds for performance later on
@@ -145,8 +128,6 @@ def sort_partial_streaming(args: Args):
                     all_map_out[:, 0], num_returns=part_id - map_round + 1
                 )
         
-        print("Ray resources:", ray.available_resources())
-
         futures = []
         reduce_round = 20
         reduce_scheduled = 0
@@ -167,8 +148,9 @@ def sort_partial_streaming(args: Args):
 
 @tracing_utils.timeit("sort")
 def sort_streaming(args: Args):
+    # Fine-grained application pipelining: no intra-partition shuffle
+
     parts = sort_utils.load_manifest(args)
-    print("Number of partitions", len(parts))
     # May have to modify to schedule tasks in rounds for performance later on
     bounds, _ = sort_main.get_boundaries(args.num_reducers)
     mapper_opt = {"num_returns": args.num_reducers}
@@ -176,8 +158,6 @@ def sort_streaming(args: Args):
     map_round = 40
     map_scheduled = 0
     reducers = [Reducer.options(**ray_utils.node_i(args, r % args.num_workers)).remote() for r in range(args.num_reducers)]
-    print("Reduce options:", ray_utils.node_i(args, 0))
-    print("Ray resources:", ray.available_resources())
     reduce_prev = []
     while map_scheduled < args.num_mappers:
         last_map = min(args.num_mappers, map_round + map_scheduled)
@@ -194,11 +174,6 @@ def sort_streaming(args: Args):
             ray.wait(reduce_prev)
 
         map_out_to_id = {r[0]: i for i, r in enumerate(all_map_out)}
-
-        print("Reducers:", len(reducers))
-        print("Mappers:", len(map_out_to_id))
-        print("Ray resources:", ray.available_resources())
-
         map_out_remaining = list(map_out_to_id)
         futures = []
         # Process one map block per loop iteration
