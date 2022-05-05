@@ -41,7 +41,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--reduce_parallelism",
-        default=4,
+        default=8,
         type=int,
         help="number of reduce tasks to run in parallel per node",
     )
@@ -76,16 +76,16 @@ def get_args(*args, **kwargs):
         help="if set, will skip the second stage reduce tasks",
     )
     parser.add_argument(
-        "--output_consume_time",
-        default=0,
-        type=float,
-        help="output will be consumed instead of being written to disk",
-    )
-    parser.add_argument(
         "--spilling",
         default=SpillingMode.RAY,
         type=SpillingMode,
         help="can be 'ray' (default), 'disk' or 's3'",
+    )
+    parser.add_argument(
+        "--free_scheduling",
+        default=False,
+        action="store_true",
+        help="if set, will not pin reduce tasks to nodes",
     )
     parser.add_argument(
         "--use_put",

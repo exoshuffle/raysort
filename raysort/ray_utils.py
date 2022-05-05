@@ -13,16 +13,16 @@ from raysort.typing import Args
 local_cluster = None
 
 
-def current_node_res(parallelism: int = 1000) -> Dict[str, float]:
+def current_node_res(parallelism: int = 1000) -> Dict:
     return node_res(ray.util.get_node_ip_address(), parallelism)
 
 
-def node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
     assert node_ip is not None, node_ip
     return {"resources": {f"node:{node_ip}": 1 / parallelism}}
 
 
-def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict:
     return node_res(args.worker_ips[node_i % args.num_workers], parallelism)
 
 

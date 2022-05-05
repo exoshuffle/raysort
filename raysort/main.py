@@ -206,6 +206,15 @@ def reduce_stage(
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
+    def get_task_options(w: int) -> Dict:
+        if args.free_scheduling:
+            return {
+                "resources": {"worker": 1 / args.reduce_parallelism},
+                "scheduling_strategy": "SPREAD",
+            }
+        else:
+            return ray_utils.node_i(args, w, args.reduce_parallelism)
+
     # Submit second-stage reduce tasks.
     reduce_results = np.empty(
         (args.num_workers, args.num_reducers_per_worker), dtype=object
@@ -219,9 +228,9 @@ def reduce_stage(
                 wait_all=True,
             )
         reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(args, w, r, *get_reduce_args(w, r))
+            final_merge.options(**get_task_options(w)).remote(
+                args, w, r, *get_reduce_args(w, r)
+            )
             for w in range(args.num_workers)
         ]
         post_reduce_callback(r)
