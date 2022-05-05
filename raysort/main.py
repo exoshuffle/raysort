@@ -202,7 +202,7 @@ def reduce_stage(
     get_reduce_args: Callable[[int, int], List],
     post_reduce_callback: Callable[[int], None] = lambda _: None,
 ) -> List[PartInfo]:
-    if args.skip_final_merge:
+    if args.skip_final_reduce:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
