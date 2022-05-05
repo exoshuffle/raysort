@@ -253,6 +253,7 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     ray_utils.fail_and_restart_node(args)
 
     return reduce_stage(
+        args,
         map_results[:, 0],
         lambda w, r: map_results[:, w * args.num_reducers_per_worker + r],
     )
@@ -332,6 +333,7 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     return reduce_stage(
         args,
+        merge_results,
         lambda w, r: merge_results[:, w * args.num_reducers_per_worker + r],
     )
 
@@ -400,7 +402,12 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     def post_reduce(r: int) -> None:
         merge_results[:, :, r] = None
 
-    return reduce_stage(merge_results, lambda w, r: merge_results[w, :, r], post_reduce)
+    return reduce_stage(
+        args,
+        merge_results,
+        lambda w, r: merge_results[w, :, r],
+        post_reduce,
+    )
 
 
 @tracing_utils.timeit("sort", log_to_wandb=True)
