@@ -196,6 +196,39 @@ def _get_node_res(args: Args, pinfo: PartInfo, part_id: PartId) -> Dict:
     return ray_utils.node_i(args, part_id)
 
 
+def reduce_stage(
+    args: Args,
+    merge_results: np.ndarray,
+    get_reduce_args: Callable[[int, int], List],
+    post_reduce_callback: Callable[[int], None] = lambda _: None,
+) -> List[PartInfo]:
+    if args.skip_final_reduce:
+        ray_utils.wait(merge_results.flatten(), wait_all=True)
+        return []
+
+    # Submit second-stage reduce tasks.
+    reduce_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued. The extra one is for task arguments prefetching.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                wait_all=True,
+            )
+        reduce_results[:, r] = [
+            final_merge.options(
+                **ray_utils.node_i(args, w, args.reduce_parallelism)
+            ).remote(args, w, r, *get_reduce_args(w, r))
+            for w in range(args.num_workers)
+        ]
+        post_reduce_callback(r)
+
+    return ray.get(reduce_results.flatten().tolist())
+
+
 def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     bounds, _ = get_boundaries(args.num_reducers)
 
@@ -219,28 +252,11 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     ray_utils.fail_and_restart_node(args)
 
-    if args.skip_final_merge:
-        ray_utils.wait(map_results[:, 0], wait_all=True)
-        return []
-
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    return reduce_stage(
+        args,
+        map_results[:, 0],
+        lambda w, r: map_results[:, w * args.num_reducers_per_worker + r],
     )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued. The extra one is for task arguments prefetching.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results[:, : r - args.reduce_parallelism].flatten(),
-                wait_all=True,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(args, w, r, *map_results[:, w * args.num_reducers_per_worker + r])
-            for w in range(args.num_workers)
-        ]
-    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -315,32 +331,11 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     ray_utils.fail_and_restart_node(args)
 
-    if args.skip_final_merge:
-        ray_utils.wait(merge_results.flatten(), wait_all=True)
-        return []
-
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    return reduce_stage(
+        args,
+        merge_results,
+        lambda w, r: merge_results[:, w * args.num_reducers_per_worker + r],
     )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued. The extra one is for task arguments prefetching.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results[:, : r - args.reduce_parallelism].flatten(),
-                wait_all=True,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(
-                args, w, r, *merge_results[:, w * args.num_reducers_per_worker + r]
-            )
-            for w in range(args.num_workers)
-        ]
-
-    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -404,31 +399,15 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         else:
             del map_results
 
-    if args.skip_final_merge:
-        ray_utils.wait(merge_results.flatten(), wait_all=True)
-        return []
-
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
-    )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued. The extra one is for task arguments prefetching.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results[:, : r - args.reduce_parallelism].flatten(),
-                wait_all=True,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(args, w, r, *merge_results[w, :, r])
-            for w in range(args.num_workers)
-        ]
+    def post_reduce(r: int) -> None:
         merge_results[:, :, r] = None
 
-    return ray.get(reduce_results.flatten().tolist())
+    return reduce_stage(
+        args,
+        merge_results,
+        lambda w, r: merge_results[w, :, r],
+        post_reduce,
+    )
 
 
 @tracing_utils.timeit("sort", log_to_wandb=True)
