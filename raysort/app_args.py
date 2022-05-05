@@ -70,7 +70,7 @@ def get_args(*args, **kwargs):
         help="if set, reducers will not write out results to disk",
     )
     parser.add_argument(
-        "--skip_final_merge",
+        "--skip_final_reduce",
         default=False,
         action="store_true",
         help="if set, will skip the second stage reduce tasks",
