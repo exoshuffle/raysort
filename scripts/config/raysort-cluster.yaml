@@ -8,7 +8,7 @@ provider:
 
 auth:
     ssh_user: ubuntu
-    ssh_private_key: ../../login-us-west-2.pem
+    ssh_private_key: ~/.aws/login-us-west-2.pem
 
 available_node_types:
     ray.head.default:
