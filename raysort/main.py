@@ -396,17 +396,14 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(args, w)
                 ).remote(args, w, m, merge_bounds[w], *map_blocks)
 
-        if start_time > 0 and (time.time() - start_time) > args.fail_time:
-            ray_utils.fail_and_restart_node(args)
-            start_time = -1
-
-        # Wait for at least one map task from this round to finish before
-        # scheduling the next round.
-        ray_utils.wait(map_results[:, 0])
         if args.magnet:
             all_map_results.append(map_results)
-        else:
-            del map_results
+        # Remove references to map_results as soon as possible.
+        del map_results
+
+        if args.fail_node and start_time and time.time() - start_time > args.fail_time:
+            ray_utils.fail_and_restart_node(args)
+            start_time = None
 
     def post_reduce(r: int) -> None:
         merge_results[:, :, r] = None
