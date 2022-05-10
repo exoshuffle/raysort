@@ -45,8 +45,7 @@ def load_partition(args: Args, path: Path) -> np.ndarray:
     if args.skip_input:
         return create_partition(args.input_part_size)
     if args.s3_bucket:
-        buf = s3_utils.download_s3(args.s3_bucket, path, None)
-        return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
+        return s3_utils.download_s3(args.s3_bucket, path)
     with open(path, "rb", buffering=args.io_size) as fin:
         return np.fromfile(fin, dtype=np.uint8)
 

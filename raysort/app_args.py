@@ -2,7 +2,7 @@ import argparse
 
 import numpy as np
 
-from raysort.typing import Args, ByteCount
+from raysort.typing import Args, ByteCount, SpillingMode
 
 STEPS = ["generate_input", "sort", "validate_output"]
 
@@ -11,7 +11,7 @@ def get_args(*args, **kwargs):
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--total_gb",
-        default=1,
+        default=1000,
         type=float,
         help="total data size in GB (10^9 bytes)",
     )
@@ -41,7 +41,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--reduce_parallelism",
-        default=4,
+        default=8,
         type=int,
         help="number of reduce tasks to run in parallel per node",
     )
@@ -70,22 +70,22 @@ def get_args(*args, **kwargs):
         help="if set, reducers will not write out results to disk",
     )
     parser.add_argument(
-        "--skip_final_merge",
+        "--skip_final_reduce",
         default=False,
         action="store_true",
         help="if set, will skip the second stage reduce tasks",
     )
     parser.add_argument(
-        "--output_consume_time",
-        default=0,
-        type=float,
-        help="output will be consumed instead of being written to disk",
+        "--spilling",
+        default=SpillingMode.RAY,
+        type=SpillingMode,
+        help="can be 'ray' (default), 'disk' or 's3'",
     )
     parser.add_argument(
-        "--manual_spilling",
+        "--free_scheduling",
         default=False,
         action="store_true",
-        help="if set, will not use object store for 2nd-stage reduce",
+        help="if set, will not pin reduce tasks to nodes",
     )
     parser.add_argument(
         "--use_put",
@@ -124,7 +124,7 @@ def get_args(*args, **kwargs):
         help="if set, will use a locally emulated Ray cluster",
     )
     parser.add_argument(
-        "--spill_path",
+        "--ray_spill_path",
         default=None,
         type=str,
         help="[only used in local cluster setup] can be a local path or S3",
@@ -169,7 +169,7 @@ def derive_app_args(args: Args):
         for step in STEPS:
             args_dict[step] = True
 
-    assert args.local or args.spill_path is None, args
+    assert args.local or args.ray_spill_path is None, args
     args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args

@@ -4,12 +4,21 @@ from typing import Iterable, Optional
 
 import botocore
 import boto3
+from boto3.s3 import transfer
 import numpy as np
 import ray
 
 from raysort import constants
 from raysort import ray_utils
 from raysort.typing import Args, Path
+
+KiB = 1024
+MiB = KiB * 1024
+
+TRANSFER_CONFIG = transfer.TransferConfig(
+    io_chunksize=4 * MiB,
+    multipart_chunksize=32 * MiB,
+)
 
 
 def s3() -> botocore.client.BaseClient:
@@ -26,32 +35,35 @@ def s3() -> botocore.client.BaseClient:
 
 def upload_s3(bucket: str, src: Path, dst: Path, *, delete_src: bool = True) -> None:
     try:
-        s3().upload_file(
-            src,
-            bucket,
-            dst,
-            Config=boto3.s3.transfer.TransferConfig(
-                max_concurrency=10,
-                multipart_chunksize=32 * 1024 * 1024,
-            ),
-        )
+        s3().upload_file(src, bucket, dst, Config=TRANSFER_CONFIG)
     finally:
         if delete_src:
             os.remove(src)
 
 
-def download_s3(bucket: str, src: Path, dst: Optional[Path]) -> Optional[io.BytesIO]:
+def download_s3(
+    bucket: str, src: Path, dst: Optional[Path] = None
+) -> Optional[np.ndarray]:
     if dst:
         s3().download_file(bucket, src, dst)
         return
     ret = io.BytesIO()
     s3().download_fileobj(bucket, src, ret)
-    return ret
+    return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
+
+
+def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
+    # TODO: avoid copying
+    s3().upload_fileobj(io.BytesIO(data), args.s3_bucket, path, Config=TRANSFER_CONFIG)
+
+
+@ray.remote(num_cpus=0)
+def upload_s3_buffer_remote(*args, **kwargs):
+    return upload_s3_buffer(*args, **kwargs)
 
 
 @ray.remote(num_cpus=0)
 def upload_part_remote(**kwargs):
-    # TODO: Make sure that this never gets scheduled to a different node.
     return s3().upload_part(**kwargs)
 
 
@@ -70,7 +82,7 @@ def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> No
                 [t for t, _ in tasks], num_returns=len(tasks) - max_concurrency
             )
         # Upload in a different worker process.
-        task = upload_part_remote.remote(
+        task = upload_part_remote.options(**ray_utils.current_node_res()).remote(
             Body=data,
             Bucket=args.s3_bucket,
             Key=path,

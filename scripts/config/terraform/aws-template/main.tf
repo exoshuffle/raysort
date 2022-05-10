@@ -13,7 +13,7 @@ provider "aws" {
 }
 
 resource "aws_instance" "cluster" {
-  count = 1
+  count = var.instance_count
 
   ami           = "ami-01cc0c9e866d3322b" # raysort-spark-worker-20220328
   instance_type = var.instance_type

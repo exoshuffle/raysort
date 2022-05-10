@@ -1,0 +1,15 @@
+---
+- hosts: all
+  gather_facts: false
+  strategy: free
+  vars:
+    pattern: b6e3749adc4f7e7cffffffffffffffffffffffff0100000005000000-multi-3
+  tasks:
+    - name: Grep
+      ansible.builtin.shell: >
+        grep -r {{ pattern }} /tmp/ray/session_latest/logs
+      register: grep_output
+      ignore_errors: true
+
+    - debug:
+        var: grep_output.stdout_lines
