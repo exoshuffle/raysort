@@ -142,6 +142,20 @@ def final_merge(
     reducer_id: PartId,
     *parts: List,
 ) -> PartInfo:
+    @ray.remote(num_cpus=0)
+    def get_part(part: PartInfo) -> np.ndarray:
+        if args.spilling == SpillingMode.DISK:
+            with open(part.path, "rb", buffering=args.io_size) as fin:
+                ret = np.fromfile(fin, dtype=np.uint8)
+            os.remove(part.path)
+            return ret
+        if args.spilling == SpillingMode.S3:
+            return s3_utils.download_s3(args.s3_bucket, part.path)
+        raise RuntimeError(f"{args}")
+
+    if isinstance(parts[0], PartInfo):
+        parts = [get_part.options(**ray_utils.current_node_res()).remote(p) for p in parts]
+
     M = len(parts)
 
     def get_block(i: int, d: int) -> np.ndarray:
@@ -155,17 +169,8 @@ def final_merge(
         if isinstance(part, ray.ObjectRef):
             ret = ray.get(part)
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
-            return ret
-        assert isinstance(part, PartInfo), part
-        if args.spilling == SpillingMode.DISK:
-            with open(part.path, "rb", buffering=args.io_size) as fin:
-                ret = np.fromfile(fin, dtype=np.uint8)
-            os.remove(part.path)
-        elif args.spilling == SpillingMode.S3:
-            ret = s3_utils.download_s3(args.s3_bucket, part.path)
-        else:
-            raise RuntimeError(f"{args}")
-        return None if ret.size == 0 else ret
+            return None if ret.size == 0 else ret
+        raise RuntimeError(f"{args}")
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(args, part_id, kind="output", s3=args.s3_bucket)
