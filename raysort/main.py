@@ -213,7 +213,7 @@ def reduce_stage(
                 "scheduling_strategy": "SPREAD",
             }
         else:
-            return ray_utils.node_i(args, w, args.reduce_parallelism)
+            return ray_utils.node_i(args, w)
 
     # Submit second-stage reduce tasks.
     reduce_results = np.empty(
