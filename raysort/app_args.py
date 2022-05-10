@@ -170,7 +170,7 @@ def derive_app_args(args: Args):
             args_dict[step] = True
 
     assert args.local or args.spill_path is None, args
-    args.total_data_size = args.total_gb * 10 ** 9
+    args.total_data_size = args.total_gb * 10**9
     args.num_mappers = int(np.ceil(args.total_data_size / args.input_part_size))
     assert args.num_mappers % args.num_workers == 0, args
     args.num_mappers_per_worker = args.num_mappers // args.num_workers
