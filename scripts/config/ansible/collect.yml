@@ -1,0 +1,14 @@
+
+---
+- hosts: all
+  gather_facts: false
+  strategy: free
+
+  tasks:
+    - name: Grep
+      ansible.builtin.shell: >
+        grep -r '"type": "restore"\|"type": "spill"' /tmp/ray/session_latest/logs
+      register: collect
+
+    - debug:
+        var: collect.stdout_lines

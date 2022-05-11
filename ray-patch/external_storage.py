@@ -1,5 +1,6 @@
 import abc
 import logging
+import json
 import os
 import shutil
 import random
@@ -394,7 +395,19 @@ class ExternalStorageRayStorageImplArrow(ExternalStorage):
         hash_prefix = hex(hash(filename))[-4:]
         url = os.path.join(self._prefix, hash_prefix, filename)
         with self._fs.open_output_stream(url, buffer_size=self._buffer_size) as f:
-            return self._write_multiple_objects(f, object_refs, owner_addresses, url)
+            start_time = time.time()
+            ref = self._write_multiple_objects(f, object_refs, owner_addresses, url)
+            metadata = {
+                'type': 'spill',
+                'object_refs': str(object_refs),
+                'num_objects': len(object_refs),
+                'filename': filename,
+                'url': url,
+                'time': time.time() - start_time
+            }
+            logger.info(json.dumps(metadata))
+            return ref
+
 
     def restore_spilled_objects(
         self, object_refs: List[ObjectRef], url_with_offset_list: List[str]
@@ -404,6 +417,7 @@ class ExternalStorageRayStorageImplArrow(ExternalStorage):
             object_ref = object_refs[i]
             url_with_offset = url_with_offset_list[i].decode()
             print(f"Restore {object_ref} from {url_with_offset} {i}", flush=True)
+            start_time = time.time()
             # Retrieve the information needed.
             parsed_result = parse_url_with_offset(url_with_offset)
             url = parsed_result.base_url
@@ -423,6 +437,14 @@ class ExternalStorageRayStorageImplArrow(ExternalStorage):
                     metadata, buf_len, f, object_ref, owner_address
                 )
             print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
+            restore_info = {
+                'type': 'restore',
+                'object_ref': str(object_ref),
+                'url_with_offset': url_with_offset,
+                'buf_len': buf_len,
+                'time': time.time() - start_time
+            }
+            logger.info(json.dumps(restore_info))
         return total
 
     def delete_spilled_objects(self, urls: List[str]):
@@ -450,6 +472,9 @@ class ExternalStorageRayStorageImplArrowBuffered(ExternalStorageRayStorageImplAr
             object_ref = object_refs[i]
             url_with_offset = url_with_offset_list[i].decode()
             print(f"Restore {object_ref} from {url_with_offset} {i}", flush=True)
+            
+            start_time = time.time()
+            
             # Retrieve the information needed.
             parsed_result = parse_url_with_offset(url_with_offset)
             url = parsed_result.base_url
@@ -470,6 +495,14 @@ class ExternalStorageRayStorageImplArrowBuffered(ExternalStorageRayStorageImplAr
                     metadata, buf_len, f, object_ref, owner_address
                 )
             print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
+            restore_info = {
+                'type': 'restore',
+                'object_ref': str(object_ref),
+                'url_with_offset': url_with_offset,
+                'buf_len': buf_len,
+                'time': time.time() - start_time
+            }
+            logger.info(json.dumps(restore_info))
         return total
 
 
@@ -508,6 +541,7 @@ class ExternalStorageRayStorageImplArrowBoto(ExternalStorageRayStorageImplArrow)
             object_ref = object_refs[i]
             url_with_offset = url_with_offset_list[i].decode()
             print(f"Restore {object_ref} from {url_with_offset} {i}", flush=True)
+            start_time = time.time()
             # Retrieve the information needed.
             parsed_result = parse_url_with_offset(url_with_offset)
             url, offset, size = parsed_result
@@ -532,6 +566,14 @@ class ExternalStorageRayStorageImplArrowBoto(ExternalStorageRayStorageImplArrow)
             # read remaining data to our buffer
             self._put_object_to_store(metadata, buf_len, f, object_ref, owner_address)
             print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
+            restore_info = {
+                'type': 'restore',
+                'object_ref': str(object_ref),
+                'url_with_offset': url_with_offset,
+                'buf_len': buf_len,
+                'time': time.time() - start_time
+            }
+            logger.info(json.dumps(restore_info))
         return total
 
 
