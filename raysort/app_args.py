@@ -82,6 +82,12 @@ def get_args(*args, **kwargs):
         help="can be 'ray' (default), 'disk' or 's3'",
     )
     parser.add_argument(
+        "--restore_parallelism",
+        default=0,
+        type=int,
+        help="when > 0, will restore spilled blocks in parallel",
+    )
+    parser.add_argument(
         "--free_scheduling",
         default=False,
         action="store_true",
