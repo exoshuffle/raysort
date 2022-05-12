@@ -162,9 +162,11 @@ def final_merge(
 ) -> PartInfo:
     if isinstance(parts[0], PartInfo):
         if args.io_parallelism > 0:
-            parts = [ray_utils.remote(args, restore_block).remote(p) for p in parts]
+            parts = [
+                ray_utils.remote(args, restore_block).remote(args, p) for p in parts
+            ]
         else:
-            parts = [restore_block(p) for p in parts]
+            parts = [restore_block(args, p) for p in parts]
 
     M = len(parts)
 
