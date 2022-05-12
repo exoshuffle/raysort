@@ -8,6 +8,7 @@ from typing import Callable, Dict, List, Tuple
 
 import ray
 from ray import cluster_utils
+from ray.remote_function import RemoteFunction
 
 from raysort import constants
 from raysort.typing import Args
@@ -15,13 +16,26 @@ from raysort.typing import Args
 local_cluster = None
 
 
-def remote(args: Args, fn: Callable) -> ray.remote_function.RemoteFunction:
+def schedule_tasks(
+    fn: Callable, task_args: List[Tuple], parallelism: int = 0
+) -> List[ray.ObjectRef]:
     """
-    Returns a remote function that runs on the current node and takes
-    1 / args.io_parallelism 'io_worker' resource.
+    Schedule tasks with a maximum parallelism on the current node.
+    """
+    task = remote(fn)
+    ret = []
+    for i, a in enumerate(task_args):
+        if parallelism > 0 and i >= parallelism:
+            wait(ret, num_returns=i - parallelism + 1)
+        ret.append(task.remote(*a))
+    return ret
+
+
+def remote(fn: Callable) -> RemoteFunction:
+    """
+    Return a remote function that runs on the current node with num_cpus=0.
     """
     opt = dict(num_cpus=0, **current_node_res())
-    opt["resources"][constants.IO_WORKER_RESOURCE] = 1 / args.io_parallelism
     return ray.remote(**opt)(fn)
 
 
@@ -159,7 +173,6 @@ def _build_cluster(
     for i in range(num_nodes):
         cluster.add_node(
             resources={
-                constants.IO_WORKER_RESOURCE: 1,
                 constants.WORKER_RESOURCE: 1,
                 f"node:10.0.0.{i + 1}": 1,
             },

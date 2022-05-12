@@ -122,6 +122,7 @@ def merge_mapper_blocks(
 
     ret = []
     spill_tasks = []
+    spill_remote = ray_utils.remote(spill_block)
     for i, datachunk in enumerate(merger):
         if args.spilling == SpillingMode.RAY:
             if args.use_put:
@@ -135,11 +136,15 @@ def merge_mapper_blocks(
             del datachunk
             continue
         part_id = constants.merge_part_ids(worker_id, merge_id, i)
-        pinfo = sort_utils.part_info(args, part_id, kind="temp")
-        if args.io_parallelism > 0:
-            spill_tasks.append(
-                ray_utils.remote(args, spill_block).remote(args, pinfo, datachunk)
-            )
+        pinfo = sort_utils.part_info(
+            args, part_id, kind="temp", s3=(args.spilling == SpillingMode.S3)
+        )
+        if args.merge_io_parallelism > 0:
+            spill_tasks.append(spill_remote.remote(args, pinfo, datachunk))
+            if i >= args.merge_io_parallelism:
+                ray_utils.wait(
+                    spill_tasks, num_returns=i - args.merge_io_parallelism + 1
+                )
         else:
             spill_block(args, pinfo, datachunk)
         ret.append(pinfo)
@@ -161,10 +166,12 @@ def final_merge(
     *parts: List,
 ) -> PartInfo:
     if isinstance(parts[0], PartInfo):
-        if args.io_parallelism > 0:
-            parts = [
-                ray_utils.remote(args, restore_block).remote(args, p) for p in parts
-            ]
+        if args.reduce_io_parallelism > 0:
+            parts = ray_utils.schedule_tasks(
+                restore_block,
+                [(args, p) for p in parts],
+                parallelism=args.reduce_io_parallelism,
+            )
         else:
             parts = [restore_block(args, p) for p in parts]
 

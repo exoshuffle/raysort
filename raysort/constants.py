@@ -9,7 +9,6 @@ __DIR__ = os.path.dirname(os.path.abspath(__file__))
 RECORD_SIZE = 100  # bytes
 
 # Ray Resources
-IO_WORKER_RESOURCE = "io_worker"
 WORKER_RESOURCE = "worker"
 
 # Progress Tracker Actor

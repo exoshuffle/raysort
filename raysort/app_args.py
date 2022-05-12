@@ -181,3 +181,5 @@ def derive_app_args(args: Args):
     args.num_reducers = args.num_mappers
     assert args.num_reducers % args.num_workers == 0, args
     args.num_reducers_per_worker = args.num_reducers // args.num_workers
+    args.merge_io_parallelism = args.io_parallelism // args.merge_parallelism
+    args.reduce_io_parallelism = args.io_parallelism // args.reduce_parallelism
