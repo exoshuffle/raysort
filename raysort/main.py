@@ -137,7 +137,7 @@ def merge_mapper_blocks(
         pinfo = sort_utils.part_info(args, part_id, kind="temp")
         if args.io_parallelism > 0:
             spill_tasks.append(
-                ray_utils.remote(args, spill_block).remote(pinfo, datachunk)
+                ray_utils.remote(args, spill_block).remote(args, pinfo, datachunk)
             )
         else:
             spill_block(pinfo, datachunk)
