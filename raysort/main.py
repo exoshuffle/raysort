@@ -79,7 +79,8 @@ def spill_block(args: Args, pinfo: PartInfo, data: np.ndarray):
             data.tofile(fout)
     elif args.spilling == SpillingMode.S3:
         s3_utils.upload_s3_buffer(args, data, pinfo.path)
-    raise RuntimeError(f"{args}")
+    else:
+        raise RuntimeError(f"{args}")
 
 
 def restore_block(args: Args, part: PartInfo) -> np.ndarray:
