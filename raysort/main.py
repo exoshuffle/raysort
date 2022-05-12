@@ -140,7 +140,7 @@ def merge_mapper_blocks(
                 ray_utils.remote(args, spill_block).remote(args, pinfo, datachunk)
             )
         else:
-            spill_block(pinfo, datachunk)
+            spill_block(args, pinfo, datachunk)
         ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
