@@ -142,7 +142,6 @@ def final_merge(
     reducer_id: PartId,
     *parts: List,
 ) -> PartInfo:
-    @ray.remote(num_cpus=0, **ray_utils.current_node_res())
     def get_part(part: PartInfo) -> np.ndarray:
         if args.spilling == SpillingMode.DISK:
             with open(part.path, "rb", buffering=args.io_size) as fin:
@@ -154,8 +153,13 @@ def final_merge(
         raise RuntimeError(f"{args}")
 
     if isinstance(parts[0], PartInfo):
-        # TODO: figure out a way to limit concurrency
-        parts = [get_part.remote(p) for p in parts]
+        if args.restore_parallelism > 0:
+            opt = dict(num_cpus=0, **ray_utils.current_node_res())
+            opt["resources"]["restore_worker"] = 1 / args.restore_parallelism
+            get_part_remote = ray.remote(**opt)(get_part)
+            parts = [get_part_remote.remote(p) for p in parts]
+        else:
+            parts = [get_part(p) for p in parts]
 
     M = len(parts)
 
@@ -166,11 +170,11 @@ def final_merge(
         if part is None:
             return None
         if isinstance(part, np.ndarray):
-            return None if part.size == 0 else part
+            return part
         if isinstance(part, ray.ObjectRef):
             ret = ray.get(part)
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
-            return None if ret.size == 0 else ret
+            return ret
         raise RuntimeError(f"{args}")
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
