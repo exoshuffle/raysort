@@ -135,8 +135,11 @@ def merge_mapper_blocks(
             del datachunk
             continue
         part_id = constants.merge_part_ids(worker_id, merge_id, i)
-        pinfo = sort_utils.part_info(args, part_id, kind="temp")
+        pinfo = sort_utils.part_info(
+            args, part_id, kind="temp", s3=(args.spilling == SpillingMode.S3)
+        )
         if args.io_parallelism > 0:
+            # TODO: Use ray.wait to avoid queueing up too many tasks.
             spill_tasks.append(
                 ray_utils.remote(args, spill_block).remote(args, pinfo, datachunk)
             )
