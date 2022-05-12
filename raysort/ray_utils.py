@@ -15,7 +15,7 @@ from raysort.typing import Args
 local_cluster = None
 
 
-def remote(args: Args, fn: Callable) -> ray.RemoteFunction:
+def remote(args: Args, fn: Callable) -> ray.remote_function.RemoteFunction:
     """
     Returns a remote function that runs on the current node and takes
     1 / args.io_parallelism 'io_worker' resource.
