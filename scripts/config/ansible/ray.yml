@@ -50,6 +50,6 @@
         --address={{ head_ip }}:6379
         --object-manager-port={{ ray_object_manager_port }}
         --metrics-export-port={{ ray_merics_export_port }}
-        --resources='{"worker":1}'
+        --resources='{"worker":1,"io_worker":1}'
         --object-store-memory={{ ray_object_store_memory }}
       changed_when: true

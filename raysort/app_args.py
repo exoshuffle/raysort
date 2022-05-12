@@ -82,10 +82,10 @@ def get_args(*args, **kwargs):
         help="can be 'ray' (default), 'disk' or 's3'",
     )
     parser.add_argument(
-        "--restore_parallelism",
+        "--io_parallelism",
         default=0,
         type=int,
-        help="when > 0, will restore spilled blocks in parallel",
+        help="when > 0, will spill and restore blocks using parallel ray tasks",
     )
     parser.add_argument(
         "--free_scheduling",

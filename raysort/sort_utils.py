@@ -253,7 +253,7 @@ def validate_output(args: Args):
         opt = (
             ray_utils.node_res(pinfo.node)
             if pinfo.node
-            else {"resources": {"worker": 1e-3}}
+            else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
         results.append(validate_part.options(**opt).remote(args, pinfo))
     logging.info(f"Validating {len(results)} partitions")
