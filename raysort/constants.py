@@ -8,6 +8,9 @@ __DIR__ = os.path.dirname(os.path.abspath(__file__))
 # Basics
 RECORD_SIZE = 100  # bytes
 
+# Ray Resources
+WORKER_RESOURCE = "worker"
+
 # Progress Tracker Actor
 PROGRESS_TRACKER_ACTOR = "ProgressTrackerActor"
 

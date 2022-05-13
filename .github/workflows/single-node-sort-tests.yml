@@ -44,6 +44,9 @@ jobs:
       - name: 1GB two stage shuffle with manual spilling
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --local
 
+      - name: 1GB two stage shuffle with manual spilling, parallelized
+        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --io_parallelism=2 --local
+
       - name: 1GB Ray native shuffle
         run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local
 

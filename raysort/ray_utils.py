@@ -4,13 +4,39 @@ import os
 import socket
 import subprocess
 import tempfile
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import ray
 from ray import cluster_utils
+from ray.remote_function import RemoteFunction
+
+from raysort import constants
 from raysort.typing import Args
 
 local_cluster = None
+
+
+def schedule_tasks(
+    fn: Callable, task_args: List[Tuple], parallelism: int = 0
+) -> List[ray.ObjectRef]:
+    """
+    Schedule tasks with a maximum parallelism on the current node.
+    """
+    task = remote(fn)
+    ret = []
+    for i, a in enumerate(task_args):
+        if parallelism > 0 and i >= parallelism:
+            wait(ret, num_returns=i - parallelism + 1)
+        ret.append(task.remote(*a))
+    return ret
+
+
+def remote(fn: Callable) -> RemoteFunction:
+    """
+    Return a remote function that runs on the current node with num_cpus=0.
+    """
+    opt = dict(num_cpus=0, **current_node_res())
+    return ray.remote(**opt)(fn)
 
 
 def current_node_res(parallelism: int = 1000) -> Dict:
@@ -147,7 +173,7 @@ def _build_cluster(
     for i in range(num_nodes):
         cluster.add_node(
             resources={
-                "worker": 1,
+                constants.WORKER_RESOURCE: 1,
                 f"node:10.0.0.{i + 1}": 1,
             },
             object_store_memory=object_store_memory,
@@ -176,9 +202,9 @@ def _get_resources_args(args: Args):
     resources = ray.cluster_resources()
     logging.info(f"Cluster resources: {resources}")
     assert (
-        "worker" in resources
+        constants.WORKER_RESOURCE in resources
     ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"
-    args.num_workers = int(resources["worker"])
+    args.num_workers = int(resources[constants.WORKER_RESOURCE])
     head_node_str = "node:" + ray.util.get_node_ip_address()
     args.worker_ips = [
         r.split(":")[1]

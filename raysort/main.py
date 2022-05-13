@@ -72,6 +72,28 @@ def _dummy_merge(
         blocks.append(((m, d_), block))
 
 
+def spill_block(args: Args, pinfo: PartInfo, data: np.ndarray):
+    if args.spilling == SpillingMode.DISK:
+        # TODO(@lsf): make sure we write to all mounted disks.
+        with open(pinfo.path, "wb", buffering=args.io_size) as fout:
+            data.tofile(fout)
+    elif args.spilling == SpillingMode.S3:
+        s3_utils.upload_s3_buffer(args, data, pinfo.path)
+    else:
+        raise RuntimeError(f"{args}")
+
+
+def restore_block(args: Args, part: PartInfo) -> np.ndarray:
+    if args.spilling == SpillingMode.DISK:
+        with open(part.path, "rb", buffering=args.io_size) as fin:
+            ret = np.fromfile(fin, dtype=np.uint8)
+        os.remove(part.path)
+        return ret
+    if args.spilling == SpillingMode.S3:
+        return s3_utils.download_s3(args.s3_bucket, part.path)
+    raise RuntimeError(f"{args}")
+
+
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote(num_cpus=0)
@@ -99,7 +121,8 @@ def merge_mapper_blocks(
     merger = merge_fn(M, get_block, num_records, False, bounds)
 
     ret = []
-    tasks = []
+    spill_tasks = []
+    spill_remote = ray_utils.remote(spill_block)
     for i, datachunk in enumerate(merger):
         if args.spilling == SpillingMode.RAY:
             if args.use_put:
@@ -113,22 +136,22 @@ def merge_mapper_blocks(
             del datachunk
             continue
         part_id = constants.merge_part_ids(worker_id, merge_id, i)
-        pinfo = sort_utils.part_info(args, part_id, kind="temp")
-        if args.spilling == SpillingMode.DISK:
-            # TODO(@lsf): make sure we write to all mounted disks.
-            with open(pinfo.path, "wb", buffering=args.io_size) as fout:
-                datachunk.tofile(fout)
-        elif args.spilling == SpillingMode.S3:
-            tasks.append(
-                s3_utils.upload_s3_buffer_remote.options(
-                    **ray_utils.current_node_res()
-                ).remote(args, datachunk, pinfo.path)
-            )
+        pinfo = sort_utils.part_info(
+            args, part_id, kind="temp", s3=(args.spilling == SpillingMode.S3)
+        )
+        if args.merge_io_parallelism > 0:
+            spill_tasks.append(spill_remote.remote(args, pinfo, datachunk))
+            if i >= args.merge_io_parallelism:
+                ray_utils.wait(
+                    spill_tasks, num_returns=i - args.merge_io_parallelism + 1
+                )
+        else:
+            spill_block(args, pinfo, datachunk)
         ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
     del blocks
-    ray_utils.wait(tasks, wait_all=True)
+    ray_utils.wait(spill_tasks, wait_all=True)
     return ret
 
 
@@ -142,24 +165,15 @@ def final_merge(
     reducer_id: PartId,
     *parts: List,
 ) -> PartInfo:
-    def get_part(part: PartInfo) -> np.ndarray:
-        if args.spilling == SpillingMode.DISK:
-            with open(part.path, "rb", buffering=args.io_size) as fin:
-                ret = np.fromfile(fin, dtype=np.uint8)
-            os.remove(part.path)
-            return ret
-        if args.spilling == SpillingMode.S3:
-            return s3_utils.download_s3(args.s3_bucket, part.path)
-        raise RuntimeError(f"{args}")
-
     if isinstance(parts[0], PartInfo):
-        if args.restore_parallelism > 0:
-            opt = dict(num_cpus=0, **ray_utils.current_node_res())
-            opt["resources"]["restore_worker"] = 1 / args.restore_parallelism
-            get_part_remote = ray.remote(**opt)(get_part)
-            parts = [get_part_remote.remote(p) for p in parts]
+        if args.reduce_io_parallelism > 0:
+            parts = ray_utils.schedule_tasks(
+                restore_block,
+                [(args, p) for p in parts],
+                parallelism=args.reduce_io_parallelism,
+            )
         else:
-            parts = [get_part(p) for p in parts]
+            parts = [restore_block(args, p) for p in parts]
 
     M = len(parts)
 
@@ -219,7 +233,7 @@ def reduce_stage(
     def get_task_options(w: int) -> Dict:
         if args.free_scheduling:
             return {
-                "resources": {"worker": 1 / args.reduce_parallelism},
+                "resources": {constants.WORKER_RESOURCE: 1 / args.reduce_parallelism},
                 "scheduling_strategy": "SPREAD",
             }
         else:

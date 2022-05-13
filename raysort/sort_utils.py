@@ -167,7 +167,9 @@ def generate_part(
 
 
 @ray.remote
-def drop_fs_cache(_):
+def drop_fs_cache(args: Args):
+    if args.s3_bucket:
+        return
     subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
     logging.info("Dropped filesystem cache")
 
@@ -253,7 +255,7 @@ def validate_output(args: Args):
         opt = (
             ray_utils.node_res(pinfo.node)
             if pinfo.node
-            else {"resources": {"worker": 1e-3}}
+            else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
         results.append(validate_part.options(**opt).remote(args, pinfo))
     logging.info(f"Validating {len(results)} partitions")
