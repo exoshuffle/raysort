@@ -113,7 +113,7 @@ def part_info(
     s3: bool = False,
 ) -> PartInfo:
     if s3:
-        shard = part_id & constants.S3_SHARD_MASK
+        shard = hash(str(part_id)) & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
     data_dir_idx = part_id % len(args.data_dirs)
@@ -132,8 +132,11 @@ def _get_part_path(
 ) -> Path:
     filename_fmt = constants.FILENAME_FMT[kind]
     filename = filename_fmt.format(part_id=part_id)
-    shard_str = constants.SHARD_FMT.format(shard=shard) if shard is not None else ""
-    return os.path.join(prefix, kind, shard_str, filename)
+    parts = [prefix, kind]
+    if shard is not None:
+        parts.append(constants.SHARD_FMT.format(shard=shard))
+    parts.append(filename)
+    return os.path.join(*parts)
 
 
 def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
