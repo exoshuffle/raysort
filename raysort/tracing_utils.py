@@ -227,6 +227,7 @@ class ProgressTracker:
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
+        os.symlink(filename, "/tmp/raysort-latest.json")
         if save_to_wandb:
             wandb.save(filename, base_path="/tmp")
 
