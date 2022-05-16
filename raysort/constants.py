@@ -32,7 +32,7 @@ TMPFS_PATH = "/mnt/tmpfs/raysort"
 
 # S3
 S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024
-S3_SHARD_NUMBER = 2**12  # 4096, must be a power of 2
+S3_SHARD_NUMBER = 2**16  # 65536, must be a power of 2
 S3_SHARD_MASK = S3_SHARD_NUMBER - 1
 
 # Prometheus config
