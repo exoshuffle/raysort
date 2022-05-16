@@ -123,6 +123,14 @@ class _DefaultDictWithKey(collections.defaultdict):
         return super().__missing__(key)
 
 
+def symlink(src: str, dst: str, **kwargs):
+    try:
+        os.symlink(src, dst, **kwargs)
+    except FileExistsError:
+        os.remove(dst)
+        os.symlink(src, dst, **kwargs)
+
+
 @ray.remote(resources={"head": 1e-3})
 class ProgressTracker:
     def __init__(self, args: Args, project: str = "raysort"):
@@ -227,7 +235,7 @@ class ProgressTracker:
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
-        os.symlink(filename, "/tmp/raysort-latest.json")
+        symlink(filename, "/tmp/raysort-latest.json")
         if save_to_wandb:
             wandb.save(filename, base_path="/tmp")
 
