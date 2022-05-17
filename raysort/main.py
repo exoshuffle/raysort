@@ -104,10 +104,11 @@ def merge_mapper_blocks(
     worker_id: PartId,
     merge_id: PartId,
     bounds: List[int],
-    *blocks: List[np.ndarray],
+    *blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
+    blocks = list(blocks)
     if isinstance(blocks[0], ray.ObjectRef):
-        blocks = ray.get(list(blocks))
+        blocks = ray.get(blocks)
 
     M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
@@ -150,8 +151,6 @@ def merge_mapper_blocks(
             spill_block(args, pinfo, datachunk)
         ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
-    del merger
-    del blocks
     ray_utils.wait(spill_tasks, wait_all=True)
     return ret
 
@@ -245,11 +244,10 @@ def reduce_stage(
         (args.num_workers, args.num_reducers_per_worker), dtype=object
     )
     for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued. The extra one is for task arguments prefetching.
-        if r > args.reduce_parallelism:
+        # At most (args.reduce_parallelism * args.num_workers) concurrent tasks.
+        if r >= args.reduce_parallelism:
             ray_utils.wait(
-                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                reduce_results[:, : r - args.reduce_parallelism + 1].flatten(),
                 wait_all=True,
             )
         reduce_results[:, r] = [
