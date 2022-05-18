@@ -397,15 +397,16 @@ class ExternalStorageRayStorageImplArrow(ExternalStorage):
         with self._fs.open_output_stream(url, buffer_size=self._buffer_size) as f:
             start_time = time.time()
             ref = self._write_multiple_objects(f, object_refs, owner_addresses, url)
-            metadata = {
+            spill_info = {
                 'type': 'spill',
                 'object_refs': str(object_refs),
                 'num_objects': len(object_refs),
                 'filename': filename,
                 'url': url,
-                'time': time.time() - start_time
+                'time': time.time(),
+                'duration': time.time() - start_time
             }
-            logger.info(json.dumps(metadata))
+            print(json.dumps(spill_info))
             return ref
 
 
@@ -436,15 +437,18 @@ class ExternalStorageRayStorageImplArrow(ExternalStorage):
                 self._put_object_to_store(
                     metadata, buf_len, f, object_ref, owner_address
                 )
-            print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
+            
             restore_info = {
                 'type': 'restore',
                 'object_ref': str(object_ref),
+                'url': url,
                 'url_with_offset': url_with_offset,
                 'buf_len': buf_len,
-                'time': time.time() - start_time
+                'time': time.time(),
+                'duration': time.time() - start_time
             }
-            logger.info(json.dumps(restore_info))
+            print(json.dumps(restore_info), flush=True)
+            
         return total
 
     def delete_spilled_objects(self, urls: List[str]):
@@ -494,15 +498,17 @@ class ExternalStorageRayStorageImplArrowBuffered(ExternalStorageRayStorageImplAr
                 self._put_object_to_store(
                     metadata, buf_len, f, object_ref, owner_address
                 )
-            print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
             restore_info = {
                 'type': 'restore',
                 'object_ref': str(object_ref),
+                'url': url,
                 'url_with_offset': url_with_offset,
                 'buf_len': buf_len,
-                'time': time.time() - start_time
+                'time': time.time(),
+                'duration': time.time() - start_time
             }
-            logger.info(json.dumps(restore_info))
+            print(json.dumps(restore_info), flush=True)
+            
         return total
 
 
@@ -565,15 +571,17 @@ class ExternalStorageRayStorageImplArrowBoto(ExternalStorageRayStorageImplArrow)
             metadata = f.read(metadata_len)
             # read remaining data to our buffer
             self._put_object_to_store(metadata, buf_len, f, object_ref, owner_address)
-            print(f"Restore {object_ref} from {url_with_offset} OK", flush=True)
             restore_info = {
                 'type': 'restore',
                 'object_ref': str(object_ref),
+                'url': url,
                 'url_with_offset': url_with_offset,
                 'buf_len': buf_len,
-                'time': time.time() - start_time
+                'time': time.time(),
+                'duration': time.time() - start_time
             }
-            logger.info(json.dumps(restore_info))
+            print(json.dumps(restore_info), flush=True)
+            
         return total
 
 
@@ -678,9 +686,21 @@ class ExternalStorageSmartOpenImpl(ExternalStorage):
             mode="wb",
             transport_params=self.transport_params,
         ) as file_like:
-            return self._write_multiple_objects(
+            start_time = time.time()
+            ref = self._write_multiple_objects(
                 file_like, object_refs, owner_addresses, url
             )
+            spill_info = {
+                'type': 'spill',
+                'object_refs': str(object_refs),
+                'num_objects': len(object_refs),
+                'qualifier': 'smart_open',
+                'url': url,
+                'time': time.time(),
+                'duration': time.time() - start_time
+            }
+            print(json.dumps(spill_info))
+            return ref
 
     def restore_spilled_objects(
         self, object_refs: List[ObjectRef], url_with_offset_list: List[str]

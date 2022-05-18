@@ -15,7 +15,7 @@ import boto3
 import click
 import ray
 
-DEFAULT_CLUSTER_NAME = "raysort-lsf"
+DEFAULT_CLUSTER_NAME = "raysort-kl"
 DEFAULT_INSTANCE_COUNT = 10
 DEFAULT_INSTANCE_TYPE = "r6i.2xlarge"
 
@@ -743,6 +743,7 @@ def collect(
     inventory_path = get_or_create_ansible_inventory(cluster_name)
     ev = get_ansible_vars(instance_type, False)
     run_ansible_playbook(inventory_path, "collect.yml", ev=ev)
+    # grep -r '"type": "restore"\|"type": "spill"' /tmp/ray/session_latest/logs
 
 
 if __name__ == "__main__":
