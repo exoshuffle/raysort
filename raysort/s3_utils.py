@@ -57,39 +57,39 @@ def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
     s3().upload_fileobj(io.BytesIO(data), args.s3_bucket, path, Config=TRANSFER_CONFIG)
 
 
-@ray.remote(num_cpus=0)
-def upload_part_remote(**kwargs):
-    return s3().upload_part(**kwargs)
-
-
 def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
-    s3 = boto3.client("s3")
-    mpu = s3.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
+    parallelism = args.reduce_io_parallelism
+    s3_client = boto3.client("s3")
+    mpu = s3_client.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
     tasks = []
     mpu_part_id = 1
 
+    def upload(**kwargs):
+        # Cannot use s3_client because Ray cannot pickle SSLContext.
+        return s3().upload_part(**kwargs)
+
+    upload_remote = ray_utils.remote(upload)
+
     def upload_part(data):
         nonlocal mpu_part_id
-        # Limit concurrency.
-        # TODO: try larger concurrency and refactor using ray_utils.schedule_tasks()
-        max_concurrency = 2
-        if len(tasks) > max_concurrency:
-            ray_utils.wait(
-                [t for t, _ in tasks], num_returns=len(tasks) - max_concurrency
-            )
-        # Upload in a different worker process.
-        task = upload_part_remote.options(**ray_utils.current_node_res()).remote(
+        if parallelism > 0 and len(tasks) > parallelism:
+            ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
+        kwargs = dict(
             Body=data,
             Bucket=args.s3_bucket,
             Key=path,
             PartNumber=mpu_part_id,
             UploadId=mpu["UploadId"],
         )
+        if parallelism > 0:
+            task = upload_remote.remote(**kwargs)
+        else:
+            task = upload(**kwargs)
         tasks.append((task, mpu_part_id))
         mpu_part_id += 1
 
-    # The merger produces a bunch of small chunks which we need to fuse into
-    # one chunk before uploading to S3.
+    # The merger produces a bunch of small chunks towards the end, which
+    # we need to fuse into one chunk before uploading to S3.
     tail = io.BytesIO()
     for datachunk in merger:
         if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
@@ -107,13 +107,13 @@ def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> No
     # Wait for all upload tasks to complete.
     mpu_parts = [
         {
-            "ETag": ray.get(t)["ETag"],
-            "PartNumber": n,
+            "ETag": ray.get(t)["ETag"] if isinstance(t, ray.ObjectRef) else t["ETag"],
+            "PartNumber": mpid,
         }
-        for t, n in tasks
+        for t, mpid in tasks
     ]
 
-    s3.complete_multipart_upload(
+    s3_client.complete_multipart_upload(
         Bucket=args.s3_bucket,
         Key=path,
         MultipartUpload={"Parts": mpu_parts},

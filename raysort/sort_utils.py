@@ -14,7 +14,7 @@ from raysort import logging_utils
 from raysort import ray_utils
 from raysort import s3_utils
 from raysort import tracing_utils
-from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
+from raysort.typing import Args, PartId, PartInfo, Path, RecordCount, SpillingMode
 
 
 # ------------------------------------------------------------
@@ -79,7 +79,7 @@ def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None
 @ray.remote
 def make_data_dirs(args: Args):
     os.makedirs(constants.TMPFS_PATH, exist_ok=True)
-    if args.s3_bucket:
+    if args.s3_bucket and args.spilling == SpillingMode.S3:
         return
     for prefix in args.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
