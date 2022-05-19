@@ -171,8 +171,6 @@ def generate_part(
 
 @ray.remote
 def drop_fs_cache(args: Args):
-    if args.s3_bucket:
-        return
     subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
     logging.info("Dropped filesystem cache")
 
@@ -198,7 +196,8 @@ def generate_input(args: Args):
     with open(get_manifest_file(args), "w") as fout:
         writer = csv.writer(fout)
         writer.writerows(parts)
-    ray.get(run_on_all_workers(args, drop_fs_cache))
+    if not args.s3_bucket:
+        ray.get(run_on_all_workers(args, drop_fs_cache))
 
 
 def create_partition(part_size: int) -> np.ndarray:
