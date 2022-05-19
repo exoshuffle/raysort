@@ -15,7 +15,7 @@ import boto3
 import click
 import ray
 
-DEFAULT_CLUSTER_NAME = "raysort-lsf"
+DEFAULT_CLUSTER_NAME = "raysort-kl"
 DEFAULT_INSTANCE_COUNT = 10
 DEFAULT_INSTANCE_TYPE = "r6i.2xlarge"
 
@@ -727,6 +727,23 @@ def ssh(cluster_name: str, worker_id_or_ip: str):
     run(
         f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
+
+@cli.command()
+@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
+@click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE)
+def collect(
+    cluster_name: str,
+    instance_type: str,
+):
+    cluster_exists = check_cluster_existence(cluster_name)
+    config_exists = os.path.exists(get_tf_dir(cluster_name))
+    if cluster_exists and not config_exists:
+        error(f"{cluster_name} exists on the cloud but nothing is found locally")
+    
+    inventory_path = get_or_create_ansible_inventory(cluster_name)
+    ev = get_ansible_vars(instance_type, False)
+    run_ansible_playbook(inventory_path, "collect.yml", ev=ev)
+    # grep -r '"type": "restore"\|"type": "spill"' /tmp/ray/session_latest/logs
 
 
 if __name__ == "__main__":

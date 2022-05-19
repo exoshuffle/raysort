@@ -45,6 +45,7 @@
       ansible.builtin.shell: >
         {{ pythondir }}/ray stop -f &&
         sleep 3 &&
+        RAY_STORAGE=s3://raysort-lsf
         nohup
         {{ pythondir }}/ray start
         --address={{ head_ip }}:6379

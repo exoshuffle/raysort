@@ -1,0 +1,42 @@
+
+---
+- hosts: all
+  gather_facts: false
+  strategy: free
+
+  tasks:
+    - name: Remove spill logs if exists
+      ansible.builtin.shell: >
+        [ ! -e /tmp/ray/session_latest/spill.log ] || rm /tmp/ray/session_latest/spill.log
+
+    - name: Create spill logs
+      ansible.builtin.shell: >
+        touch /tmp/ray/session_latest/spill.log && chmod 777 /tmp/ray/session_latest/spill.log
+
+    - name: Grep spill logs
+      ansible.builtin.shell: >
+        grep -hr '"type": "spill"' /tmp/ray/session_latest/logs > /tmp/ray/session_latest/spill.log
+
+    - name: Fetch spill logs
+      ansible.posix.synchronize:
+        src: /tmp/ray/session_latest/spill.log
+        dest: /tmp/ray/session_latest/spill.log
+        mode: pull
+
+    - name: Remove restore logs if exists
+      ansible.builtin.shell: >
+        [ ! -e /tmp/ray/session_latest/restore.log ] || rm /tmp/ray/session_latest/restore.log
+
+    - name: Create restore logs
+      ansible.builtin.shell: >
+        touch /tmp/ray/session_latest/restore.log && chmod 777 /tmp/ray/session_latest/restore.log
+
+    - name: Grep restore logs
+      ansible.builtin.shell: >
+        grep -hr '"type": "restore"' /tmp/ray/session_latest/logs > /tmp/ray/session_latest/restore.log
+
+    - name: Fetch restore logs
+      ansible.posix.synchronize:
+        src: /tmp/ray/session_latest/restore.log
+        dest: /tmp/ray/session_latest/restore.log
+        mode: pull
