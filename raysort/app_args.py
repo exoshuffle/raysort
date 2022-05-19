@@ -23,7 +23,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--num_concurrent_rounds",
-        default=2,
+        default=1,
         type=int,
         help="how many rounds of tasks to run concurrently (1 or 2)",
     )
@@ -41,7 +41,7 @@ def get_args(*args, **kwargs):
     )
     parser.add_argument(
         "--reduce_parallelism",
-        default=8,
+        default=4,
         type=int,
         help="number of reduce tasks to run in parallel per node",
     )
