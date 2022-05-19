@@ -325,8 +325,8 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         if (round + 1) % round_merge_factor == 0:
             # Make sure all merge tasks previous rounds finish.
             num_extra_rounds = (
-                (round + 1) // round_merge_factor - args.num_concurrent_rounds + 1
-            )
+                round + 1
+            ) // round_merge_factor - args.num_concurrent_rounds
             if num_extra_rounds > 0:
                 ray_utils.wait(
                     merge_results[:, 0].flatten(),
