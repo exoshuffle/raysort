@@ -15,11 +15,6 @@ from raysort.typing import Args, Path
 KiB = 1024
 MiB = KiB * 1024
 
-TRANSFER_CONFIG = transfer.TransferConfig(
-    io_chunksize=4 * MiB,
-    multipart_chunksize=32 * MiB,
-)
-
 
 def s3() -> botocore.client.BaseClient:
     return boto3.client(
@@ -35,26 +30,28 @@ def s3() -> botocore.client.BaseClient:
 
 def upload_s3(bucket: str, src: Path, dst: Path, *, delete_src: bool = True) -> None:
     try:
-        s3().upload_file(src, bucket, dst, Config=TRANSFER_CONFIG)
+        s3().upload_file(src, bucket, dst)
     finally:
         if delete_src:
             os.remove(src)
 
 
 def download_s3(
-    bucket: str, src: Path, dst: Optional[Path] = None
+    bucket: str, src: Path, dst: Optional[Path] = None, **kwargs
 ) -> Optional[np.ndarray]:
+    config = transfer.TransferConfig(**kwargs) if kwargs else None
     if dst:
-        s3().download_file(bucket, src, dst)
+        s3().download_file(bucket, src, dst, Config=config)
         return
     ret = io.BytesIO()
-    s3().download_fileobj(bucket, src, ret)
+    s3().download_fileobj(bucket, src, ret, Config=config)
     return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
 
 
-def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
+def upload_s3_buffer(args: Args, data: np.ndarray, path: Path, **kwargs) -> None:
     # TODO: avoid copying
-    s3().upload_fileobj(io.BytesIO(data), args.s3_bucket, path, Config=TRANSFER_CONFIG)
+    config = transfer.TransferConfig(**kwargs) if kwargs else None
+    s3().upload_fileobj(io.BytesIO(data), args.s3_bucket, path, Config=config)
 
 
 def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
