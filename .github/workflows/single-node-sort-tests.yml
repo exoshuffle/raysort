@@ -39,22 +39,22 @@ jobs:
         run: scripts/installers/install_binaries.sh gensort
 
       - name: 1GB simple shuffle
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --simple_shuffle --local
+        run: CONFIG=LocalSimple python raysort/main.py
 
       - name: 1GB two stage shuffle with manual spilling
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --local
+        run: CONFIG=LocalManualSpillingDisk python raysort/main.py
 
       - name: 1GB two stage shuffle with manual spilling, parallelized
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --io_parallelism=2 --local
+        run: CONFIG=LocalManualSpillingDiskParallel python raysort/main.py
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --local
+        run: CONFIG=LocalNative python raysort/main.py
 
       - name: 1GB Ray native shuffle with ray.put()
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --use_put --local
+        run: CONFIG=LocalNativePut python raysort/main.py
 
       - name: 1GB Ray native shuffle, Magnet version
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --magnet --local
+        run: CONFIG=LocalMagnet python raysort/main.py
 
       - name: 1GB Ray native shuffle, Riffle version
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --riffle --merge_factor=8 --local
+        run: CONFIG=LocalRiffle python raysort/main.py

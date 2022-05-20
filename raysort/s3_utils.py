@@ -10,7 +10,8 @@ import ray
 
 from raysort import constants
 from raysort import ray_utils
-from raysort.typing import Args, Path
+from raysort.config import AppConfig
+from raysort.typing import Path
 
 KiB = 1024
 MiB = KiB * 1024
@@ -52,15 +53,15 @@ def download_s3(
     return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
 
 
-def upload_s3_buffer(args: Args, data: np.ndarray, path: Path) -> None:
+def upload_s3_buffer(cfg: AppConfig, data: np.ndarray, path: Path) -> None:
     # TODO: avoid copying
-    s3().upload_fileobj(io.BytesIO(data), args.s3_bucket, path, Config=TRANSFER_CONFIG)
+    s3().upload_fileobj(io.BytesIO(data), cfg.s3_bucket, path, Config=TRANSFER_CONFIG)
 
 
-def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
-    parallelism = args.reduce_io_parallelism
+def multipart_upload(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> None:
+    parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")
-    mpu = s3_client.create_multipart_upload(Bucket=args.s3_bucket, Key=path)
+    mpu = s3_client.create_multipart_upload(Bucket=cfg.s3_bucket, Key=path)
     tasks = []
     mpu_part_id = 1
 
@@ -76,7 +77,7 @@ def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> No
             ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
         kwargs = dict(
             Body=data,
-            Bucket=args.s3_bucket,
+            Bucket=cfg.s3_bucket,
             Key=path,
             PartNumber=mpu_part_id,
             UploadId=mpu["UploadId"],
@@ -114,7 +115,7 @@ def multipart_upload(args: Args, path: Path, merger: Iterable[np.ndarray]) -> No
     ]
 
     s3_client.complete_multipart_upload(
-        Bucket=args.s3_bucket,
+        Bucket=cfg.s3_bucket,
         Key=path,
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],

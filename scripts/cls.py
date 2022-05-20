@@ -28,7 +28,6 @@ ANSIBLE_DIR = "config/ansible"
 HADOOP_TEMPLATE_DIR = "config/hadoop"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
-RAY_STORAGE_URI = "s3://raysort-lsf"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
 GRAFANA_SERVER_PORT = 3000
@@ -472,7 +471,7 @@ def restart_ray(
     run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd()
-    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=RAY_STORAGE_URI))
+    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage_uri))
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
