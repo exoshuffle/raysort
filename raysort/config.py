@@ -178,7 +178,7 @@ def get_steps(steps: List[AppStep] = []) -> Dict:
     if not steps:
         steps_str = os.getenv(APP_STEPS_ENV_VAR)
         if steps_str:
-            steps = [AppStep[step] for step in steps_str.split(",")]
+            steps = [AppStep(step) for step in steps_str.split(",")]
         if not steps:
             steps = [AppStep.GENERATE_INPUT, AppStep.SORT, AppStep.VALIDATE_OUTPUT]
     return {step.value: True for step in steps}
@@ -302,6 +302,46 @@ __config__ = {
             fail_node=0,
         ),
     ),
+    "LocalNativeFT": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+            fail_node=0,
+        ),
+    ),
+    "LocalNativePutFT": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            use_put=True,
+            skip_input=True,
+            fail_node=0,
+        ),
+    ),
+    "LocalMagnetFT": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            magnet=True,
+            skip_input=True,
+            fail_node=0,
+        ),
+    ),
+    "LocalRiffleFT": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            riffle=True,
+            merge_factor=8,
+            skip_input=True,
+            fail_node=0,
+        ),
+    ),
     # ------------------------------------------------------------
     #     Local S3 spilling experiments
     # ------------------------------------------------------------
@@ -352,20 +392,26 @@ __config__ = {
         ),
     ),
     # ------------------------------------------------------------
-    #     10 nodes 1TB experiments
+    #     d3.2xl 10 nodes 1TB (NSDI '22)
+    # ------------------------------------------------------------
+    # ------------------------------------------------------------
+    #     S3 10 nodes 1TB
     # ------------------------------------------------------------
     "10-1tb-s3-native-s3": JobConfig(
+        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
         ),
-        system=dict(),
+        system=dict(
+            s3_spill=16,
+        ),
         app=dict(
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
             s3_bucket=S3_BUCKET,
-            io_parallelism=32,
+            io_parallelism=16,
         ),
     ),
     "10-1tb-s3-manual-s3": JobConfig(
