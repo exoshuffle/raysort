@@ -292,6 +292,16 @@ __config__ = {
     # ------------------------------------------------------------
     #     Local fault tolerance experiments
     # ------------------------------------------------------------
+    "LocalSimpleFT": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            simple_shuffle=True,
+            skip_input=True,
+            fail_node=0,
+        ),
+    ),
     # ------------------------------------------------------------
     #     Local S3 spilling experiments
     # ------------------------------------------------------------
@@ -344,6 +354,20 @@ __config__ = {
     # ------------------------------------------------------------
     #     10 nodes 1TB experiments
     # ------------------------------------------------------------
+    "10-1tb-s3-native-s3": JobConfig(
+        cluster=dict(
+            instance_count=10,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=32,
+        ),
+    ),
     "10-1tb-s3-manual-s3": JobConfig(
         cluster=dict(
             instance_count=10,

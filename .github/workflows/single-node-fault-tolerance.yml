@@ -38,6 +38,7 @@ jobs:
       - name: 1GB simple shuffle
         env:
           CONFIG: LocalSimpleFT
+          STEPS: sort
         run: python raysort/main.py
 
       - name: 1GB two stage shuffle with manual spilling
