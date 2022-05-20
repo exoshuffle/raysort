@@ -531,7 +531,6 @@ def print_after_setup(cluster_name: str) -> None:
 def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
-        click.argument("cluster_name", default=cfg.cluster.name),
         click.option(
             "--ray",
             default=False,

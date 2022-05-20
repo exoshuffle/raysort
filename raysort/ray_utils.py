@@ -161,10 +161,13 @@ def wait(
     )
 
 
-def _build_cluster(num_nodes: int, ray_args: Dict) -> cluster_utils.Cluster:
+def _build_cluster(
+    num_nodes: int, ray_args: Dict, system_config: Dict
+) -> cluster_utils.Cluster:
     cluster = cluster_utils.Cluster()
     cluster.add_node(
         resources={"head": 1},
+        _system_config=system_config,
         **ray_args,
     )
     cluster.connect()
@@ -199,13 +202,12 @@ def _init_local_cluster(job_cfg: JobConfig):
             }
         )
     ray_args = dict(
-        _system_config=system_config,
         num_cpus=1,
         object_store_memory=1 * GiB,
         storage=job_cfg.system.ray_storage,
     )
     num_nodes = os.cpu_count() // 2
-    cluster = _build_cluster(num_nodes, ray_args)
+    cluster = _build_cluster(num_nodes, ray_args, system_config)
     return cluster
 
 

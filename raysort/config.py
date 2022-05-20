@@ -67,8 +67,8 @@ class SystemConfig:
 class AppConfig:
     _cluster: InitVar[ClusterConfig]
 
-    total_gb: InitVar[float]
-    input_part_gb: InitVar[float]
+    total_gb: float
+    input_part_gb: float
     total_data_size: int = field(init=False)
     input_part_size: int = field(init=False)
 
@@ -122,13 +122,11 @@ class AppConfig:
     def __post_init__(
         self,
         cluster: ClusterConfig,
-        total_gb: float,
-        input_part_gb: float,
         map_parallelism_multiplier: float,
         reduce_parallelism_multiplier: float,
     ):
-        self.total_data_size = int(total_gb * GB)
-        self.input_part_size = int(input_part_gb * GB)
+        self.total_data_size = int(self.total_gb * GB)
+        self.input_part_size = int(self.input_part_gb * GB)
         self.map_parallelism = int(
             map_parallelism_multiplier * cluster.instance_type.cpu
         )
