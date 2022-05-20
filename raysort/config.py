@@ -39,7 +39,7 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
-    cluster_name: str = CLUSTER_NAME
+    name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
 
@@ -372,6 +372,3 @@ def get(config_name: Optional[str] = None) -> Tuple[JobConfig, str]:
     assert config_name, f"No configuration specified, please set ${CONFIG_NAME_ENV_VAR}"
     assert config_name in __config__, f"Unknown configuration: {config_name}"
     return __config__[config_name], config_name
-
-
-cfg, cfg_name = get()

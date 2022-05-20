@@ -15,9 +15,9 @@ import boto3
 import click
 import ray
 
-from raysort.config import cfg
+from raysort import config
 
-DEFAULT_CLUSTER_NAME = "raysort-lsf"
+cfg, cfg_name = config.get()
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"
@@ -92,7 +92,7 @@ def run_output(cmd: str, **kwargs) -> str:
 
 
 def get_tf_dir(cluster_name: str) -> pathlib.Path:
-    return SCRIPT_DIR / TERRAFORM_DIR / ("_" + cluster_name)
+    return SCRIPT_DIR / TERRAFORM_DIR / f"_{cluster_name}"
 
 
 def get_instances(filters: Dict[str, str]) -> List[Dict]:
@@ -531,7 +531,7 @@ def print_after_setup(cluster_name: str) -> None:
 def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
-        click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
+        click.argument("cluster_name", default=cfg.cluster.name),
         click.option(
             "--ray",
             default=False,
@@ -570,12 +570,12 @@ def cli():
 
 @setup_command_options
 def up(
-    cluster_name: str,
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
     reinstall_ray: bool,
 ):
+    cluster_name = cfg.cluster.name
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
@@ -601,13 +601,13 @@ def up(
     help="whether to skip common setup (file sync, mounts, etc)",
 )
 def setup(
-    cluster_name: str,
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
     reinstall_ray: bool,
     no_common: bool,
 ):
+    cluster_name = cfg.cluster.name
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
@@ -624,8 +624,8 @@ def setup(
 
 
 @cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def down(cluster_name: str):
+def down():
+    cluster_name = cfg.cluster.name
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     cmd = "terraform destroy -auto-approve" + get_terraform_vars(
         cluster_name=cluster_name
@@ -635,31 +635,28 @@ def down(cluster_name: str):
 
 
 @cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def start(cluster_name: str):
-    aws_action(cluster_name, "start_instances", "Started")
+def start():
+    aws_action(cfg.cluster.name, "start_instances", "Started")
 
 
 @cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def stop(cluster_name: str):
-    aws_action(cluster_name, "stop_instances", "Stopped")
+def stop():
+    aws_action(cfg.cluster.name, "stop_instances", "Stopped")
 
 
 @cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-def reboot(cluster_name: str):
-    aws_action(cluster_name, "reboot_instances", "Rebooted")
+def reboot():
+    aws_action(cfg.cluster.name, "reboot_instances", "Rebooted")
 
 
 @cli.command()
-@click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
 @click.argument("worker_id_or_ip", type=str, default="0")
-def ssh(cluster_name: str, worker_id_or_ip: str):
-    ips = get_tf_output(cluster_name, "instance_ips")
-    click.echo(f"worker_ips = {ips}")
+def ssh(worker_id_or_ip: str):
     try:
-        ip = ips[int(worker_id_or_ip)]
+        idx = int(worker_id_or_ip)
+        ips = get_tf_output(cfg.cluster.name, "instance_ips")
+        click.echo(f"worker_ips = {ips}")
+        ip = ips[idx]
     except ValueError:
         ip = worker_id_or_ip
     run(
