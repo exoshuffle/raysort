@@ -54,7 +54,7 @@ class SystemConfig:
     object_spilling_threshold: float = 0.8
     object_store_memory_percent: float = 0.45
     object_store_memory_bytes: int = field(init=False)
-    ray_storage: str = f"s3://{S3_BUCKET}"
+    ray_storage: Optional[str] = f"s3://{S3_BUCKET}" if S3_BUCKET else None
     s3_spill: int = 0
 
     def __post_init__(self, cluster: ClusterConfig):
@@ -346,7 +346,7 @@ __config__ = {
     # ------------------------------------------------------------
     #     10 nodes 1TB experiments
     # ------------------------------------------------------------
-    "ManualS3_1TB": JobConfig(
+    "10-1tb-s3-manual-s3": JobConfig(
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -358,6 +358,9 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            spilling=SpillingMode.S3,
+            io_parallelism=32,
         ),
     ),
 }

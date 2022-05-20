@@ -471,7 +471,7 @@ def restart_ray(
     run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd()
-    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage_uri))
+    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage))
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
