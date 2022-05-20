@@ -15,9 +15,9 @@ import boto3
 import click
 import ray
 
+from raysort.config import cfg
+
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
-DEFAULT_INSTANCE_COUNT = 10
-DEFAULT_INSTANCE_TYPE = "r6i.2xlarge"
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"
@@ -147,15 +147,13 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     return tf_dir
 
 
-def terraform_provision(
-    cluster_name: str, instance_count: int, instance_type: str
-) -> None:
+def terraform_provision(cluster_name: str) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
     run("terraform init", cwd=tf_dir)
     cmd = "terraform apply -auto-approve" + get_terraform_vars(
         cluster_name=cluster_name,
-        instance_count=instance_count,
-        instance_type=instance_type,
+        instance_count=cfg.cluster.instance_count,
+        instance_type=cfg.cluster.instance_type.name,
     )
     run(cmd, cwd=tf_dir)
 
@@ -235,43 +233,24 @@ def run_ansible_playbook(
     return run(cmd, retries=retries, time_between_retries=time_between_retries)
 
 
-def is_hdd(instance_type: str) -> bool:
-    return instance_type.startswith("d3.")
+def get_data_disks() -> List[str]:
+    offset = cfg.cluster.instance_type.disk_device_offset
+    return [
+        f"/dev/nvme{i + offset}n1" for i in range(cfg.cluster.instance_type.disk_count)
+    ]
 
 
-def get_nvme_device_count(instance_type: str) -> int:
-    return {
-        "i3.4xlarge": 2,
-        "i3.8xlarge": 4,
-        "i3.16xlarge": 8,
-        "d3.xlarge": 3,
-        "d3.2xlarge": 6,
-        "d3.4xlarge": 12,
-        "d3.8xlarge": 24,
-        "m5d.4xlarge": 2,
-        "m5d.8xlarge": 2,
-        "m5d.12xlarge": 2,
-        "m5d.16xlarge": 4,
-        "m5d.24xlarge": 4,
-    }.get(instance_type, 1)
+def get_mnt_paths() -> List[str]:
+    return [
+        MNT_PATH_FMT.format(i=i) for i in range(cfg.cluster.instance_type.disk_count)
+    ]
 
 
-def get_data_disks(instance_type: str, no_disk: bool) -> List[str]:
-    cnt = 0 if no_disk else get_nvme_device_count(instance_type)
-    offset = 0 if instance_type.startswith("i3.") else 1
-    return [f"/dev/nvme{i + offset}n1" for i in range(cnt)]
-
-
-def get_mnt_paths(instance_type: str, no_disk: bool) -> List[str]:
-    cnt = 0 if no_disk else get_nvme_device_count(instance_type)
-    return [MNT_PATH_FMT.format(i=i) for i in range(cnt)]
-
-
-def get_ansible_vars(instance_type: str, no_disk: bool) -> Dict:
+def get_ansible_vars() -> Dict:
     ret = {}
-    if no_disk:
+    if cfg.cluster.instance_type.disk_count == 0:
         ret["mnt_prefix"] = ""
-    ret["data_disks"] = get_data_disks(instance_type, no_disk)
+    ret["data_disks"] = get_data_disks()
     return ret
 
 
@@ -390,9 +369,7 @@ def setup_grafana() -> None:
 # ------------------------------------------------------------
 
 
-def common_setup(
-    cluster_name: str, instance_type: str, cluster_exists: bool, no_disk: bool
-) -> pathlib.Path:
+def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
     head_ip = run_output("ec2metadata --local-ipv4")
     ips = get_tf_output(cluster_name, "instance_ips")
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
@@ -401,13 +378,11 @@ def common_setup(
     else:
         update_hosts_file(ips)
         update_workers_file(ips)
-        update_hadoop_config(
-            head_ip, get_mnt_paths(instance_type, no_disk), is_hdd(instance_type)
-        )
+        update_hadoop_config(head_ip, get_mnt_paths(), cfg.cluster.instance_type.hdd)
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
     if not cluster_exists:
         sleep(60, "worker nodes starting up")
-    ev = get_ansible_vars(instance_type, no_disk)
+    ev = get_ansible_vars()
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
     setup_grafana()
@@ -418,13 +393,9 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd(
-    s3_spill: int,
-    is_hdd: bool,
-    mnt_paths: List[str],
-) -> Tuple[str, Dict]:
-    system_config = {}
-    if s3_spill > 0:
+def get_ray_start_cmd() -> Tuple[str, Dict]:
+    system_config = {"object_spilling_threshold": cfg.system.object_spilling_threshold}
+    if cfg.system.s3_spill > 0:
         # system_config.update(
         #     **{
         #         "max_io_workers": s3_spill,
@@ -444,7 +415,7 @@ def get_ray_start_cmd(
         # )
         system_config.update(
             **{
-                "max_io_workers": s3_spill,
+                "max_io_workers": cfg.system.s3_spill,
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "ray_storage",
@@ -454,7 +425,10 @@ def get_ray_start_cmd(
             }
         )
     else:
-        assert mnt_paths, "must have disks mounted or use S3 for spilling"
+        mnt_paths = get_mnt_paths()
+        if len(mnt_paths) == 0:
+            click.echo("No data disks mounted. Using /tmp.")
+            mnt_paths = ["/tmp"]
         system_config.update(
             **{
                 "max_io_workers": max(4, len(mnt_paths) * 2),
@@ -463,7 +437,9 @@ def get_ray_start_cmd(
                         "type": "filesystem",
                         "params": {
                             "directory_path": [f"{mnt}/ray" for mnt in mnt_paths],
-                            "buffer_size": 10 * MiB if is_hdd else -1,
+                            "buffer_size": 10 * MiB
+                            if cfg.cluster.instance_type.hdd
+                            else -1,
                         },
                     },
                 ),
@@ -486,22 +462,16 @@ def write_ray_system_config(config: Dict, path: str) -> None:
 
 def restart_ray(
     inventory_path: pathlib.Path,
-    instance_type: str,
     clear_data_dir: bool,
     reinstall_ray: bool,
-    s3_spill: int,
-    no_disk: bool,
 ) -> None:
-    mnt_paths = get_mnt_paths(instance_type, no_disk)
     # Clear all mounts in case the previous setup has more mounts than we have.
     run(f"sudo rm -rf {MNT_PATH_PATTERN}")
-    for mnt in mnt_paths:
+    for mnt in get_mnt_paths():
         run(f"sudo mkdir -m 777 -p {mnt}")
     run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd(
-        s3_spill, is_hdd(instance_type), mnt_paths
-    )
+    ray_cmd, ray_system_config = get_ray_start_cmd()
     run(ray_cmd, env=dict(os.environ, RAY_STORAGE=RAY_STORAGE_URI))
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
@@ -510,7 +480,8 @@ def restart_ray(
         "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
-        "mnt_paths": mnt_paths,
+        "ray_object_store_memory": cfg.system.object_store_memory_bytes,
+        "mnt_paths": get_mnt_paths(),
     }
     run_ansible_playbook(inventory_path, "ray", ev=ev)
     sleep(3, "waiting for Ray nodes to connect")
@@ -518,12 +489,8 @@ def restart_ray(
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
 
 
-def restart_yarn(
-    inventory_path: pathlib.Path,
-    instance_type: str,
-    no_disk: bool,
-) -> None:
-    mnt_paths = get_mnt_paths(instance_type, no_disk)
+def restart_yarn(inventory_path: pathlib.Path) -> None:
+    mnt_paths = get_mnt_paths()
     env = dict(
         os.environ,
         HADOOP_SSH_OPTS="-i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
@@ -566,8 +533,6 @@ def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
         click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
-        click.argument("instance_count", default=DEFAULT_INSTANCE_COUNT),
-        click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE),
         click.option(
             "--ray",
             default=False,
@@ -592,18 +557,6 @@ def setup_command_options(cli_fn):
             is_flag=True,
             help="whether to reinstall Ray nightly",
         ),
-        click.option(
-            "--s3_spill",
-            default=0,
-            type=int,
-            help="whether to ask Ray to spill to S3",
-        ),
-        click.option(
-            "--no-disk",
-            default=False,
-            is_flag=True,
-            help="whether to skip setting up local disks",
-        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -619,32 +572,25 @@ def cli():
 @setup_command_options
 def up(
     cluster_name: str,
-    instance_count: int,
-    instance_type: str,
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
     reinstall_ray: bool,
-    s3_spill: int,
-    no_disk: bool,
 ):
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
-    terraform_provision(cluster_name, instance_count, instance_type)
-    inventory_path = common_setup(cluster_name, instance_type, cluster_exists, no_disk)
+    terraform_provision(cluster_name)
+    inventory_path = common_setup(cluster_name, cluster_exists)
     if ray:
         restart_ray(
             inventory_path,
-            instance_type,
             clear_data_dir,
             reinstall_ray,
-            s3_spill,
-            no_disk,
         )
     if yarn:
-        restart_yarn(inventory_path, instance_type, no_disk)
+        restart_yarn(inventory_path)
     print_after_setup(cluster_name)
 
 
@@ -657,31 +603,24 @@ def up(
 )
 def setup(
     cluster_name: str,
-    _: int,  # unused: instance_count
-    instance_type: str,
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
     reinstall_ray: bool,
-    s3_spill: int,
-    no_disk: bool,
     no_common: bool,
 ):
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
-        inventory_path = common_setup(cluster_name, instance_type, True, no_disk)
+        inventory_path = common_setup(cluster_name, True)
     if ray:
         restart_ray(
             inventory_path,
-            instance_type,
             clear_data_dir,
             reinstall_ray,
-            s3_spill,
-            no_disk,
         )
     if yarn:
-        restart_yarn(inventory_path, instance_type, no_disk)
+        restart_yarn(inventory_path)
     print_after_setup(cluster_name)
 
 
