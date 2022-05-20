@@ -207,20 +207,28 @@ r6i_2xl = InstanceType(
     memory_gib=61.8,
 )
 
-local_mini_app_config = dict(
+local_base_app_config = dict(
     **get_steps(),
-    total_gb=0.1,
-    input_part_gb=0.001,
     map_parallelism_multiplier=1,
     reduce_parallelism_multiplier=1,
 )
 
+local_micro_app_config = dict(
+    **local_base_app_config,
+    total_gb=0.16,
+    input_part_gb=0.01,
+)
+
+local_mini_app_config = dict(
+    **local_base_app_config,
+    total_gb=0.16,
+    input_part_gb=0.001,
+)
+
 local_app_config = dict(
-    **get_steps(),
+    **local_base_app_config,
     total_gb=1.024,
     input_part_gb=0.004,
-    map_parallelism_multiplier=1,
-    reduce_parallelism_multiplier=1,
 )
 
 
@@ -284,14 +292,18 @@ __config__ = {
         ),
     ),
     # ------------------------------------------------------------
+    #     Local fault tolerance experiments
+    # ------------------------------------------------------------
+    # ------------------------------------------------------------
     #     Local S3 spilling experiments
     # ------------------------------------------------------------
     "LocalS3Spilling": JobConfig(
         cluster=local_cluster,
-        system=dict(),
+        system=dict(
+            s3_spill=4,
+        ),
         app=dict(
             **local_mini_app_config,
-            s3_spill=4,
         ),
     ),
     "LocalS3IO": JobConfig(
@@ -304,19 +316,19 @@ __config__ = {
     ),
     "LocalS3IOAndSpilling": JobConfig(
         cluster=local_cluster,
-        system=dict(),
+        system=dict(
+            s3_spill=4,
+        ),
         app=dict(
             **local_mini_app_config,
             s3_bucket=S3_BUCKET,
-            s3_spill=4,
         ),
     ),
     "LocalS3IOManualSpillingS3": JobConfig(
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_mini_app_config,
-            input_part_gb=0.01,
+            **local_micro_app_config,
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
         ),
@@ -325,8 +337,7 @@ __config__ = {
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_mini_app_config,
-            input_part_gb=0.01,
+            **local_micro_app_config,
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
             io_parallelism=4,
