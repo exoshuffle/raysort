@@ -211,16 +211,10 @@ local_base_app_config = dict(
     reduce_parallelism_multiplier=1,
 )
 
-local_micro_app_config = dict(
-    **local_base_app_config,
-    total_gb=0.16,
-    input_part_gb=0.01,
-)
-
 local_mini_app_config = dict(
     **local_base_app_config,
     total_gb=0.16,
-    input_part_gb=0.001,
+    input_part_gb=0.01,
 )
 
 local_app_config = dict(
@@ -376,7 +370,7 @@ __config__ = {
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_micro_app_config,
+            **local_mini_app_config,
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
         ),
@@ -385,7 +379,7 @@ __config__ = {
         cluster=local_cluster,
         system=dict(),
         app=dict(
-            **local_micro_app_config,
+            **local_mini_app_config,
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
             io_parallelism=4,
@@ -394,6 +388,7 @@ __config__ = {
     # ------------------------------------------------------------
     #     d3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
+    # TODO(@lsf)
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
