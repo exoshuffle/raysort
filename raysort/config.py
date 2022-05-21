@@ -193,7 +193,7 @@ local_cluster = dict(
     instance_type=InstanceType(
         name="local",
         cpu=2,
-        memory_gib=0,
+        memory_gib=0,  # not used
     ),
     local=True,
 )
@@ -392,7 +392,7 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
-    "10-1tb-s3-native-s3": JobConfig(
+    "1tb-s3-native-s3": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
@@ -409,7 +409,7 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
-    "10-1tb-s3-manual-s3": JobConfig(
+    "1tb-s3-manual-s3": JobConfig(
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
