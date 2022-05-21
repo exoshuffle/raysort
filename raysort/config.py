@@ -392,7 +392,7 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
-    "1tb-s3-native-s3": JobConfig(
+    "1tb-2gb-s3-native-s3": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
@@ -409,7 +409,24 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
-    "1tb-s3-manual-s3": JobConfig(
+    "1tb-1gb-s3-native-s3": JobConfig(
+        # 575s, https://wandb.ai/raysort/raysort/runs/3vk1b0aa
+        cluster=dict(
+            instance_count=10,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=1,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+        ),
+    ),
+    "1tb-2gb-s3-manual-s3": JobConfig(
         # 650s, https://wandb.ai/raysort/raysort/runs/2d7d9ysa
         cluster=dict(
             instance_count=10,
