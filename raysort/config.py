@@ -410,6 +410,7 @@ __config__ = {
         ),
     ),
     "1tb-s3-manual-s3": JobConfig(
+        # 650s, https://wandb.ai/raysort/raysort/runs/2d7d9ysa
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
