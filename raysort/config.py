@@ -444,6 +444,26 @@ __config__ = {
             io_parallelism=32,
         ),
     ),
+    # ------------------------------------------------------------
+    #     S3 20 nodes 2TB
+    # ------------------------------------------------------------
+    "2tb-2gb-s3-native-s3": JobConfig(
+        # NOTE: this currently hangs on ray master
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+        ),
+    ),
 }
 
 
