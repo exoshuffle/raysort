@@ -445,10 +445,10 @@ __config__ = {
         ),
     ),
     # ------------------------------------------------------------
-    #     S3 20 nodes 2TB
+    #     S3 20 nodes
     # ------------------------------------------------------------
     "2tb-2gb-s3-native-s3": JobConfig(
-        # NOTE: this currently hangs on ray master
+        # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -462,6 +462,27 @@ __config__ = {
             input_part_gb=2,
             s3_bucket=S3_BUCKET,
             io_parallelism=16,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 40 nodes
+    # ------------------------------------------------------------
+    "4tb-2gb-s3-manual-s3": JobConfig(
+        # 707s, https://wandb.ai/raysort/raysort/runs/2zekqq6m
+        cluster=dict(
+            instance_count=40,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            object_spilling_threshold=1,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            spilling=SpillingMode.S3,
+            io_parallelism=32,
         ),
     ),
 }
