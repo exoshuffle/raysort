@@ -150,6 +150,7 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
 
 
 @ray.remote
+@tracing_utils.timeit("generate_part")
 def generate_part(
     cfg: AppConfig,
     part_id: PartId,
