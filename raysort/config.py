@@ -27,7 +27,7 @@ class InstanceType:
     memory_bytes: int = field(init=False)
     instance_disk_count: int = 0
     disk_count: int = field(init=False)
-    disk_device_offset: int = 0
+    disk_device_offset: int = 1
     hdd: bool = False
 
     def __post_init__(self):
@@ -198,11 +198,18 @@ local_cluster = dict(
     local=True,
 )
 
-
 r6i_2xl = InstanceType(
     name="r6i.2xlarge",
     cpu=8,
     memory_gib=61.8,
+)
+
+d3_2xl = InstanceType(
+    name="d3.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    instance_disk_count=6,
+    hdd=True,
 )
 
 local_base_app_config = dict(
@@ -388,7 +395,19 @@ __config__ = {
     # ------------------------------------------------------------
     #     d3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
-    # TODO(@lsf)
+    "1tb-2gb-d3-cosco": JobConfig(
+        # running
+        cluster=dict(
+            instance_count=10,
+            instance_type=d3_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+        ),
+    ),
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
@@ -464,6 +483,24 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
+    "2tb-2gb-s3-manual-s3": JobConfig(
+        # TODO
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            object_spilling_threshold=1,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            spilling=SpillingMode.S3,
+            io_parallelism=32,
+        ),
+    ),
     # ------------------------------------------------------------
     #     S3 40 nodes
     # ------------------------------------------------------------
@@ -479,6 +516,24 @@ __config__ = {
         app=dict(
             **get_steps(),
             total_gb=4000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            spilling=SpillingMode.S3,
+            io_parallelism=32,
+        ),
+    ),
+    "20tb-2gb-s3-manual-s3": JobConfig(
+        # running
+        cluster=dict(
+            instance_count=40,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            object_spilling_threshold=1,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=20000,
             input_part_gb=2,
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
