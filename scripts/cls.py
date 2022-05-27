@@ -24,9 +24,9 @@ MNT_PATH_FMT = "/mnt/data{i}"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
-ANSIBLE_DIR = "config/ansible"
-HADOOP_TEMPLATE_DIR = "config/hadoop"
-TERRAFORM_DIR = "config/terraform"
+ANSIBLE_DIR = SCRIPT_DIR / "config" / "ansible"
+HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
+TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
@@ -92,7 +92,7 @@ def run_output(cmd: str, **kwargs) -> str:
 
 
 def get_tf_dir(cluster_name: str) -> pathlib.Path:
-    return SCRIPT_DIR / TERRAFORM_DIR / f"_{cluster_name}"
+    return TERRAFORM_DIR / f"_{cluster_name}"
 
 
 def get_instances(filters: Dict[str, str]) -> List[Dict]:
@@ -137,7 +137,7 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     elif must_exist:
         raise FileNotFoundError(f"Cluster configuration does not exist {tf_dir}")
 
-    template_dir = SCRIPT_DIR / TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
+    template_dir = TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
     assert not os.path.exists(tf_dir), f"{tf_dir} must not exist"
     assert os.path.exists(template_dir), f"{template_dir} must exist"
     shutil.copytree(template_dir, tf_dir)
@@ -187,16 +187,10 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
         return host, {"ansible_host": ip}
 
     hosts = [get_item(ip) for ip in node_ips]
-    ansible_vars = {
-        "ansible_user": "ubuntu",
-        "ansible_ssh_private_key_file": "/home/ubuntu/.aws/login-us-west-2.pem",
-        "ansible_host_key_checking": False,
-    }
     ret = {
         "all": {
             "hosts": {k: v for k, v in hosts},
-            "vars": ansible_vars,
-        }
+        },
     }
     return yaml.dump(ret)
 
@@ -204,7 +198,7 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
 def get_or_create_ansible_inventory(
     cluster_name: str, ips: List[str] = []
 ) -> pathlib.Path:
-    path = SCRIPT_DIR / ANSIBLE_DIR / f"_{cluster_name}.yml"
+    path = ANSIBLE_DIR / f"_{cluster_name}.yml"
     if len(ips) == 0:
         if os.path.exists(path):
             return path
@@ -225,11 +219,16 @@ def run_ansible_playbook(
 ) -> subprocess.CompletedProcess:
     if not playbook.endswith(".yml"):
         playbook += ".yml"
-    playbook_path = SCRIPT_DIR / ANSIBLE_DIR / playbook
+    playbook_path = ANSIBLE_DIR / playbook
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
     if len(ev) > 0:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
-    return run(cmd, retries=retries, time_between_retries=time_between_retries)
+    return run(
+        cmd,
+        cwd=ANSIBLE_DIR,
+        retries=retries,
+        time_between_retries=time_between_retries,
+    )
 
 
 def get_data_disks() -> List[str]:
@@ -287,7 +286,7 @@ def update_workers_file(ips: List[str]) -> None:
 def update_hadoop_xml(
     filename: str, head_ip: str, mnt_paths: List[str], is_hdd: bool
 ) -> None:
-    with open(SCRIPT_DIR / HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
+    with open(HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
         template = string.Template(fin.read())
     content = template.substitute(
         DEFAULT_FS=f"hdfs://{head_ip}:9000",
