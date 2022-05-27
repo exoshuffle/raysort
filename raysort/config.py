@@ -396,7 +396,7 @@ __config__ = {
     #     d3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
     "1tb-2gb-d3-cosco": JobConfig(
-        # running
+        # currently slow due to https://github.com/ray-project/ray/issues/24667
         cluster=dict(
             instance_count=10,
             instance_type=d3_2xl,
