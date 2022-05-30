@@ -28,10 +28,10 @@ It should complete without errors with an `All OK!` message. The detailed config
 ## Starting up a Cluster
 
 1. Install Terraform: `scripts/installers/install_terraform.sh`
-2. Run `export CONFIG=1tb-s3-native-s3 && python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
+2. Run `export CONFIG=1tb-1gb-s3-native-s3 && python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
 3. Run a test run on the cluster: `python raysort/main.py 2>&1 | tee main.log`
 
-The `1tb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB sort using S3 for I/O and for shuffle spilling.
+The `1tb-1gb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB sort with 1GB partitions using S3 for I/O and for shuffle spilling.
 
 ## Cluster Management
 
