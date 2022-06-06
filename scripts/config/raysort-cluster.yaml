@@ -23,7 +23,7 @@ available_node_types:
     ray.worker.default:
         min_workers: 10
         node_config:
-            InstanceType: d3.2xlarge
+            InstanceType: r6i.2xlarge
             # IAM profile providing full access to EC2 and S3, required for S3 I/O
             IamInstanceProfile:
               Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
