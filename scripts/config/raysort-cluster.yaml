@@ -47,6 +47,7 @@ setup_commands:
     S3_BUCKET=raysort-isaac
     CLUSTER_NAME=raysort-isaac
     CONFIG=1tb-1gb-s3-native-s3
+  # WANDB_API_KEY=YOUR_WANDB_API_KEY
     ' >> ~/.bashrc
   # Sync workdir
   - rsync -a ~/workdir/ ~/raysort
@@ -63,7 +64,7 @@ setup_commands:
   - rsync -a ~/ray-patch/ ~/miniconda3/envs/raysort/lib/python3.9/site-packages/ray/
   # Mount tmpfs
   - sudo mkdir -p /mnt/tmpfs && sudo mount -t tmpfs tmpfs /mnt/tmpfs && sudo chmod 777 /mnt/tmpfs
-  # TODO(@iojw): Setup Prometheus and Grafana and wandb
+  # TODO(@iojw): Setup Prometheus and Grafana
 
 head_start_ray_commands:
   - ray stop
