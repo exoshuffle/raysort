@@ -106,7 +106,7 @@ def merge_partitions(
         if part_id != -1:
             block_indexes[part_id] += 1
             block = get_block(part_id, block_indexes[part_id])
-            if block is None:
+            if block is None or block.size == 0:
                 continue
             blocks[part_id] = block
             merger.Refill(_to_const_record_array(block), part_id)

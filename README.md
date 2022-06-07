@@ -2,10 +2,9 @@
 
 ## Development Setup
 
-If you created your VM using the `raysort-general` image, you should already have a Conda environment ready. Otherwise, install [Miniconda3](https://docs.conda.io/en/latest/miniconda.html) and run the following:
+If you created your VM using the `raysort` AMI, you should already have a Conda environment ready. Otherwise, install [Miniconda3](https://docs.conda.io/en/latest/miniconda.html) and run `conda create -n raysort python=3.9.7`. Then run:
 
 ```
-conda create -n raysort python=3.9.7
 conda activate raysort
 pip install -Ur requirements/dev.txt
 pip install -Ur requirements/worker.txt
@@ -14,47 +13,34 @@ pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 scripts/installers/install_binaries.sh
 ```
 
-Set up [direnv](https://direnv.net/), otherwise manually `source .envrc`.
+Edit `.envrc` and change `CLUSTER_NAME` and `S3_BUCKET` to your own. Set up [direnv](https://direnv.net/) so that the `.envrc` files are sourced automatically when you `cd` into a directory. Otherwise, manually `source .envrc`.
 
 ## Running Locally
 
-A full end-to-end test run:
+A good first step to sanity check your setup is to run raysort on a single node with:
 
-```bash
-python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --local 2>&1 | tee local.log
+```
+CONFIG=LocalNative python raysort/main.py
 ```
 
-A quicker run, skipping input:
-
-```bash
-python raysort/main.py --total_gb=10 --input_part_size=100_000_000 --skip_input --sort --local 2>&1 | tee local.log
-```
-
-Notes:
-
-- Run `python raysort/main.py --help` to see description of arguments.
-- Specifying `--local` will make Raysort launch an locally emulated Ray cluster to start the run. If not, it will try to connect to an existing one using `ray.init("auto")`.
-- By default, Raysort calls `gensort` to generate input data and `valsort` to validate output data on disk. If you want to skip both or either steps, set `--skip_input` or `--skip_output`. If input is skipped, Raysort will generate input data on the fly using `np.random`.
+It should complete without errors with an `All OK!` message. The detailed configuration is in [config.py](https://github.com/franklsf95/raysort/blob/master/raysort/config.py).
 
 ## Starting up a Cluster
 
 1. Install Terraform: `scripts/installers/install_terraform.sh`
-2. Run `python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
-3. Run a test run on the cluster: `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
+2. Run `export CONFIG=1tb-1gb-s3-native-s3 && python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
+3. Run a test run on the cluster: `python raysort/main.py 2>&1 | tee main.log`
+
+The `1tb-1gb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB sort with 1GB partitions using S3 for I/O and for shuffle spilling.
 
 ## Cluster Management
 
-`scripts/cls.py` is the centralized place for cluster management code. Before you use it, change `DEFAULT_CLUSTER_NAME` in the script to your liking. All commands need a cluster name argument; the default name will be used if you do not pass one.
+`scripts/cls.py` is the centralized place for cluster management code.
 
 - `python scripts/cls.py up` launches a cluster via Terraform and configures it via Ansible. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
 - `python scripts/cls.py setup` skips Terraform and only runs Ansible for software setup. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
 - `python scripts/cls.py down` terminates the cluster via Terraform. Tip: when you're done for the day, run `python scripts/cls.py down && sudo shutdown -h now` to terminate the cluster and stop your head node.
 - `python scripts/cls.py start/stop/reboot` calls the AWS CLI tool to start/stop/reboot all your machines in the cluster. Useful when you want to stop the cluster but not terminate the machines.
-
-### Spilling to S3
-To configure Ray to spill to S3 buckets and run, use the following:
-- `python scripts/cls.py up --ray --s3_spill=3`
-- `python raysort/main.py --total_gb=256 2>&1 | tee main.log`
 
 ## Misc
 

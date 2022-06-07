@@ -14,7 +14,8 @@ from raysort import logging_utils
 from raysort import ray_utils
 from raysort import s3_utils
 from raysort import tracing_utils
-from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
+from raysort.config import AppConfig
+from raysort.typing import PartId, PartInfo, Path, RecordCount, SpillingMode
 
 
 # ------------------------------------------------------------
@@ -22,35 +23,35 @@ from raysort.typing import Args, PartId, PartInfo, Path, RecordCount
 # ------------------------------------------------------------
 
 
-def get_manifest_file(args: Args, kind: str = "input") -> Path:
-    suffix = "s3" if args.s3_bucket else "fs"
+def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
+    suffix = "s3" if cfg.s3_bucket else "fs"
     return constants.MANIFEST_FMT.format(kind=kind, suffix=suffix)
 
 
-def load_manifest(args: Args, kind: str = "input") -> List[PartInfo]:
-    if args.skip_input and kind == "input":
+def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
+    if cfg.skip_input and kind == "input":
         return [
-            PartInfo(args.worker_ips[i % args.num_workers], None)
-            for i in range(args.num_mappers)
+            PartInfo(cfg.worker_ips[i % cfg.num_workers], None)
+            for i in range(cfg.num_mappers)
         ]
-    path = get_manifest_file(args, kind=kind)
+    path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
         ret = [PartInfo(node, path) for node, path in reader]
         return ret
 
 
-def load_partition(args: Args, path: Path) -> np.ndarray:
-    if args.skip_input:
-        return create_partition(args.input_part_size)
-    if args.s3_bucket:
-        return s3_utils.download_s3(args.s3_bucket, path)
-    with open(path, "rb", buffering=args.io_size) as fin:
+def load_partition(cfg: AppConfig, path: Path) -> np.ndarray:
+    if cfg.skip_input:
+        return create_partition(cfg.input_part_size)
+    if cfg.s3_bucket:
+        return s3_utils.download_s3(cfg.s3_bucket, path)
+    with open(path, "rb", buffering=cfg.io_size) as fin:
         return np.fromfile(fin, dtype=np.uint8)
 
 
-def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None:
-    if args.skip_output:
+def save_partition(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> None:
+    if cfg.skip_output:
         first_chunk = True
         for datachunk in merger:
             if first_chunk:
@@ -63,10 +64,10 @@ def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None
                     log_to_wandb=True,
                 )
             del datachunk
-    elif args.s3_bucket:
-        s3_utils.multipart_upload(args, path, merger)
+    elif cfg.s3_bucket:
+        s3_utils.multipart_upload(cfg, path, merger)
     else:
-        with open(path, "wb", buffering=args.io_size) as fout:
+        with open(path, "wb", buffering=cfg.io_size) as fout:
             for datachunk in merger:
                 fout.write(datachunk)
 
@@ -77,26 +78,26 @@ def save_partition(args: Args, path: Path, merger: Iterable[np.ndarray]) -> None
 
 
 @ray.remote
-def make_data_dirs(args: Args):
+def make_data_dirs(cfg: AppConfig):
     os.makedirs(constants.TMPFS_PATH, exist_ok=True)
-    if args.s3_bucket:
+    if cfg.s3_bucket and cfg.spilling == SpillingMode.S3:
         return
-    for prefix in args.data_dirs:
+    for prefix in cfg.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
 def run_on_all_workers(
-    args: Args, fn: ray.remote_function.RemoteFunction, include_head: bool = False
+    cfg: AppConfig, fn: ray.remote_function.RemoteFunction, include_head: bool = False
 ) -> List[ray.ObjectRef]:
-    opts = [ray_utils.node_res(node) for node in args.worker_ips]
+    opts = [ray_utils.node_res(node) for node in cfg.worker_ips]
     if include_head:
         opts.append({"resources": {"head": 1}})
-    return [fn.options(**opt).remote(args) for opt in opts]
+    return [fn.options(**opt).remote(cfg) for opt in opts]
 
 
-def init(args: Args):
-    ray.get(run_on_all_workers(args, make_data_dirs, include_head=True))
+def init(cfg: AppConfig):
+    ray.get(run_on_all_workers(cfg, make_data_dirs, include_head=True))
     logging.info("Created data directories on all nodes")
 
 
@@ -106,18 +107,18 @@ def init(args: Args):
 
 
 def part_info(
-    args: Args,
+    cfg: AppConfig,
     part_id: PartId,
     *,
     kind: str = "input",
     s3: bool = False,
 ) -> PartInfo:
     if s3:
-        shard = part_id & constants.S3_SHARD_MASK
+        shard = hash(str(part_id)) & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         return PartInfo(None, path)
-    data_dir_idx = part_id % len(args.data_dirs)
-    prefix = args.data_dirs[data_dir_idx]
+    data_dir_idx = part_id % len(cfg.data_dirs)
+    prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
     return PartInfo(node, filepath)
@@ -132,8 +133,11 @@ def _get_part_path(
 ) -> Path:
     filename_fmt = constants.FILENAME_FMT[kind]
     filename = filename_fmt.format(part_id=part_id)
-    shard_str = constants.SHARD_FMT.format(shard=shard) if shard is not None else ""
-    return os.path.join(prefix, kind, shard_str, filename)
+    parts = [prefix, kind]
+    if shard is not None:
+        parts.append(constants.SHARD_FMT.format(shard=shard))
+    parts.append(filename)
+    return os.path.join(*parts)
 
 
 def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
@@ -146,54 +150,56 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
 
 
 @ray.remote
+@tracing_utils.timeit("generate_part")
 def generate_part(
-    args: Args,
+    cfg: AppConfig,
     part_id: PartId,
     size: RecordCount,
     offset: RecordCount,
 ) -> PartInfo:
     logging_utils.init()
-    if args.s3_bucket:
-        pinfo = part_info(args, part_id, s3=True)
+    if cfg.s3_bucket:
+        pinfo = part_info(cfg, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
-        pinfo = part_info(args, part_id)
+        pinfo = part_info(cfg, part_id)
         path = pinfo.path
-    _run_gensort(offset, size, path, args.s3_bucket)
-    if args.s3_bucket:
-        s3_utils.upload_s3(args.s3_bucket, path, pinfo.path)
+    _run_gensort(offset, size, path, cfg.s3_bucket)
+    if cfg.s3_bucket:
+        s3_utils.upload_s3(cfg.s3_bucket, path, pinfo.path)
     logging.info(f"Generated input {pinfo}")
     return pinfo
 
 
 @ray.remote
-def drop_fs_cache(_):
+def drop_fs_cache(_: AppConfig):
     subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
     logging.info("Dropped filesystem cache")
 
 
-def generate_input(args: Args):
-    if args.skip_input:
+def generate_input(cfg: AppConfig):
+    if cfg.skip_input:
         return
-    total_size = constants.bytes_to_records(args.total_data_size)
-    size = constants.bytes_to_records(args.input_part_size)
+    total_size = constants.bytes_to_records(cfg.total_data_size)
+    size = constants.bytes_to_records(cfg.input_part_size)
     offset = 0
     tasks = []
-    for m in range(args.num_mappers_per_worker):
-        for w in range(args.num_workers):
+    for m in range(cfg.num_mappers_per_worker):
+        for w in range(cfg.num_workers):
             part_id = constants.merge_part_ids(w, m)
             tasks.append(
-                generate_part.options(**ray_utils.node_i(args, w)).remote(
-                    args, part_id, min(size, total_size - offset), offset
+                generate_part.options(**ray_utils.node_i(cfg, w)).remote(
+                    cfg, part_id, min(size, total_size - offset), offset
                 )
             )
             offset += size
     logging.info(f"Generating {len(tasks)} partitions")
     parts = ray.get(tasks)
-    with open(get_manifest_file(args), "w") as fout:
+    with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
         writer.writerows(parts)
-    ray.get(run_on_all_workers(args, drop_fs_cache))
+    if not cfg.s3_bucket:
+        ray.get(run_on_all_workers(cfg, drop_fs_cache))
 
 
 def create_partition(part_size: int) -> np.ndarray:
@@ -230,11 +236,11 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 
 
 @ray.remote
-def validate_part(args: Args, pinfo: PartInfo) -> Tuple[int, bytes]:
+def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
-    if args.s3_bucket:
+    if cfg.s3_bucket:
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3_utils.download_s3(args.s3_bucket, pinfo.path, tmp_path)
+        s3_utils.download_s3(cfg.s3_bucket, pinfo.path, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
@@ -243,23 +249,23 @@ def validate_part(args: Args, pinfo: PartInfo) -> Tuple[int, bytes]:
     return ret
 
 
-def validate_output(args: Args):
-    if args.skip_sorting or args.skip_output:
+def validate_output(cfg: AppConfig):
+    if cfg.skip_sorting or cfg.skip_output:
         return
-    parts = load_manifest(args, kind="output")
-    assert len(parts) == args.num_reducers, (len(parts), args)
+    parts = load_manifest(cfg, kind="output")
+    assert len(parts) == cfg.num_reducers, (len(parts), cfg)
     results = []
     for pinfo in parts:
         opt = (
             ray_utils.node_res(pinfo.node)
             if pinfo.node
-            else {"resources": {"worker": 1e-3}}
+            else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
-        results.append(validate_part.options(**opt).remote(args, pinfo))
+        results.append(validate_part.options(**opt).remote(cfg, pinfo))
     logging.info(f"Validating {len(results)} partitions")
     results = ray.get(results)
     total = sum(sz for sz, _ in results)
-    assert total == args.total_data_size, total - args.total_data_size
+    assert total == cfg.total_data_size, total - cfg.total_data_size
     all_checksum = b"".join(chksm for _, chksm in results)
     with tempfile.NamedTemporaryFile() as fout:
         fout.write(all_checksum)

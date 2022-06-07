@@ -4,13 +4,43 @@ import os
 import socket
 import subprocess
 import tempfile
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 import ray
 from ray import cluster_utils
-from raysort.typing import Args
+from ray.remote_function import RemoteFunction
+
+from raysort import constants
+from raysort.config import AppConfig, JobConfig
 
 local_cluster = None
+
+KiB = 1024
+MiB = KiB * 1024
+GiB = MiB * 1024
+
+
+def schedule_tasks(
+    fn: Callable, task_args: List[Tuple], parallelism: int = 0
+) -> List[ray.ObjectRef]:
+    """
+    Schedule tasks with a maximum parallelism on the current node.
+    """
+    task = remote(fn)
+    ret = []
+    for i, a in enumerate(task_args):
+        if parallelism > 0 and i >= parallelism:
+            wait(ret, num_returns=i - parallelism + 1)
+        ret.append(task.remote(*a))
+    return ret
+
+
+def remote(fn: Callable) -> RemoteFunction:
+    """
+    Return a remote function that runs on the current node with num_cpus=0.
+    """
+    opt = dict(num_cpus=0, **current_node_res())
+    return ray.remote(**opt)(fn)
 
 
 def current_node_res(parallelism: int = 1000) -> Dict:
@@ -22,12 +52,12 @@ def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
     return {"resources": {f"node:{node_ip}": 1 / parallelism}}
 
 
-def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict:
-    return node_res(args.worker_ips[node_i % args.num_workers], parallelism)
+def node_i(cfg: AppConfig, node_i: int, parallelism: int = 1000) -> Dict:
+    return node_res(cfg.worker_ips[node_i % cfg.num_workers], parallelism)
 
 
-def _fail_and_restart_local_node(args: Args):
-    idx = int(args.fail_node)
+def _fail_and_restart_local_node(cfg: AppConfig):
+    idx = int(cfg.fail_node)
     worker_node = list(local_cluster.worker_nodes)[idx]
     resource_spec = worker_node.get_resource_spec()
     print("Killing worker node", worker_node, resource_spec)
@@ -91,13 +121,13 @@ def _fail_and_restart_remote_node(worker_ip: str):
     ).communicate()
 
 
-def fail_and_restart_node(args: Args):
-    if not args.fail_node:
+def fail_and_restart_node(cfg: AppConfig):
+    if not cfg.fail_node:
         return
     if local_cluster is not None:
-        _fail_and_restart_local_node(args.fail_node)
+        _fail_and_restart_local_node(cfg.fail_node)
     else:
-        _fail_and_restart_remote_node(args.fail_node)
+        _fail_and_restart_remote_node(cfg.fail_node)
 
 
 def wait(
@@ -132,31 +162,56 @@ def wait(
 
 
 def _build_cluster(
-    system_config: Dict,
-    num_nodes: int,
-    num_cpus_per_node: int = 1,
-    object_store_memory: int = 1 * 1024 * 1024 * 1024,
+    num_nodes: int, ray_args: Dict, system_config: Dict
 ) -> cluster_utils.Cluster:
     cluster = cluster_utils.Cluster()
     cluster.add_node(
         resources={"head": 1},
-        object_store_memory=object_store_memory,
         _system_config=system_config,
+        **ray_args,
     )
     cluster.connect()
     for i in range(num_nodes):
         cluster.add_node(
             resources={
-                "worker": 1,
+                constants.WORKER_RESOURCE: 1,
                 f"node:10.0.0.{i + 1}": 1,
             },
-            object_store_memory=object_store_memory,
-            num_cpus=num_cpus_per_node,
+            **ray_args,
         )
     cluster.wait_for_nodes()
     return cluster
 
 
+def _json_dump_no_space(data) -> str:
+    return json.dumps(data, separators=(",", ":"))
+
+
+def _init_local_cluster(job_cfg: JobConfig):
+    system_config = {}
+    if job_cfg.system.s3_spill > 0:
+        system_config.update(
+            **{
+                "max_io_workers": job_cfg.system.s3_spill,
+                "object_spilling_config": _json_dump_no_space(
+                    {
+                        "type": "ray_storage",
+                        "params": {"buffer_size": 16 * MiB},
+                    }
+                ),
+            }
+        )
+    ray_args = dict(
+        num_cpus=1,
+        object_store_memory=1 * GiB,
+        storage=job_cfg.system.ray_storage,
+    )
+    num_nodes = os.cpu_count() // 2
+    cluster = _build_cluster(num_nodes, ray_args, system_config)
+    return cluster
+
+
+# TODO@(lsf): maybe move this to config.py
 def _get_data_dirs():
     mnt = "/mnt"
     if os.path.exists(mnt):
@@ -172,54 +227,28 @@ def _get_data_dirs():
     return [tempfile.gettempdir()]
 
 
-def _get_resources_args(args: Args):
+def _init_runtime_context(cfg: AppConfig):
     resources = ray.cluster_resources()
     logging.info(f"Cluster resources: {resources}")
     assert (
-        "worker" in resources
+        constants.WORKER_RESOURCE in resources
     ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"
-    args.num_workers = int(resources["worker"])
+    cfg.num_workers = int(resources[constants.WORKER_RESOURCE])
     head_node_str = "node:" + ray.util.get_node_ip_address()
-    args.worker_ips = [
+    cfg.worker_ips = [
         r.split(":")[1]
         for r in resources
         if r.startswith("node:") and r != head_node_str
     ]
-    args.num_nodes = args.num_workers + 1
-    assert args.num_workers == len(args.worker_ips), args
-    args.data_dirs = _get_data_dirs()
-    args.node_workmem = resources["memory"] / args.num_nodes
-    args.node_objmem = resources["object_store_memory"] / args.num_nodes
+    assert cfg.num_workers == len(cfg.worker_ips), cfg
+    cfg.data_dirs = _get_data_dirs()
 
 
-def _init_local_cluster(args: Args):
-    system_config = {}
-    if args.ray_spill_path:
-        if "://" in args.ray_spill_path:
-            system_config.update(
-                object_spilling_config=json.dumps(
-                    {"type": "smart_open", "params": {"uri": args.ray_spill_path}},
-                )
-            )
-        else:
-            system_config.update(
-                object_spilling_config=json.dumps(
-                    {
-                        "type": "filesystem",
-                        "params": {"directory_path": args.ray_spill_path},
-                    },
-                )
-            )
-    num_nodes = os.cpu_count() // 2
-    cluster = _build_cluster(system_config, num_nodes)
-    return cluster
-
-
-def init(args: Args):
+def init(job_cfg: JobConfig):
     cluster = None
-    if args.local:
-        cluster = _init_local_cluster(args)
+    if job_cfg.cluster.local:
+        cluster = _init_local_cluster(job_cfg)
     else:
         ray.init(address="auto")
-    _get_resources_args(args)
+    _init_runtime_context(job_cfg.app)
     return cluster

@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       WANDB_MODE: offline
+      STEPS: sort
     steps:
       - name: Mount tmpfs
         run: |
@@ -36,19 +37,26 @@ jobs:
           pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 
       - name: 1GB simple shuffle
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --simple_shuffle --skip_input --sort --fail_node=0 --local
-
-      - name: 1GB two stage shuffle with manual spilling
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --spilling=disk --skip_input --sort --fail_node=0 --local
+        env:
+          CONFIG: LocalSimpleFT
+        run: python raysort/main.py
 
       - name: 1GB Ray native shuffle
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --skip_input --sort --fail_node=0 --local
+        env:
+          CONFIG: LocalNativeFT
+        run: python raysort/main.py
 
       - name: 1GB Ray native shuffle with ray.put()
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --use_put --skip_input --fail_node=0 --sort --local
+        env:
+          CONFIG: LocalNativePutFT
+        run: python raysort/main.py
 
       - name: 1GB Ray native shuffle, Magnet version
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --magnet --skip_input --fail_node=0 --sort --local
+        env:
+          CONFIG: LocalMagnetFT
+        run: python raysort/main.py
 
       - name: 1GB Ray native shuffle, Riffle version
-        run: python raysort/main.py --total_gb=1.024 --input_part_size=4_000_000 --riffle --merge_factor=8 --skip_input --fail_node=0 --sort --local
+        env:
+          CONFIG: LocalRiffleFT
+        run: python raysort/main.py

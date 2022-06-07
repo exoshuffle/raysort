@@ -1,8 +1,6 @@
-import argparse
 import enum
 from typing import NamedTuple, Tuple
 
-Args = argparse.Namespace
 ByteCount = int
 PartId = int
 Path = str
@@ -11,10 +9,10 @@ RecordCount = int
 BlockInfo = Tuple[int, int]
 
 
-class SpillingMode(enum.Enum):
-    RAY = "ray"
-    DISK = "disk"
-    S3 = "s3"
+class AppStep(enum.Enum):
+    GENERATE_INPUT = "generate_input"
+    SORT = "sort"
+    VALIDATE_OUTPUT = "validate_output"
 
 
 class PartInfo(NamedTuple):
@@ -22,4 +20,10 @@ class PartInfo(NamedTuple):
     path: Path
 
     def __repr__(self):
-        return f"Part({self.node}:{self.path})"
+        return f"{self.node}:{self.path}"
+
+
+class SpillingMode(enum.Enum):
+    RAY = "ray"
+    DISK = "disk"
+    S3 = "s3"

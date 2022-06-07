@@ -1,4 +1,5 @@
 import collections
+import dataclasses
 import functools
 import json
 import logging
@@ -16,7 +17,7 @@ import wandb
 
 from raysort import constants
 from raysort import logging_utils
-from raysort.typing import Args
+from raysort.config import JobConfig
 
 Span = collections.namedtuple(
     "Span",
@@ -123,10 +124,18 @@ class _DefaultDictWithKey(collections.defaultdict):
         return super().__missing__(key)
 
 
+def symlink(src: str, dst: str, **kwargs):
+    try:
+        os.symlink(src, dst, **kwargs)
+    except FileExistsError:
+        os.remove(dst)
+        os.symlink(src, dst, **kwargs)
+
+
 @ray.remote(resources={"head": 1e-3})
 class ProgressTracker:
-    def __init__(self, args: Args, project: str = "raysort"):
-        self.run_args = args
+    def __init__(self, job_cfg: JobConfig, project: str = "raysort"):
+        self.job_cfg = job_cfg
         self.counts = collections.defaultdict(int)
         self.gauges = _DefaultDictWithKey(metrics.Gauge)
         self.series = collections.defaultdict(list)
@@ -142,7 +151,7 @@ class ProgressTracker:
                 wandb.init(mode="offline")
             else:
                 raise e
-        wandb.config.update(args)
+        wandb.config.update(dataclasses.asdict(job_cfg))
         wandb.config.update(
             {k: v for k, v in os.environ.items() if k.startswith("RAY_")}
         )
@@ -211,7 +220,7 @@ class ProgressTracker:
         df = pd.DataFrame(ret, columns=["task", "mean", "std", "max", "min", "count"])
         print(self.series.get("output_time"))
         print(df.set_index("task"))
-        print(self.run_args)
+        print(self.job_cfg)
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
         wandb.finish()
 
@@ -227,6 +236,7 @@ class ProgressTracker:
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
             json.dump(ret, fout)
+        symlink(filename, "/tmp/raysort-latest.json")
         if save_to_wandb:
             wandb.save(filename, base_path="/tmp")
 
