@@ -1,4 +1,5 @@
 import argparse
+import enum
 from typing import NamedTuple, Tuple
 
 Args = argparse.Namespace
@@ -8,6 +9,12 @@ Path = str
 RecordCount = int
 
 BlockInfo = Tuple[int, int]
+
+
+class SpillingMode(enum.Enum):
+    RAY = "ray"
+    DISK = "disk"
+    S3 = "s3"
 
 
 class PartInfo(NamedTuple):

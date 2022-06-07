@@ -11,10 +11,11 @@ from raysort import app_args
 from raysort import constants
 from raysort import logging_utils
 from raysort import ray_utils
+from raysort import s3_utils
 from raysort import sortlib
 from raysort import sort_utils
 from raysort import tracing_utils
-from raysort.typing import Args, BlockInfo, PartId, PartInfo, Path
+from raysort.typing import Args, BlockInfo, PartId, PartInfo, Path, SpillingMode
 
 
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
@@ -98,8 +99,9 @@ def merge_mapper_blocks(
     merger = merge_fn(M, get_block, num_records, False, bounds)
 
     ret = []
+    tasks = []
     for i, datachunk in enumerate(merger):
-        if not args.manual_spilling:
+        if args.spilling == SpillingMode.RAY:
             if args.use_put:
                 ret.append(ray.put(datachunk))
             else:
@@ -109,21 +111,28 @@ def merge_mapper_blocks(
             # memory usage is still high. This does not make sense since
             # ray.put() should only use shared memory. Need to investigate.
             del datachunk
-        else:
-            # TODO(@lsf): support S3 for manual_spilling.
+            continue
+        part_id = constants.merge_part_ids(worker_id, merge_id, i)
+        pinfo = sort_utils.part_info(args, part_id, kind="temp")
+        if args.spilling == SpillingMode.DISK:
             # TODO(@lsf): make sure we write to all mounted disks.
-            part_id = constants.merge_part_ids(worker_id, merge_id, i)
-            pinfo = sort_utils.part_info(args, part_id, kind="temp")
             with open(pinfo.path, "wb", buffering=args.io_size) as fout:
                 datachunk.tofile(fout)
-            ret.append(pinfo)
+        elif args.spilling == SpillingMode.S3:
+            tasks.append(
+                s3_utils.upload_s3_buffer_remote.options(
+                    **ray_utils.current_node_res()
+                ).remote(args, datachunk, pinfo.path)
+            )
+        ret.append(pinfo)
     assert len(ret) == len(bounds), (ret, bounds)
     del merger
     del blocks
+    ray_utils.wait(tasks, wait_all=True)
     return ret
 
 
-# Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 1GB
+# Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
 @ray.remote
 @tracing_utils.timeit("reduce")
@@ -133,6 +142,21 @@ def final_merge(
     reducer_id: PartId,
     *parts: List,
 ) -> PartInfo:
+    @ray.remote(num_cpus=0, **ray_utils.current_node_res())
+    def get_part(part: PartInfo) -> np.ndarray:
+        if args.spilling == SpillingMode.DISK:
+            with open(part.path, "rb", buffering=args.io_size) as fin:
+                ret = np.fromfile(fin, dtype=np.uint8)
+            os.remove(part.path)
+            return ret
+        if args.spilling == SpillingMode.S3:
+            return s3_utils.download_s3(args.s3_bucket, part.path)
+        raise RuntimeError(f"{args}")
+
+    if isinstance(parts[0], PartInfo):
+        # TODO: figure out a way to limit concurrency
+        parts = [get_part.remote(p) for p in parts]
+
     M = len(parts)
 
     def get_block(i: int, d: int) -> np.ndarray:
@@ -146,12 +170,8 @@ def final_merge(
         if isinstance(part, ray.ObjectRef):
             ret = ray.get(part)
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
-            return ret
-        assert isinstance(part, PartInfo), part
-        with open(part.path, "rb", buffering=args.io_size) as fin:
-            ret = np.fromfile(fin, dtype=np.uint8)
-        os.remove(part.path)
-        return None if ret.size == 0 else ret
+            return None if ret.size == 0 else ret
+        raise RuntimeError(f"{args}")
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(args, part_id, kind="output", s3=args.s3_bucket)
@@ -182,6 +202,48 @@ def _get_node_res(args: Args, pinfo: PartInfo, part_id: PartId) -> Dict:
     return ray_utils.node_i(args, part_id)
 
 
+def reduce_stage(
+    args: Args,
+    merge_results: np.ndarray,
+    get_reduce_args: Callable[[int, int], List],
+    post_reduce_callback: Callable[[int], None] = lambda _: None,
+) -> List[PartInfo]:
+    if args.skip_final_reduce:
+        ray_utils.wait(merge_results.flatten(), wait_all=True)
+        return []
+
+    def get_task_options(w: int) -> Dict:
+        if args.free_scheduling:
+            return {
+                "resources": {"worker": 1 / args.reduce_parallelism},
+                "scheduling_strategy": "SPREAD",
+            }
+        else:
+            return ray_utils.node_i(args, w)
+
+    # Submit second-stage reduce tasks.
+    reduce_results = np.empty(
+        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    )
+    for r in range(args.num_reducers_per_worker):
+        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
+        # tasks are queued. The extra one is for task arguments prefetching.
+        if r > args.reduce_parallelism:
+            ray_utils.wait(
+                reduce_results[:, : r - args.reduce_parallelism].flatten(),
+                wait_all=True,
+            )
+        reduce_results[:, r] = [
+            final_merge.options(**get_task_options(w)).remote(
+                args, w, r, *get_reduce_args(w, r)
+            )
+            for w in range(args.num_workers)
+        ]
+        post_reduce_callback(r)
+
+    return ray.get(reduce_results.flatten().tolist())
+
+
 def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
     bounds, _ = get_boundaries(args.num_reducers)
 
@@ -205,28 +267,11 @@ def sort_simple(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     ray_utils.fail_and_restart_node(args)
 
-    if args.skip_final_merge:
-        ray_utils.wait(map_results[:, 0], wait_all=True)
-        return []
-
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    return reduce_stage(
+        args,
+        map_results[:, 0],
+        lambda w, r: map_results[:, w * args.num_reducers_per_worker + r],
     )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(args, w, r, *map_results[:, w * args.num_reducers_per_worker + r])
-            for w in range(args.num_workers)
-        ]
-    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -277,6 +322,9 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
             map_results_to_merge = np.concatenate(
                 all_map_results[merge_start:merge_end], axis=1
             )
+            # Release map result references.
+            for i in range(merge_start, merge_end):
+                all_map_results[i] = []
             m = round
             for w in range(args.num_workers):
                 map_blocks = map_results_to_merge[w, :]
@@ -298,32 +346,11 @@ def sort_riffle(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
 
     ray_utils.fail_and_restart_node(args)
 
-    if args.skip_final_merge:
-        ray_utils.wait(merge_results.flatten(), wait_all=True)
-        return []
-
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
+    return reduce_stage(
+        args,
+        merge_results,
+        lambda w, r: merge_results[:, w * args.num_reducers_per_worker + r],
     )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(
-                args, w, r, *merge_results[:, w * args.num_reducers_per_worker + r]
-            )
-            for w in range(args.num_workers)
-        ]
-
-    return ray.get(reduce_results.flatten().tolist())
 
 
 def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
@@ -375,47 +402,24 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(args, w)
                 ).remote(args, w, m, merge_bounds[w], *map_blocks)
 
-        if start_time > 0 and (time.time() - start_time) > args.fail_time:
-            ray_utils.fail_and_restart_node(args)
-            start_time = -1
-
-        # Wait for at least one map task from this round to finish before
-        # scheduling the next round.
-        #        completed, timed_out = ray.wait(map_results, timeout=0.001) # good value of timeout?
-        #       if len(completed) == 0:
-        start = time.time()
-        ray_utils.wait(map_results[:, 0])
-        print("Waited for", time.time() - start)
         if args.magnet:
             all_map_results.append(map_results)
-        else:
-            del map_results
+        # Remove references to map_results as soon as possible.
+        del map_results
 
-    if args.skip_final_merge:
-        ray_utils.wait(merge_results.flatten(), wait_all=True)
-        return []
+        if args.fail_node and start_time and time.time() - start_time > args.fail_time:
+            ray_utils.fail_and_restart_node(args)
+            start_time = None
 
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (args.num_workers, args.num_reducers_per_worker), dtype=object
-    )
-    for r in range(args.num_reducers_per_worker):
-        # This guarantees at most ((args.reduce_parallelism + 1) * args.num_workers)
-        # tasks are queued.
-        if r > args.reduce_parallelism:
-            ray_utils.wait(
-                reduce_results.flatten(),
-                num_returns=(r - args.reduce_parallelism) * args.num_workers,
-            )
-        reduce_results[:, r] = [
-            final_merge.options(
-                **ray_utils.node_i(args, w, args.reduce_parallelism)
-            ).remote(args, w, r, *merge_results[w, :, r])
-            for w in range(args.num_workers)
-        ]
+    def post_reduce(r: int) -> None:
         merge_results[:, :, r] = None
 
-    return ray.get(reduce_results.flatten().tolist())
+    return reduce_stage(
+        args,
+        merge_results,
+        lambda w, r: merge_results[w, :, r],
+        post_reduce,
+    )
 
 
 @tracing_utils.timeit("sort", log_to_wandb=True)

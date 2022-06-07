@@ -28,6 +28,9 @@ SMALL_SIZE = 8
 MEDIUM_SIZE = 10
 BIG_SIZE = 12
 
+SYS = "S"
+SYS_FULL = "Scramble"
+
 plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
 plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
 plt.rc("axes", labelsize=SMALL_SIZE)  # fontsize of the x and y labels
@@ -125,100 +128,102 @@ def plot_mb_all():
     )
 
 
-def plot_ft():
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=945817794
+def plot_hdd():
     df = pd.DataFrame(
         [
-            ["Ray-Riffle", "No failure", 1002.35],
-            ["Ray-Riffle", "With failure", 1556.876],
-            ["Ray-Magnet", "No failure", 988.296],
-            ["Ray-Magnet", "With failure", 1026.939],
-            ["Ray-Cosco", "No failure", 827.059],
-            ["Ray-Cosco", "With failure", 881.596],
+            [f"{SYS}-simple", "2K", 2799],
+            [f"{SYS}-simple", "1K", 1929],
+            [f"{SYS}-simple", "500", 1297],
+            [f"{SYS}-merge", "2K", 2163],
+            [f"{SYS}-merge", "1K", 1334],
+            [f"{SYS}-merge", "500", 1409],
+            [f"{SYS}-push", "2K", 748],
+            [f"{SYS}-push", "1K", 700],
+            [f"{SYS}-push", "500", 761],
+            [f"{SYS}-push", "500[F]", 775],
+            [f"{SYS}-push-opt", "2K", 743],
+            [f"{SYS}-push-opt", "1K", 634],
+            [f"{SYS}-push-opt", "500", 702],
+            [f"{SYS}-push-opt", "500[F]", 757],
+            ["Spark-default", "2K", 1609],
+            ["Spark-default", "1K", 1701],
+            ["Spark-default", "500", 1558],
         ],
-        columns=["version", "fail_mode", "time"],
+        columns=["version", "partitions", "time"],
     )
-    figname = "ft_comparison"
-    return plot(
-        df,
-        [],
-        figname,
-        "version",
-        "time",
-        "fail_mode",
-        "",
-        "",
-        "Job Completion Time (s)",
-    )
-
-
-# https://docs.google.com/spreadsheets/d/1ia36j5ECKLde5J22DvNMrwBSZj85Fz7gNRiJJvK_qLA/edit#gid=0
-def plot_ssd():
-    df = pd.DataFrame(
-        [
-            ["Ray-simple", "2GB", 758.968],
-            ["Ray-simple", "0.5GB", 1308.5],
-            ["Ray-simple", "0.1GB", 0],
-            ["Ray-Riffle", "2GB", 1002.35],
-            ["Ray-Riffle", "0.5GB", 1031.096],
-            ["Ray-Riffle", "0.1GB", 1141.065],
-            ["Ray-Magnet", "2GB", 988.296],
-            ["Ray-Magnet", "0.5GB", 984.41],
-            ["Ray-Magnet", "0.1GB", 1112.63],
-            ["Ray-Cosco", "2GB", 827.059],
-            ["Ray-Cosco", "0.5GB", 779.383],
-            ["Ray-Cosco", "0.1GB", 988.836],
-            ["Spark", "2GB", 925.232],
-            ["Spark", "0.5GB", 995.099],
-            ["Spark", "0.1GB", 850.577],
-        ],
-        columns=["version", "partition_size", "time"],
-    )
-    theoretical = [813.802]
+    theoretical = [339]
     return plot(
         df,
         theoretical,
         "shuffle_comparison",
         "version",
         "time",
-        "partition_size",
-        "Partition Size",
+        "partitions",
+        "Partitions",
         "",
         "Job Completion Time (s)",
     )
 
 
-def plot_nvme():
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=173105676
+def plot_ssd():
     df = pd.DataFrame(
         [
-            ["Ray-simple", "2GB", 392.003],
-            ["Ray-simple", "0.5GB", 609.277],
-            ["Ray-simple", "0.1GB", 0],
-            ["Ray-Riffle", "2GB", 482.203],
-            ["Ray-Riffle", "0.5GB", 489.848],
-            ["Ray-Riffle", "0.1GB", 0],
-            ["Ray-Magnet", "2GB", 415.271],
-            ["Ray-Magnet", "0.5GB", 461.591],
-            ["Ray-Magnet", "0.1GB", 557.691],
-            ["Ray-Cosco", "2GB", 378.239],
-            ["Ray-Cosco", "0.5GB", 399.196],
-            ["Ray-Cosco", "0.1GB", 511.533],
-            ["Spark", "2GB", 833.298],
-            ["Spark", "0.5GB", 846.917],
-            ["Spark", "0.1GB", 861.462],
+            [f"{SYS}-simple", "2K", 1085],
+            [f"{SYS}-simple", "1K", 628],
+            [f"{SYS}-simple", "500", 570],
+            [f"{SYS}-merge", "2K", 728],
+            [f"{SYS}-merge", "1K", 660],
+            [f"{SYS}-merge", "500", 711],
+            [f"{SYS}-push", "2K", 626],
+            [f"{SYS}-push", "1K", 580],
+            [f"{SYS}-push", "500", 602],
+            [f"{SYS}-push", "500[F]", 666],
+            [f"{SYS}-push-opt", "2K", 553],
+            [f"{SYS}-push-opt", "1K", 533],
+            [f"{SYS}-push-opt", "500", 596],
+            [f"{SYS}-push-opt", "500[F]", 657],
+            ["Spark-default", "2K", 1498],
+            ["Spark-default", "1K", 1533],
+            ["Spark-default", "500", 1614],
         ],
-        columns=["version", "partition_size", "time"],
+        columns=["version", "partitions", "time"],
     )
-    theoretical = [339.084]
+    theoretical = [543]
     return plot(
         df,
         theoretical,
-        "shuffle_comparison_nvme",
+        "shuffle_comparison_ssd",
         "version",
         "time",
-        "partition_size",
-        "Partition Size",
+        "partitions",
+        "Partitions",
         "",
         "Job Completion Time (s)",
+    )
+
+
+def plot_large():
+    df = pd.DataFrame(
+        [
+            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
+            ["Spark-push", "100TB", 19293 / SECS_PER_HR],
+            [f"{SYS_FULL}", "100TB", 10707 / SECS_PER_HR],
+        ],
+        columns=["version", "data_size", "time"],
+    )
+    theoretical = [3390 / SECS_PER_HR]
+    return plot(
+        df,
+        theoretical,
+        "shuffle_comparison_large",
+        "version",
+        "time",
+        None,
+        "",
+        "",
+        "Job Completion Time (h)",
     )
 
 
@@ -258,8 +263,9 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
-    ax = fig.gca()
     # # Add hatches to bars.
+    # import itertools
+    # ax = fig.gca()
     # hatches = itertools.cycle(["", "/", "\\"])
     # for i, bar in enumerate(ax.patches):
     #     if i % 3 == 0:
@@ -278,14 +284,14 @@ def plot(
     g.despine(left=True)
     ax.set_yscale("log")
     g.set_axis_labels(xtitle, ytitle)
-    g.legend.set_title(legend_title)
+    plt.xticks(rotation=45, horizontalalignment="right")
+    if g.legend:
+        g.legend.set_title(legend_title)
     filename = figname + ".pdf"
     print(filename)
     g.savefig(filename)
 
-
-plot_dask_comparison()
-# plot_ssd()
-# plot_nvme()
-# plot_ft()
+plot_hdd()
+plot_ssd()
+plot_large()
 # plot_mb_all()

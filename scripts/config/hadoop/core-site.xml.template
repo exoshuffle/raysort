@@ -8,8 +8,8 @@
         <name>hadoop.tmp.dir</name>
         <value>/mnt/data0/hadoop</value>
     </property>
-    <property>
+    <!-- <property>
         <name>io.file.buffer.size</name>
         <value>$IO_BUFFER_SIZE</value>
-    </property>
+    </property> -->
 </configuration>

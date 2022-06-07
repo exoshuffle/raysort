@@ -16,7 +16,8 @@ import click
 import ray
 
 DEFAULT_CLUSTER_NAME = "raysort-lsf"
-DEFAULT_INSTANCE_TYPE = "d3.2xlarge"
+DEFAULT_INSTANCE_COUNT = 10
+DEFAULT_INSTANCE_TYPE = "r6i.2xlarge"
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"
@@ -27,8 +28,8 @@ ANSIBLE_DIR = "config/ansible"
 HADOOP_TEMPLATE_DIR = "config/hadoop"
 TERRAFORM_DIR = "config/terraform"
 TERRAFORM_TEMPLATE_DIR = "aws-template"
+RAY_STORAGE_URI = "s3://raysort-lsf"
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
-RAY_S3_SPILL_PATH = "s3://raysort-tmp/ray-{:03d}"
 
 GRAFANA_SERVER_PORT = 3000
 PROMETHEUS_SERVER_PORT = 9090
@@ -36,8 +37,8 @@ PROMETHEUS_NODE_EXPORTER_PORT = 8091
 RAY_METRICS_EXPORT_PORT = 8090
 RAY_OBJECT_MANAGER_PORT = 8076
 
-KB = 1024
-MB = KB * 1024
+KiB = 1024
+MiB = KiB * 1024
 
 
 def error(*args, **kwargs):
@@ -124,13 +125,8 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     return ret
 
 
-def get_terraform_vars(cluster_name: str, instance_type: str) -> str:
-    return "".join(
-        [
-            f' -var="cluster_name={cluster_name}"',
-            f' -var="instance_type={instance_type}"',
-        ]
-    )
+def get_terraform_vars(**kwargs: Dict) -> str:
+    return "".join([f' -var="{k}={v}"' for k, v in kwargs.items()])
 
 
 def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib.Path:
@@ -151,11 +147,15 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     return tf_dir
 
 
-def terraform_provision(cluster_name: str, instance_type: str) -> None:
+def terraform_provision(
+    cluster_name: str, instance_count: int, instance_type: str
+) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
     run("terraform init", cwd=tf_dir)
     cmd = "terraform apply -auto-approve" + get_terraform_vars(
-        cluster_name, instance_type
+        cluster_name=cluster_name,
+        instance_count=instance_count,
+        instance_type=instance_type,
     )
     run(cmd, cwd=tf_dir)
 
@@ -256,8 +256,8 @@ def get_nvme_device_count(instance_type: str) -> int:
     }.get(instance_type, 1)
 
 
-def get_data_disks(instance_type: str) -> List[str]:
-    cnt = get_nvme_device_count(instance_type)
+def get_data_disks(instance_type: str, no_disk: bool) -> List[str]:
+    cnt = 0 if no_disk else get_nvme_device_count(instance_type)
     offset = 0 if instance_type.startswith("i3.") else 1
     return [f"/dev/nvme{i + offset}n1" for i in range(cnt)]
 
@@ -271,7 +271,7 @@ def get_ansible_vars(instance_type: str, no_disk: bool) -> Dict:
     ret = {}
     if no_disk:
         ret["mnt_prefix"] = ""
-    ret["data_disks"] = get_data_disks(instance_type)
+    ret["data_disks"] = get_data_disks(instance_type, no_disk)
     return ret
 
 
@@ -314,7 +314,7 @@ def update_hadoop_xml(
     content = template.substitute(
         DEFAULT_FS=f"hdfs://{head_ip}:9000",
         HEAD_IP=head_ip,
-        IO_BUFFER_SIZE=128 * KB if is_hdd else 4 * KB,
+        IO_BUFFER_SIZE=128 * KiB if is_hdd else 4 * KiB,
         DATA_DIRS=",".join(os.path.join(p, "hadoop/dfs/data") for p in mnt_paths),
         LOCAL_DIRS=",".join(os.path.join(p, "hadoop/yarn/local") for p in mnt_paths),
     )
@@ -372,6 +372,7 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
         fout.write(get_prometheus_sd_content(head_ip, ips))
     free_port(PROMETHEUS_SERVER_PORT)
     cmd = str(SCRIPT_DIR.parent / "raysort/bin/prometheus/prometheus")
+    cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
     subprocess.Popen(cmd, shell=True)
@@ -424,17 +425,30 @@ def get_ray_start_cmd(
 ) -> Tuple[str, Dict]:
     system_config = {}
     if s3_spill > 0:
+        # system_config.update(
+        #     **{
+        #         "max_io_workers": s3_spill,
+        #         "object_spilling_config": json_dump_no_space(
+        #             {
+        #                 "type": "smart_open",
+        #                 "params": {
+        #                     "uri": [
+        #                         "s3://raysort-tmp/ray-{:03d}".format(i)
+        #                         for i in range(s3_spill)
+        #                     ],
+        #                     "buffer_size": 16 * MiB,
+        #                 },
+        #             }
+        #         ),
+        #     }
+        # )
         system_config.update(
             **{
+                "max_io_workers": s3_spill,
                 "object_spilling_config": json_dump_no_space(
                     {
-                        "type": "smart_open",
-                        "params": {
-                            "uri": [
-                                RAY_S3_SPILL_PATH.format(i) for i in range(s3_spill)
-                            ],
-                            "buffer_size": 100 * MB,
-                        },
+                        "type": "ray_storage",
+                        "params": {"buffer_size": 16 * MiB},
                     }
                 ),
             }
@@ -449,7 +463,7 @@ def get_ray_start_cmd(
                         "type": "filesystem",
                         "params": {
                             "directory_path": [f"{mnt}/ray" for mnt in mnt_paths],
-                            "buffer_size": 10 * MB if is_hdd else -1,
+                            "buffer_size": 10 * MiB if is_hdd else -1,
                         },
                     },
                 ),
@@ -488,7 +502,7 @@ def restart_ray(
     ray_cmd, ray_system_config = get_ray_start_cmd(
         s3_spill, is_hdd(instance_type), mnt_paths
     )
-    run(ray_cmd)
+    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=RAY_STORAGE_URI))
     head_ip = run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
@@ -552,6 +566,7 @@ def setup_command_options(cli_fn):
     decorators = [
         cli.command(),
         click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME),
+        click.argument("instance_count", default=DEFAULT_INSTANCE_COUNT),
         click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE),
         click.option(
             "--ray",
@@ -604,6 +619,7 @@ def cli():
 @setup_command_options
 def up(
     cluster_name: str,
+    instance_count: int,
     instance_type: str,
     ray: bool,
     yarn: bool,
@@ -616,7 +632,7 @@ def up(
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
         error(f"{cluster_name} exists on the cloud but nothing is found locally")
-    terraform_provision(cluster_name, instance_type)
+    terraform_provision(cluster_name, instance_count, instance_type)
     inventory_path = common_setup(cluster_name, instance_type, cluster_exists, no_disk)
     if ray:
         restart_ray(
@@ -641,6 +657,7 @@ def up(
 )
 def setup(
     cluster_name: str,
+    _: int,  # unused: instance_count
     instance_type: str,
     ray: bool,
     yarn: bool,
@@ -670,11 +687,10 @@ def setup(
 
 @cli.command()
 @click.argument("cluster_name", default=DEFAULT_CLUSTER_NAME)
-@click.argument("instance_type", default=DEFAULT_INSTANCE_TYPE)
-def down(cluster_name: str, instance_type: str):
+def down(cluster_name: str):
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     cmd = "terraform destroy -auto-approve" + get_terraform_vars(
-        cluster_name, instance_type
+        cluster_name=cluster_name
     )
     run(cmd, cwd=tf_dir)
     check_cluster_existence(cluster_name, raise_if_exists=True)

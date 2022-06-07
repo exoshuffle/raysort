@@ -76,6 +76,8 @@
         rsync_opts:
           - --exclude=.git
           - --exclude=data
+          - --exclude=ray
+          - --exclude=wandb
 
     - name: Install Python dependencies
       ansible.builtin.shell: |

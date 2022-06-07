@@ -13,12 +13,16 @@ from raysort.typing import Args
 local_cluster = None
 
 
-def node_res(node_ip: str, parallelism: int = 1000) -> Dict[str, float]:
+def current_node_res(parallelism: int = 1000) -> Dict:
+    return node_res(ray.util.get_node_ip_address(), parallelism)
+
+
+def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
     assert node_ip is not None, node_ip
     return {"resources": {f"node:{node_ip}": 1 / parallelism}}
 
 
-def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict[str, float]:
+def node_i(args: Args, node_i: int, parallelism: int = 1000) -> Dict:
     return node_res(args.worker_ips[node_i % args.num_workers], parallelism)
 
 
@@ -97,14 +101,34 @@ def fail_and_restart_node(args: Args):
 
 
 def wait(
-    futures, wait_all: bool = False, **kwargs
+    futures,
+    wait_all: bool = False,
+    soft_timeout: float = 120,
+    **kwargs,
 ) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
     to_wait = [f for f in futures if f is not None]
-    default_kwargs = dict(fetch_local=False)
-    if wait_all:
-        default_kwargs.update(num_returns=len(to_wait))
-    kwargs = dict(**default_kwargs, **kwargs)
-    return ray.wait(to_wait, **kwargs)
+    if len(to_wait) == 0:
+        return [], []
+    kwargs_ = dict(
+        fetch_local=False,
+        num_returns=len(to_wait) if wait_all else 1,
+        timeout=soft_timeout,
+    )
+    kwargs_.update(kwargs)
+    num_returns = kwargs_["num_returns"]
+    ready, not_ready = ray.wait(to_wait, **kwargs_)
+    if len(ready) == num_returns:
+        return ready, not_ready
+    logging.warning(
+        f"Only {len(ready)}/{num_returns} tasks ready in {soft_timeout} seconds; "
+        f"tasks hanging: {not_ready}"
+    )
+    return wait(
+        futures,
+        wait_all=wait_all,
+        soft_timeout=soft_timeout,
+        **kwargs,
+    )
 
 
 def _build_cluster(
@@ -170,11 +194,11 @@ def _get_resources_args(args: Args):
 
 def _init_local_cluster(args: Args):
     system_config = {}
-    if args.spill_path:
-        if "://" in args.spill_path:
+    if args.ray_spill_path:
+        if "://" in args.ray_spill_path:
             system_config.update(
                 object_spilling_config=json.dumps(
-                    {"type": "smart_open", "params": {"uri": args.spill_path}},
+                    {"type": "smart_open", "params": {"uri": args.ray_spill_path}},
                 )
             )
         else:
@@ -182,7 +206,7 @@ def _init_local_cluster(args: Args):
                 object_spilling_config=json.dumps(
                     {
                         "type": "filesystem",
-                        "params": {"directory_path": args.spill_path},
+                        "params": {"directory_path": args.ray_spill_path},
                     },
                 )
             )
