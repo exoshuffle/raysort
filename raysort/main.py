@@ -125,6 +125,7 @@ def merge_mapper_blocks(
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 1GB
 # Plasma usage: input_part_size = 2GB
+@ray.remote
 @tracing_utils.timeit("reduce")
 def final_merge(
     args: Args,
@@ -347,9 +348,7 @@ def sort_two_stage(args: Args, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, args.num_workers), dtype=object)
         for _ in range(num_map_tasks):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt)
-            if args.pin_tasks:
-                opt = dict(**mapper_opt, **_get_node_res(args, pinfo, part_id))
+            opt = dict(**mapper_opt, **_get_node_res(args, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
             map_results[m, :] = mapper.options(**opt).remote(
                 args, part_id, map_bounds, pinfo.path

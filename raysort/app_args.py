@@ -142,12 +142,6 @@ def get_args(*args, **kwargs):
         help="fail a node this many seconds into execution if fail_node is nonempty",
     )
     parser.add_argument(
-        "--pin_tasks",
-        default=False,
-        action="store_true",
-        help="if set, will pin tasks to specific nodes",
-    )
-    parser.add_argument(
         "--dataloader_mode",
         default=None,
         type=str,

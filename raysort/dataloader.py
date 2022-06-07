@@ -1,8 +1,10 @@
 import collections
-import ray
 import time
-import numpy as np
 from typing import Callable, Dict, Iterable, List, Tuple, Union
+
+import numpy as np
+import ray
+
 from raysort import app_args
 from raysort import constants
 from raysort import logging_utils
