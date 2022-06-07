@@ -1,8 +1,23 @@
+import json
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+
+# Read in json file of timestamps for map and reduce tasks
+def get_json_input(fname):
+    f = open(fname)
+    data = json.load(f)
+    map_times = []
+    reduce_times = []
+    for row in data:
+        if row["name"] == "map":
+            map_times.append(row["ts"])
+        elif row["name"] == "reduce":
+            reduce_times.append(row["ts"])
+    return (map_times, reduce_times)
+
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
