@@ -291,6 +291,7 @@ def plot(
     print(filename)
     g.savefig(filename)
 
+
 plot_hdd()
 plot_ssd()
 plot_large()
