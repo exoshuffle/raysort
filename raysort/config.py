@@ -99,6 +99,8 @@ class AppConfig:
 
     spilling: SpillingMode = SpillingMode.RAY
 
+    dataloader_mode: str = None
+
     free_scheduling: bool = False
     use_put: bool = False
 
@@ -390,6 +392,35 @@ __config__ = {
             s3_bucket=S3_BUCKET,
             spilling=SpillingMode.S3,
             io_parallelism=4,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     Local data loader experiments
+    # ------------------------------------------------------------
+    "LocalNoStreamingDL": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+        ),
+    ),
+    "LocalPartialStreamingDL": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+            dataloader_mode="partial",
+        ),
+    ),
+    "LocalFullStreamingDL": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+            dataloader_mode="streaming",
         ),
     ),
     # ------------------------------------------------------------
