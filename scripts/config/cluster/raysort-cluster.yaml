@@ -46,7 +46,7 @@ setup_commands:
     S3_BUCKET=raysort-isaac
     CLUSTER_NAME=raysort-isaac
     CONFIG=1tb-1gb-s3-native-s3
-  # WANDB_API_KEY=YOUR_WANDB_API_KEY
+    # WANDB_API_KEY=YOUR_WANDB_API_KEY
     ' >> ~/.bashrc
   # Sync workdir
   - rsync -a ~/workdir/ ~/raysort
