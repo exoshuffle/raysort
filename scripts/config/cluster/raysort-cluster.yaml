@@ -40,7 +40,6 @@ file_mounts:
 
 setup_commands:
   # Set environment variables
-  # TODO(@iojw): See if it is possible to not hardcode these
   - >-
     echo 'export
     RAY_STORAGE=s3://raysort-isaac
