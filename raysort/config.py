@@ -51,6 +51,7 @@ class ClusterConfig:
 @dataclass
 class SystemConfig:
     _cluster: InitVar[ClusterConfig]
+    max_fused_object_count: int = 2000
     object_spilling_threshold: float = 0.8
     object_store_memory_percent: float = 0.45
     object_store_memory_bytes: int = field(init=False)
@@ -100,6 +101,8 @@ class AppConfig:
     spilling: SpillingMode = SpillingMode.RAY
 
     dataloader_mode: str = None
+
+    record_object_refs: bool = False
 
     free_scheduling: bool = False
     use_put: bool = False
@@ -498,12 +501,14 @@ __config__ = {
     #     S3 20 nodes
     # ------------------------------------------------------------
     "2tb-2gb-s3-native-s3": JobConfig(
-        # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt
+        # 650s, https://wandb.ai/raysort/raysort/runs/30rszs7y
+        # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt (cannot reproduce)
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
         ),
         system=dict(
+            max_fused_object_count=3,
             s3_spill=16,
         ),
         app=dict(
@@ -515,7 +520,7 @@ __config__ = {
         ),
     ),
     "2tb-2gb-s3-manual-s3": JobConfig(
-        # TODO
+        # 730s, https://wandb.ai/raysort/raysort/runs/2tlqlqpo
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,

@@ -20,6 +20,15 @@ MiB = KiB * 1024
 GiB = MiB * 1024
 
 
+def run_on_all_workers(
+    cfg: AppConfig, fn: ray.remote_function.RemoteFunction, include_head: bool = False
+) -> List[ray.ObjectRef]:
+    opts = [node_res(node) for node in cfg.worker_ips]
+    if include_head:
+        opts.append({"resources": {"head": 1}})
+    return [fn.options(**opt).remote(cfg) for opt in opts]
+
+
 def schedule_tasks(
     fn: Callable, task_args: List[Tuple], parallelism: int = 0
 ) -> List[ray.ObjectRef]:

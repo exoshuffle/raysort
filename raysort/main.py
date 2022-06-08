@@ -103,7 +103,6 @@ def restore_block(cfg: AppConfig, part: PartInfo) -> np.ndarray:
 @tracing_utils.timeit("merge")
 def merge_mapper_blocks(
     cfg: AppConfig,
-    worker_id: PartId,
     merge_id: PartId,
     bounds: List[int],
     *blocks: Tuple[np.ndarray],
@@ -139,7 +138,7 @@ def merge_mapper_blocks(
             # ray.put() should only use shared memory. Need to investigate.
             del datachunk
             continue
-        part_id = constants.merge_part_ids(worker_id, merge_id, i)
+        part_id = constants.merge_part_ids(merge_id, i)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="temp", s3=(cfg.spilling == SpillingMode.S3)
         )
@@ -347,9 +346,10 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = round
             for w in range(cfg.num_workers):
                 map_blocks = map_results_to_merge[w, :]
+                merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_mapper_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, w, m, merge_bounds, *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds, *map_blocks)
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
@@ -370,6 +370,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
 def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     start_time = time.time()
+    ref_recorder = tracing_utils.ObjectRefRecorder(cfg.record_object_refs)
     map_bounds, merge_bounds = get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
     )
@@ -398,9 +399,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
-            map_results[m, :] = mapper.options(**opt).remote(
-                cfg, part_id, map_bounds, pinfo.path
-            )
+            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo.path)
+            map_results[m, :] = refs
+            ref_recorder.record(refs, lambda i: f"map_{part_id:010x}_{i}")
             part_id += 1
 
         # Keep references to the map tasks but not to map output blocks.
@@ -420,9 +421,14 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = round * cfg.merge_parallelism + j
             for w in range(cfg.num_workers):
                 map_blocks = map_results[j * f : (j + 1) * f, w]
-                merge_results[w, m, :] = merge_mapper_blocks.options(
+                merge_id = constants.merge_part_ids(w, m)
+                refs = merge_mapper_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, w, m, merge_bounds[w], *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
+                merge_results[w, m, :] = refs
+                ref_recorder.record(refs, lambda i: f"merge_{merge_id:010x}_{i}")
+
+        ref_recorder.flush()
 
         # Delete references to map output blocks as soon as possible.
         if cfg.magnet:

@@ -87,17 +87,8 @@ def make_data_dirs(cfg: AppConfig):
             os.makedirs(os.path.join(prefix, kind), exist_ok=True)
 
 
-def run_on_all_workers(
-    cfg: AppConfig, fn: ray.remote_function.RemoteFunction, include_head: bool = False
-) -> List[ray.ObjectRef]:
-    opts = [ray_utils.node_res(node) for node in cfg.worker_ips]
-    if include_head:
-        opts.append({"resources": {"head": 1}})
-    return [fn.options(**opt).remote(cfg) for opt in opts]
-
-
 def init(cfg: AppConfig):
-    ray.get(run_on_all_workers(cfg, make_data_dirs, include_head=True))
+    ray.get(ray_utils.run_on_all_workers(cfg, make_data_dirs, include_head=True))
     logging.info("Created data directories on all nodes")
 
 
@@ -199,7 +190,7 @@ def generate_input(cfg: AppConfig):
         writer = csv.writer(fout)
         writer.writerows(parts)
     if not cfg.s3_bucket:
-        ray.get(run_on_all_workers(cfg, drop_fs_cache))
+        ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
 
 def create_partition(part_size: int) -> np.ndarray:

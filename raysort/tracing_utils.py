@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 import time
-from typing import Dict
+from typing import Callable, Dict, Iterable
 import yaml
 
 import ray
@@ -260,3 +260,26 @@ class ProgressTracker:
         self.save_prometheus_snapshot()
         self.report_spilling()
         self.report()
+
+
+class ObjectRefRecorder:
+    def __init__(self, enabled: bool = True):
+        self._enabled = enabled
+        self._filename = f"/tmp/raysort-{int(time.time())}-objects.txt"
+        self._records = []
+        with open(self._filename, "w"):
+            pass
+        symlink(self._filename, "/tmp/raysort-latest-objects.txt")
+
+    def record(self, refs: Iterable[ray.ObjectRef], get_name: Callable[[int], str]):
+        if not self._enabled:
+            return
+        for i, ref in enumerate(refs):
+            self._records.append(f"{ref.hex()} {get_name(i)}\n")
+
+    def flush(self):
+        if not self._enabled:
+            return
+        with open(self._filename, "a") as fout:
+            fout.writelines(self._records)
+        self._records = []

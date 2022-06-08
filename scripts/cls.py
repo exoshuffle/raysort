@@ -392,7 +392,10 @@ def json_dump_no_space(data) -> str:
 
 
 def get_ray_start_cmd() -> Tuple[str, Dict]:
-    system_config = {"object_spilling_threshold": cfg.system.object_spilling_threshold}
+    system_config = {
+        "max_fused_object_count": cfg.system.max_fused_object_count,
+        "object_spilling_threshold": cfg.system.object_spilling_threshold,
+    }
     if cfg.system.s3_spill > 0:
         # system_config.update(
         #     **{
