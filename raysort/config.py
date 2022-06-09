@@ -207,6 +207,13 @@ i3_2xl = InstanceType(
     disk_device_offset=0,
 )
 
+i4i_2xl = InstanceType(
+    name="i4i.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=1,
+)
+
 r6i_2xl = InstanceType(
     name="r6i.2xlarge",
     cpu=8,
@@ -467,6 +474,24 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 10 nodes
+    # ------------------------------------------------------------
+    "1tb-2gb-i4i-native-s3": JobConfig(
+        # 492s, https://wandb.ai/raysort/raysort/runs/pjve8jyc
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
         ),
     ),
     # ------------------------------------------------------------
