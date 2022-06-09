@@ -15,7 +15,7 @@
     ray_merics_export_port: 8090
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
   environment:
-    RAY_STORAGE: s3://raysort-lsf
+    RAY_STORAGE: "s3://{{ lookup('env', 'S3_BUCKET') }}"
   tasks:
     - name: Install nightly Ray
       ansible.builtin.shell: >
