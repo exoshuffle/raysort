@@ -25,14 +25,12 @@ class InstanceType:
     cpu: int
     memory_gib: float
     memory_bytes: int = field(init=False)
-    instance_disk_count: int = 0
-    disk_count: int = field(init=False)
+    disk_count: int = 0
     disk_device_offset: int = 1
     hdd: bool = False
 
     def __post_init__(self):
         self.memory_bytes = int(self.memory_gib * GiB)
-        self.disk_count = self.instance_disk_count
 
 
 @dataclass
@@ -45,7 +43,7 @@ class ClusterConfig:
 
     def __post_init__(self):
         if self.ebs:
-            self.instance_type.disk_count = self.instance_type.instance_disk_count + 1
+            self.instance_type.disk_count += 1
 
 
 @dataclass
@@ -190,6 +188,33 @@ def get_steps(steps: List[AppStep] = []) -> Dict:
 
 
 # ------------------------------------------------------------
+#     VM Types
+# ------------------------------------------------------------
+
+d3_2xl = InstanceType(
+    name="d3.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=6,
+    hdd=True,
+)
+
+i3_2xl = InstanceType(
+    name="i3.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=1,
+    disk_device_offset=0,
+)
+
+r6i_2xl = InstanceType(
+    name="r6i.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+)
+
+
+# ------------------------------------------------------------
 #     Configurations
 # ------------------------------------------------------------
 
@@ -201,20 +226,6 @@ local_cluster = dict(
         memory_gib=0,  # not used
     ),
     local=True,
-)
-
-r6i_2xl = InstanceType(
-    name="r6i.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-)
-
-d3_2xl = InstanceType(
-    name="d3.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-    instance_disk_count=6,
-    hdd=True,
 )
 
 local_base_app_config = dict(
@@ -443,6 +454,22 @@ __config__ = {
         ),
     ),
     # ------------------------------------------------------------
+    #     i3.2xl 10 nodes 1TB (NSDI '22)
+    # ------------------------------------------------------------
+    "1tb-2gb-i3-cosco": JobConfig(
+        # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+        ),
+    ),
+    # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
     "1tb-2gb-s3-native-s3": JobConfig(
@@ -532,6 +559,24 @@ __config__ = {
         app=dict(
             **get_steps(),
             total_gb=10000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+        ),
+    ),
+    "10tb-2gb-s3-native-s3": JobConfig(
+        # 2960s, https://wandb.ai/raysort/raysort/runs/1r83qp4x
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            max_fused_object_count=3,
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=20000,
             input_part_gb=2,
             s3_bucket=S3_BUCKET,
             io_parallelism=16,
