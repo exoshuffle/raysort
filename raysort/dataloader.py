@@ -1,20 +1,17 @@
-import collections
 import time
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import List
 
 import numpy as np
 import ray
 
 from raysort import config
-from raysort import constants
-from raysort import logging_utils
 from raysort import ray_utils
 from raysort import sortlib
 from raysort import sort_utils
 from raysort import tracing_utils
 from raysort import main as sort_main
-from raysort.config import AppConfig, JobConfig
-from raysort.typing import BlockInfo, PartId, PartInfo, Path
+from raysort.config import AppConfig
+from raysort.typing import PartId, PartInfo
 
 
 @ray.remote
@@ -23,11 +20,11 @@ def mapper(
     cfg: AppConfig,
     mapper_id: PartId,
     bounds: List[int],
-    path: Path,
+    pinfo: PartInfo,
 ) -> List[np.ndarray]:
     start_time = time.time()
     tracing_utils.record_value("map_arrive", start_time)
-    part = sort_utils.load_partition(cfg, path)
+    part = sort_utils.load_partition(cfg, pinfo)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = sortlib.sort_and_partition
@@ -74,7 +71,7 @@ def sort(cfg: AppConfig):
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
-                cfg, part_id, bounds, pinfo.path
+                cfg, part_id, bounds, pinfo
             )
             if part_id > 0 and part_id % map_round == 0:
                 # Wait for at least one map task from this round to finish before
@@ -127,7 +124,7 @@ def sort_partial_streaming(cfg: AppConfig):
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
-                cfg, part_id, bounds, pinfo.path
+                cfg, part_id, bounds, pinfo
             )
             if part_id > 0 and part_id % map_round == 0:
                 # Wait for at least one map task from this round to finish before
@@ -179,7 +176,7 @@ def sort_streaming(cfg: AppConfig):
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
             all_map_out[part_id - map_scheduled, :] = mapper.options(**opt).remote(
-                cfg, part_id, bounds, pinfo.path
+                cfg, part_id, bounds, pinfo
             )
         if len(reduce_prev) > 0:
             # Wait for at least one reduce task from the last round to finish before

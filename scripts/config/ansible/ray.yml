@@ -15,6 +15,7 @@
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
   environment:
     RAY_STORAGE: "s3://{{ lookup('env', 'S3_BUCKET') }}"
+    S3_BUCKET: "{{ lookup('env', 'S3_BUCKET') }}"
   tasks:
     - name: Sync Ray patches
       ansible.posix.synchronize:

@@ -39,11 +39,11 @@ def mapper(
     cfg: AppConfig,
     mapper_id: PartId,
     bounds: List[int],
-    path: Path,
+    pinfo: PartInfo,
 ) -> List[np.ndarray]:
     start_time = time.time()
-    part = sort_utils.load_partition(cfg, path)
-    assert part.size == cfg.input_part_size, (part.shape, path, cfg)
+    part = sort_utils.load_partition(cfg, pinfo)
+    assert part.size == cfg.input_part_size, (part.shape, pinfo, cfg)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = (
@@ -81,7 +81,7 @@ def spill_block(cfg: AppConfig, pinfo: PartInfo, data: np.ndarray):
         with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
             data.tofile(fout)
     elif cfg.spilling == SpillingMode.S3:
-        s3_utils.upload_s3_buffer(cfg, data, pinfo.path, use_threads=False)
+        s3_utils.upload_s3_buffer(cfg, data, pinfo, use_threads=False)
     else:
         raise RuntimeError(f"{cfg}")
 
@@ -93,7 +93,7 @@ def restore_block(cfg: AppConfig, part: PartInfo) -> np.ndarray:
         os.remove(part.path)
         return ret
     if cfg.spilling == SpillingMode.S3:
-        return s3_utils.download_s3(cfg.s3_bucket, part.path, use_threads=False)
+        return s3_utils.download_s3(part.node, part.path, use_threads=False)
     raise RuntimeError(f"{cfg}")
 
 
@@ -193,10 +193,10 @@ def final_merge(
         raise RuntimeError(f"{cfg}")
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
-    pinfo = sort_utils.part_info(cfg, part_id, kind="output", s3=cfg.s3_bucket)
+    pinfo = sort_utils.part_info(cfg, part_id, kind="output", s3=bool(cfg.s3_buckets))
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
     merger = merge_fn(M, get_block)
-    sort_utils.save_partition(cfg, pinfo.path, merger)
+    sort_utils.save_partition(cfg, pinfo, merger)
     return pinfo
 
 
@@ -273,7 +273,7 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         pinfo = parts[part_id]
         opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
         map_results[part_id, :] = mapper.options(**opt).remote(
-            cfg, part_id, bounds, pinfo.path
+            cfg, part_id, bounds, pinfo
         )[: cfg.num_reducers]
         # TODO(@lsf): try memory-aware scheduling
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
@@ -319,7 +319,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = part_id % num_map_tasks_per_round
             map_results[i % cfg.num_workers, i // cfg.num_workers] = mapper.options(
                 **opt
-            ).remote(cfg, part_id, map_bounds, pinfo.path)[0]
+            ).remote(cfg, part_id, map_bounds, pinfo)[0]
             part_id += 1
         all_map_results.append(map_results)
 
@@ -399,7 +399,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
-            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo.path)
+            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs
             ref_recorder.record(refs, lambda i: f"map_{part_id:010x}_{i}")
             part_id += 1
