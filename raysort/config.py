@@ -480,7 +480,7 @@ __config__ = {
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     "1tb-2gb-i4i-native-s3": JobConfig(
-        # 492s, https://wandb.ai/raysort/raysort/runs/pjve8jyc
+        # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
         cluster=dict(
             instance_count=10,
             instance_type=i4i_2xl,
@@ -492,6 +492,61 @@ __config__ = {
             input_part_gb=2,
             s3_bucket=S3_BUCKET,
             io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 20 nodes
+    # ------------------------------------------------------------
+    "2tb-2gb-i4i-native-s3": JobConfig(
+        # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        cluster=dict(
+            instance_count=20,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 40 nodes
+    # ------------------------------------------------------------
+    "4tb-2gb-i4i-native-s3": JobConfig(
+        # 547s, https://wandb.ai/raysort/raysort/runs/l1lwlfy5
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    "20tb-2gb-i4i-native-s3": JobConfig(
+        # 2901s, https://wandb.ai/raysort/raysort/runs/q0w17xxi
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=20000,
+            input_part_gb=2,
+            s3_bucket=S3_BUCKET,
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
         ),
     ),
     # ------------------------------------------------------------
