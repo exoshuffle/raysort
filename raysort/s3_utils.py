@@ -31,7 +31,7 @@ def s3() -> botocore.client.BaseClient:
 
 def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True) -> None:
     try:
-        s3().upload_file(src, pinfo.node, pinfo.path)
+        s3().upload_file(src, pinfo.bucket, pinfo.path)
     finally:
         if delete_src:
             os.remove(src)
@@ -42,10 +42,10 @@ def download_s3(
 ) -> Optional[np.ndarray]:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if dst:
-        s3().download_file(pinfo.node, pinfo.path, dst, Config=config)
+        s3().download_file(pinfo.bucket, pinfo.path, dst, Config=config)
         return
     ret = io.BytesIO()
-    s3().download_fileobj(pinfo.node, pinfo.path, ret, Config=config)
+    s3().download_fileobj(pinfo.bucket, pinfo.path, ret, Config=config)
     return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
 
 
@@ -54,7 +54,7 @@ def upload_s3_buffer(
 ) -> None:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     # TODO: avoid copying
-    s3().upload_fileobj(io.BytesIO(data), pinfo.node, pinfo.path, Config=config)
+    s3().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
 
 
 def multipart_upload(
@@ -62,7 +62,7 @@ def multipart_upload(
 ) -> None:
     parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")
-    mpu = s3_client.create_multipart_upload(Bucket=pinfo.node, Key=pinfo.path)
+    mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
     tasks = []
     mpu_part_id = 1
 
@@ -78,7 +78,7 @@ def multipart_upload(
             ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
         kwargs = dict(
             Body=data,
-            Bucket=pinfo.node,
+            Bucket=pinfo.bucket,
             Key=pinfo.path,
             PartNumber=mpu_part_id,
             UploadId=mpu["UploadId"],
@@ -116,7 +116,7 @@ def multipart_upload(
     ]
 
     s3_client.complete_multipart_upload(
-        Bucket=pinfo.node,
+        Bucket=pinfo.bucket,
         Key=pinfo.path,
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],

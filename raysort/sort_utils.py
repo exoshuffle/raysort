@@ -31,13 +31,13 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(cfg.worker_ips[i % cfg.num_workers], None)
+            PartInfo(cfg.worker_ips[i % cfg.num_workers], None, None)
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [PartInfo(node, path) for node, path in reader]
+        ret = [PartInfo(node, bucket, path) for node, bucket, path in reader]
         return ret
 
 
@@ -66,7 +66,7 @@ def save_partition(
                     log_to_wandb=True,
                 )
             del datachunk
-    elif cfg.s3_bucket:
+    elif cfg.s3_buckets:
         s3_utils.multipart_upload(cfg, pinfo, merger)
     else:
         with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
@@ -110,12 +110,12 @@ def part_info(
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         bucket = cfg.s3_buckets[shard % len(cfg.s3_buckets)]
-        return PartInfo(bucket, path)
+        return PartInfo(None, bucket, path)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
-    return PartInfo(node, filepath)
+    return PartInfo(node, None, filepath)
 
 
 def _get_part_path(
