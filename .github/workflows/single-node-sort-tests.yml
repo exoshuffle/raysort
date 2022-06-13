@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
+      S3_BUCKET: raysort-github-ci
       WANDB_MODE: offline
     steps:
       - name: Mount tmpfs
