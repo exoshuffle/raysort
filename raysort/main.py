@@ -93,7 +93,7 @@ def restore_block(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         os.remove(pinfo.path)
         return ret
     if cfg.spilling == SpillingMode.S3:
-        return s3_utils.download_s3(pinfo.bucket, pinfo.path, use_threads=False)
+        return s3_utils.download_s3(pinfo, use_threads=False)
     raise RuntimeError(f"{cfg}")
 
 
