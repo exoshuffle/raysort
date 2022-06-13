@@ -163,7 +163,7 @@ def generate_part(
         s3_utils.upload_s3(
             path,
             pinfo,
-            max_concurrency=cfg.io_parallelism // cfg.map_parallelism,
+            max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
         )
     logging.info(f"Generated input {pinfo}")
     return pinfo
