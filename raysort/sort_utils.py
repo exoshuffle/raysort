@@ -24,33 +24,35 @@ from raysort.typing import PartId, PartInfo, Path, RecordCount, SpillingMode
 
 
 def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
-    suffix = "s3" if cfg.s3_bucket else "fs"
+    suffix = "s3" if cfg.s3_buckets else "fs"
     return constants.MANIFEST_FMT.format(kind=kind, suffix=suffix)
 
 
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(cfg.worker_ips[i % cfg.num_workers], None)
+            PartInfo(cfg.worker_ips[i % cfg.num_workers], None, None)
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [PartInfo(node, path) for node, path in reader]
+        ret = [PartInfo(node, bucket, path) for node, bucket, path in reader]
         return ret
 
 
-def load_partition(cfg: AppConfig, path: Path) -> np.ndarray:
+def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:
         return create_partition(cfg.input_part_size)
-    if cfg.s3_bucket:
-        return s3_utils.download_s3(cfg.s3_bucket, path)
-    with open(path, "rb", buffering=cfg.io_size) as fin:
+    if cfg.s3_buckets:
+        return s3_utils.download_s3(pinfo)
+    with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
         return np.fromfile(fin, dtype=np.uint8)
 
 
-def save_partition(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> None:
+def save_partition(
+    cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
+) -> None:
     if cfg.skip_output:
         first_chunk = True
         for datachunk in merger:
@@ -64,10 +66,10 @@ def save_partition(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> 
                     log_to_wandb=True,
                 )
             del datachunk
-    elif cfg.s3_bucket:
-        s3_utils.multipart_upload(cfg, path, merger)
+    elif cfg.s3_buckets:
+        s3_utils.multipart_upload(cfg, pinfo, merger)
     else:
-        with open(path, "wb", buffering=cfg.io_size) as fout:
+        with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
             for datachunk in merger:
                 fout.write(datachunk)
 
@@ -80,7 +82,7 @@ def save_partition(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> 
 @ray.remote
 def make_data_dirs(cfg: AppConfig):
     os.makedirs(constants.TMPFS_PATH, exist_ok=True)
-    if cfg.s3_bucket and cfg.spilling == SpillingMode.S3:
+    if cfg.s3_buckets and cfg.spilling == SpillingMode.S3:
         return
     for prefix in cfg.data_dirs:
         for kind in constants.FILENAME_FMT.keys():
@@ -107,12 +109,13 @@ def part_info(
     if s3:
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
-        return PartInfo(None, path)
+        bucket = cfg.s3_buckets[shard % len(cfg.s3_buckets)]
+        return PartInfo(None, bucket, path)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
     node = ray.util.get_node_ip_address()
-    return PartInfo(node, filepath)
+    return PartInfo(node, None, filepath)
 
 
 def _get_part_path(
@@ -149,15 +152,19 @@ def generate_part(
     offset: RecordCount,
 ) -> PartInfo:
     logging_utils.init()
-    if cfg.s3_bucket:
+    if cfg.s3_buckets:
         pinfo = part_info(cfg, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
         pinfo = part_info(cfg, part_id)
         path = pinfo.path
-    _run_gensort(offset, size, path, cfg.s3_bucket)
-    if cfg.s3_bucket:
-        s3_utils.upload_s3(cfg.s3_bucket, path, pinfo.path)
+    _run_gensort(offset, size, path, bool(cfg.s3_buckets))
+    if cfg.s3_buckets:
+        s3_utils.upload_s3(
+            path,
+            pinfo,
+            max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
+        )
     logging.info(f"Generated input {pinfo}")
     return pinfo
 
@@ -189,7 +196,7 @@ def generate_input(cfg: AppConfig):
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
         writer.writerows(parts)
-    if not cfg.s3_bucket:
+    if not cfg.s3_buckets:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
 
@@ -229,9 +236,9 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 @ray.remote
 def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
-    if cfg.s3_bucket:
+    if cfg.s3_buckets:
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3_utils.download_s3(cfg.s3_bucket, pinfo.path, tmp_path)
+        s3_utils.download_s3(pinfo, tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:

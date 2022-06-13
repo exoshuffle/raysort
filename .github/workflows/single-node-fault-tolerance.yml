@@ -10,8 +10,11 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      WANDB_MODE: offline
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      S3_BUCKET: raysort-github-ci
       STEPS: sort
+      WANDB_MODE: offline
     steps:
       - name: Mount tmpfs
         run: |
