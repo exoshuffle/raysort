@@ -160,7 +160,11 @@ def generate_part(
         path = pinfo.path
     _run_gensort(offset, size, path, bool(cfg.s3_buckets))
     if cfg.s3_buckets:
-        s3_utils.upload_s3(path, pinfo)
+        s3_utils.upload_s3(
+            path,
+            pinfo,
+            max_concurrency=cfg.io_parallelism // cfg.map_parallelism,
+        )
     logging.info(f"Generated input {pinfo}")
     return pinfo
 

@@ -29,9 +29,10 @@ def s3() -> botocore.client.BaseClient:
     )
 
 
-def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True) -> None:
+def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> None:
+    config = transfer.TransferConfig(**kwargs) if kwargs else None
     try:
-        s3().upload_file(src, pinfo.bucket, pinfo.path)
+        s3().upload_file(src, pinfo.bucket, pinfo.path, Config=config)
     finally:
         if delete_src:
             os.remove(src)
