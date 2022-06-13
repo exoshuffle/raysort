@@ -523,7 +523,7 @@ __config__ = {
     #     S3 + i4i.2xl 40 nodes
     # ------------------------------------------------------------
     "4tb-2gb-i4i-native-s3": JobConfig(
-        # 547s, https://wandb.ai/raysort/raysort/runs/l1lwlfy5
+        # 536s, https://wandb.ai/raysort/raysort/runs/14xr10t2
         cluster=dict(
             instance_count=40,
             instance_type=i4i_2xl,
@@ -533,7 +533,7 @@ __config__ = {
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
@@ -558,7 +558,7 @@ __config__ = {
     #     S3 + i4i.2xl 100 nodes
     # ------------------------------------------------------------
     "10tb-2gb-i4i-native-s3": JobConfig(
-        # TODO
+        # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
         cluster=dict(
             instance_count=100,
             instance_type=i4i_2xl,
@@ -568,7 +568,7 @@ __config__ = {
             **get_steps(),
             total_gb=10000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
