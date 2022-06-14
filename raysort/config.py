@@ -783,7 +783,7 @@ __config__ = {
             **get_steps(),
             total_gb=600,
             input_part_gb=1,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
