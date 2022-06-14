@@ -27,3 +27,7 @@ class SpillingMode(enum.Enum):
     RAY = "ray"
     DISK = "disk"
     S3 = "s3"
+
+class InstanceLifetime(enum.Enum):
+    SPOT = "spot"
+    DEDICATED = "dedicated"
