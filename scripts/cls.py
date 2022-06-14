@@ -468,7 +468,6 @@ def write_ray_system_config(config: Dict, path: str) -> None:
 def restart_ray(
     inventory_path: pathlib.Path,
     clear_data_dir: bool,
-    reinstall_ray: bool,
 ) -> None:
     # Clear all mounts in case the previous setup has more mounts than we have.
     run(f"sudo rm -rf {MNT_PATH_PATTERN}")
@@ -482,7 +481,6 @@ def restart_ray(
     ev = {
         "head_ip": head_ip,
         "clear_data_dir": clear_data_dir,
-        "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
         "ray_object_store_memory": cfg.system.object_store_memory_bytes,
@@ -529,6 +527,15 @@ def print_after_setup(cluster_name: str) -> None:
     click.echo(f"  Ray system config written to: {RAY_SYSTEM_CONFIG_FILE_PATH}")
 
 
+def pip_install_upgrade() -> None:
+    requirement_dir = SCRIPT_DIR.parent / "requirements"
+    requirements = " ".join(
+        f"-r {requirement_dir}/{requirement_file}"
+        for requirement_file in ["dev.txt", "worker.txt"]
+    )
+    run(f"pip install --no-cache-dir --upgrade {requirements}")
+
+
 # ------------------------------------------------------------
 #     CLI Interface
 # ------------------------------------------------------------
@@ -555,12 +562,6 @@ def setup_command_options(cli_fn):
             is_flag=True,
             help="whether to remove input data directory",
         ),
-        click.option(
-            "--reinstall_ray",
-            default=False,
-            is_flag=True,
-            help="whether to reinstall Ray nightly",
-        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -578,8 +579,8 @@ def up(
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
-    reinstall_ray: bool,
 ):
+    pip_install_upgrade()
     cluster_name = cfg.cluster.name
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
@@ -591,7 +592,6 @@ def up(
         restart_ray(
             inventory_path,
             clear_data_dir,
-            reinstall_ray,
         )
     if yarn:
         restart_yarn(inventory_path)
@@ -609,7 +609,6 @@ def setup(
     ray: bool,
     yarn: bool,
     clear_data_dir: bool,
-    reinstall_ray: bool,
     no_common: bool,
 ):
     cluster_name = cfg.cluster.name
@@ -621,7 +620,6 @@ def setup(
         restart_ray(
             inventory_path,
             clear_data_dir,
-            reinstall_ray,
         )
     if yarn:
         restart_yarn(inventory_path)

@@ -11,7 +11,7 @@ import ray
 from raysort import constants
 from raysort import ray_utils
 from raysort.config import AppConfig
-from raysort.typing import Path
+from raysort.typing import PartInfo, Path
 
 KiB = 1024
 MiB = KiB * 1024
@@ -29,36 +29,41 @@ def s3() -> botocore.client.BaseClient:
     )
 
 
-def upload_s3(bucket: str, src: Path, dst: Path, *, delete_src: bool = True) -> None:
+def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> None:
+    config = transfer.TransferConfig(**kwargs) if kwargs else None
     try:
-        s3().upload_file(src, bucket, dst)
+        s3().upload_file(src, pinfo.bucket, pinfo.path, Config=config)
     finally:
         if delete_src:
             os.remove(src)
 
 
 def download_s3(
-    bucket: str, src: Path, dst: Optional[Path] = None, **kwargs
+    pinfo: PartInfo, dst: Optional[Path] = None, **kwargs
 ) -> Optional[np.ndarray]:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if dst:
-        s3().download_file(bucket, src, dst, Config=config)
+        s3().download_file(pinfo.bucket, pinfo.path, dst, Config=config)
         return
     ret = io.BytesIO()
-    s3().download_fileobj(bucket, src, ret, Config=config)
+    s3().download_fileobj(pinfo.bucket, pinfo.path, ret, Config=config)
     return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
 
 
-def upload_s3_buffer(cfg: AppConfig, data: np.ndarray, path: Path, **kwargs) -> None:
+def upload_s3_buffer(
+    cfg: AppConfig, data: np.ndarray, pinfo: PartInfo, **kwargs
+) -> None:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     # TODO: avoid copying
-    s3().upload_fileobj(io.BytesIO(data), cfg.s3_bucket, path, Config=config)
+    s3().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
 
 
-def multipart_upload(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -> None:
+def multipart_upload(
+    cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
+) -> None:
     parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")
-    mpu = s3_client.create_multipart_upload(Bucket=cfg.s3_bucket, Key=path)
+    mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
     tasks = []
     mpu_part_id = 1
 
@@ -74,8 +79,8 @@ def multipart_upload(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -
             ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
         kwargs = dict(
             Body=data,
-            Bucket=cfg.s3_bucket,
-            Key=path,
+            Bucket=pinfo.bucket,
+            Key=pinfo.path,
             PartNumber=mpu_part_id,
             UploadId=mpu["UploadId"],
         )
@@ -112,8 +117,8 @@ def multipart_upload(cfg: AppConfig, path: Path, merger: Iterable[np.ndarray]) -
     ]
 
     s3_client.complete_multipart_upload(
-        Bucket=cfg.s3_bucket,
-        Key=path,
+        Bucket=pinfo.bucket,
+        Key=pinfo.path,
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],
     )

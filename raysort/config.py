@@ -19,6 +19,11 @@ MB = KB * 1000
 GB = MB * 1000
 
 
+def get_s3_buckets(count: int = 1) -> List[str]:
+    assert S3_BUCKET
+    return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
+
+
 @dataclass
 class InstanceType:
     name: str
@@ -110,7 +115,7 @@ class AppConfig:
     riffle: bool = False
     magnet: bool = False
 
-    s3_bucket: Optional[str] = None
+    s3_buckets: List[str] = field(default_factory=list)
 
     fail_node: Optional[str] = None
     fail_time: int = 45
@@ -406,7 +411,7 @@ __config__ = {
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
         ),
     ),
     "LocalS3IOAndSpilling": JobConfig(
@@ -416,7 +421,7 @@ __config__ = {
         ),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
         ),
     ),
     "LocalS3IOManualSpillingS3": JobConfig(
@@ -424,7 +429,7 @@ __config__ = {
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
         ),
     ),
@@ -433,7 +438,7 @@ __config__ = {
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=4,
         ),
@@ -503,7 +508,7 @@ __config__ = {
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     "1tb-2gb-i4i-native-s3": JobConfig(
-        # 492s, https://wandb.ai/raysort/raysort/runs/pjve8jyc
+        # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
         cluster=dict(
             instance_count=10,
             instance_type=i4i_2xl,
@@ -513,8 +518,82 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 20 nodes
+    # ------------------------------------------------------------
+    "2tb-2gb-i4i-native-s3": JobConfig(
+        # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        cluster=dict(
+            instance_count=20,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 40 nodes
+    # ------------------------------------------------------------
+    "4tb-2gb-i4i-native-s3": JobConfig(
+        # 536s, https://wandb.ai/raysort/raysort/runs/14xr10t2
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    "20tb-2gb-i4i-native-s3": JobConfig(
+        # 2901s, https://wandb.ai/raysort/raysort/runs/q0w17xxi
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=20000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 100 nodes
+    # ------------------------------------------------------------
+    "10tb-2gb-i4i-native-s3": JobConfig(
+        # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -533,7 +612,7 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
@@ -550,7 +629,7 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=1,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
@@ -567,7 +646,7 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
@@ -590,7 +669,7 @@ __config__ = {
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
@@ -608,7 +687,7 @@ __config__ = {
             **get_steps(),
             total_gb=10000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
@@ -626,7 +705,7 @@ __config__ = {
             **get_steps(),
             total_gb=20000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
@@ -643,7 +722,7 @@ __config__ = {
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
@@ -664,7 +743,7 @@ __config__ = {
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
@@ -682,7 +761,7 @@ __config__ = {
             **get_steps(),
             total_gb=20000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
