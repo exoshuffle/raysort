@@ -42,7 +42,7 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
-    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED 
+    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
@@ -804,7 +804,6 @@ __config__ = {
             input_part_gb=2,
         ),
     ),
-
 }
 
 

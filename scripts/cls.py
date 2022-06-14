@@ -16,7 +16,7 @@ import click
 import ray
 
 from raysort import config
-from raysort.typing import InstanceLifetime 
+from raysort.typing import InstanceLifetime
 
 cfg, cfg_name = config.get()
 
