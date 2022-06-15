@@ -5,6 +5,7 @@ max_workers: 10
 provider:
     type: aws
     region: us-west-2
+    cache_stopped_nodes: False
 
 auth:
     ssh_user: ubuntu
