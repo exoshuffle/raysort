@@ -9,7 +9,12 @@ from util import run
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 AUTOSCALER_DIR = SCRIPT_DIR / "config" / "autoscaler"
 AUTOSCALER_CONFIG_TEMPLATE_PATH = AUTOSCALER_DIR / "raysort-cluster-template.yaml"
-VARIABLES_TO_REPLACE = ["${CLUSTER_NAME}", "${S3_BUCKET}", "${CONFIG}", "${WANDB_API_KEY}"]
+VARIABLES_TO_REPLACE = [
+    "${CLUSTER_NAME}",
+    "${S3_BUCKET}",
+    "${CONFIG}",
+    "${WANDB_API_KEY}",
+]
 
 
 def get_or_create_autoscaler_config(cluster_name: str) -> pathlib.Path:
