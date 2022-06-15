@@ -20,3 +20,5 @@ wandb
 .terraform*
 **/_*.yml
 **/terraform/_*
+
+**/autoscaler/_*
