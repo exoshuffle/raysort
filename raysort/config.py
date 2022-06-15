@@ -50,6 +50,8 @@ class ClusterConfig:
     def __post_init__(self):
         if self.ebs:
             self.instance_type.disk_count += 1
+        if cfg.cluster.instance_lifetime == InstanceLifetime.SPOT:
+            cfg.cluster.name = cfg.cluster.name + "-spot"
 
 
 @dataclass
@@ -197,6 +199,14 @@ def get_steps(steps: List[AppStep] = []) -> Dict:
 #     VM Types
 # ------------------------------------------------------------
 
+d3_xl = InstanceType(
+    name="d3.xlarge",
+    cpu=4,
+    memory_gib=32,
+    disk_count=3,
+    hdd=True,
+)
+
 d3_2xl = InstanceType(
     name="d3.2xlarge",
     cpu=8,
@@ -239,28 +249,6 @@ local_cluster = dict(
         memory_gib=0,  # not used
     ),
     local=True,
-)
-
-r6i_2xl = InstanceType(
-    name="r6i.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-)
-
-d3_xl = InstanceType(
-    name="d3.xlarge",
-    cpu=4,
-    memory_gib=32,
-    disk_count=3,
-    hdd=True,
-)
-
-d3_2xl = InstanceType(
-    name="d3.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-    disk_count=6,
-    hdd=True,
 )
 
 local_base_app_config = dict(

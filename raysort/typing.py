@@ -37,5 +37,5 @@ class SpillingMode(enum.Enum):
 
 
 class InstanceLifetime(enum.Enum):
-    SPOT = "spot"
     DEDICATED = "dedicated"
+    SPOT = "spot"
