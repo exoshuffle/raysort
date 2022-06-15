@@ -46,7 +46,7 @@ setup_commands:
     RAY_STORAGE=s3://${S3_BUCKET}
     S3_BUCKET=${S3_BUCKET}
     CONFIG=${CONFIG}
-    # WANDB_API_KEY=YOUR_WANDB_API_KEY
+    WANDB_API_KEY=${WANDB_API_KEY}
     ' >> ~/.bashrc
   # Sync workdir
   - rsync -a ~/workdir/ ~/raysort
