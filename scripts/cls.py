@@ -16,6 +16,7 @@ import click
 import ray
 
 from raysort import config
+from raysort.typing import InstanceLifetime
 
 cfg, cfg_name = config.get()
 
@@ -27,7 +28,11 @@ SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 ANSIBLE_DIR = SCRIPT_DIR / "config" / "ansible"
 HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
 TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
-TERRAFORM_TEMPLATE_DIR = "aws-template"
+TERRAFORM_TEMPLATE_DIR = (
+    "aws-template"
+    if cfg.cluster.instance_lifetime == "DEDICATED"
+    else "aws-spot-template"
+)
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
 GRAFANA_SERVER_PORT = 3000

@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass, field, InitVar
 from typing import Dict, Optional, List, Tuple
 
-from raysort.typing import AppStep, SpillingMode
+from raysort.typing import AppStep, SpillingMode, InstanceLifetime
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME")
 S3_BUCKET = os.getenv("S3_BUCKET")
@@ -42,6 +42,7 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
+    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
@@ -49,6 +50,8 @@ class ClusterConfig:
     def __post_init__(self):
         if self.ebs:
             self.instance_type.disk_count += 1
+        if cfg.cluster.instance_lifetime == InstanceLifetime.SPOT:
+            cfg.cluster.name = cfg.cluster.name + "-spot"
 
 
 @dataclass
@@ -195,6 +198,14 @@ def get_steps(steps: List[AppStep] = []) -> Dict:
 # ------------------------------------------------------------
 #     VM Types
 # ------------------------------------------------------------
+
+d3_xl = InstanceType(
+    name="d3.xlarge",
+    cpu=4,
+    memory_gib=32,
+    disk_count=3,
+    hdd=True,
+)
 
 d3_2xl = InstanceType(
     name="d3.2xlarge",
@@ -741,6 +752,44 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     Spot instances 20 nodes
+    # ------------------------------------------------------------
+    "600gb-1gb-spot-s3": JobConfig(
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+            instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(
+            max_fused_object_count=3,
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=600,
+            input_part_gb=1,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     Spot version of i3.2xl 10 nodes 1TB
+    # ------------------------------------------------------------
+    "1tb-2gb-i3-spot": JobConfig(
+        # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+            instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
         ),
     ),
 }
