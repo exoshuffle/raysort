@@ -5,7 +5,7 @@ from typing import Dict, Optional, List, Tuple
 
 from raysort.typing import AppStep, SpillingMode, InstanceLifetime
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME")
+CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
 S3_BUCKET = os.getenv("S3_BUCKET")
 
 CONFIG_NAME_ENV_VAR = "CONFIG"
