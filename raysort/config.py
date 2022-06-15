@@ -50,8 +50,8 @@ class ClusterConfig:
     def __post_init__(self):
         if self.ebs:
             self.instance_type.disk_count += 1
-        if cfg.cluster.instance_lifetime == InstanceLifetime.SPOT:
-            cfg.cluster.name = cfg.cluster.name + "-spot"
+        if self.instance_lifetime == InstanceLifetime.SPOT:
+            self.name += "-spot"
 
 
 @dataclass
@@ -657,7 +657,7 @@ __config__ = {
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
         ),
     ),
