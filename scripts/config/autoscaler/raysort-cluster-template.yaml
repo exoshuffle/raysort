@@ -1,4 +1,4 @@
-cluster_name: raysort-cluster-isaac
+cluster_name: ${CLUSTER_NAME}-autoscaler
 
 max_workers: 10
 
@@ -43,11 +43,9 @@ setup_commands:
   # Set environment variables
   - >-
     echo 'export
-    RAY_STORAGE=s3://raysort-isaac
-    S3_BUCKET=raysort-isaac
-    CLUSTER_NAME=raysort-isaac
-    CONFIG=1tb-1gb-s3-native-s3
-    # WANDB_API_KEY=YOUR_WANDB_API_KEY
+    RAY_STORAGE=s3://${S3_BUCKET}
+    S3_BUCKET=${S3_BUCKET}
+    CONFIG=${CONFIG}
     ' >> ~/.bashrc
   # Sync workdir
   - rsync -a ~/workdir/ ~/raysort
