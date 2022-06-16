@@ -10,8 +10,8 @@ import intervaltree
 import numpy as np
 import pandas as pd
 import ray
-
 import wandb
+
 from raysort import constants, file_utils, logging_utils, s3_utils
 from raysort.typing import *
 

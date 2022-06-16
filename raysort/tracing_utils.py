@@ -14,8 +14,8 @@ import ray
 import requests
 import yaml
 from ray.util import metrics
-
 import wandb
+
 from raysort import constants, logging_utils
 from raysort.config import JobConfig
 
