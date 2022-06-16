@@ -25,7 +25,7 @@ def run_on_all_workers(
 ) -> List[ray.ObjectRef]:
     opts = [node_res(node) for node in cfg.worker_ips]
     if include_head:
-        opts.append({"resources": {"head": 1}})
+        opts.append({"resources": {"head": 1e-3}})
     return [fn.options(**opt).remote(cfg) for opt in opts]
 
 
