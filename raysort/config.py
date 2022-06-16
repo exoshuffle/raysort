@@ -112,6 +112,7 @@ class AppConfig:
 
     free_scheduling: bool = False
     use_put: bool = False
+    use_yield: bool = False
 
     simple_shuffle: bool = False
     riffle: bool = False
@@ -659,6 +660,7 @@ __config__ = {
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
+            reduce_parallelism_multiplier=1,
         ),
     ),
     "10tb-2gb-s3-native-s3": JobConfig(
