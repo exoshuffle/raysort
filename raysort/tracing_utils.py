@@ -9,15 +9,14 @@ import re
 import shutil
 import time
 from typing import Callable, Dict, Iterable
-import yaml
 
 import ray
-from ray.util import metrics
 import requests
-import wandb
+import yaml
+from ray.util import metrics
 
-from raysort import constants
-from raysort import logging_utils
+import wandb
+from raysort import constants, logging_utils
 from raysort.config import JobConfig
 
 Span = collections.namedtuple(
