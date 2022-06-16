@@ -12,9 +12,9 @@ from typing import Callable, Dict, Iterable
 
 import ray
 import requests
+import wandb
 import yaml
 from ray.util import metrics
-import wandb
 
 from raysort import constants, logging_utils
 from raysort.config import JobConfig
