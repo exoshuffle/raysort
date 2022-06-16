@@ -1,6 +1,7 @@
 import collections
 import dataclasses
 import functools
+import inspect
 import json
 import logging
 import os
@@ -32,38 +33,45 @@ def timeit(
     log_to_wandb: bool = False,
 ):
     def decorator(f):
-        @functools.wraps(f)
-        def wrapped_f(*args, **kwargs):
-            tracker = get_progress_tracker()
-            tracker.inc.remote(
-                f"{event}_in_progress",
-                echo=report_in_progress,
-            )
-            if event == "sort":
-                tracker.record_start_time.remote()
-            try:
-                begin = time.time()
-                ret = f(*args, **kwargs)
-                duration = time.time() - begin
-                tracker.record_span.remote(
-                    Span(
-                        begin,
-                        duration,
-                        event,
-                        ray.util.get_node_ip_address(),
-                        os.getpid(),
-                    ),
-                    log_to_wandb=log_to_wandb,
-                )
-                tracker.inc.remote(
-                    f"{event}_completed",
-                    echo=report_completed,
-                )
-                return ret
-            finally:
-                tracker.dec.remote(f"{event}_in_progress")
+        def factory(execute):
+            @functools.wraps(f)
+            def wrapped_fn(*args, **kwargs):
+                tracker = get_progress_tracker()
+                if event == "sort":
+                    tracker.record_start_time.remote()
+                try:
+                    begin = time.time()
+                    ret = execute(*args, **kwargs)
+                    duration = time.time() - begin
+                    tracker.record_span.remote(
+                        Span(
+                            begin,
+                            duration,
+                            event,
+                            ray.util.get_node_ip_address(),
+                            os.getpid(),
+                        ),
+                        log_to_wandb=log_to_wandb,
+                    )
+                    return ret
+                finally:
+                    tracker.inc.remote(
+                        f"{event}_completed",
+                        echo=report_completed,
+                    )
 
-        return wrapped_f
+            return wrapped_fn
+
+        def execute_generator(*args, **kwargs):
+            for val in f(*args, **kwargs):
+                yield val
+
+        def execute_fn(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return factory(
+            execute_generator if inspect.isgeneratorfunction(f) else execute_fn
+        )
 
     return decorator
 
