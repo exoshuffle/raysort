@@ -2,18 +2,18 @@
 import json
 import os
 import pathlib
-import psutil
-import signal
 import shutil
+import signal
 import string
 import subprocess
 import time
 from typing import Dict, List, Tuple, Union
-import yaml
 
 import boto3
 import click
+import psutil
 import ray
+import yaml
 
 from raysort import config
 from raysort.typing import InstanceLifetime

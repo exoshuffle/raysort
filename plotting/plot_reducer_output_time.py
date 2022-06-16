@@ -1,9 +1,11 @@
 import json
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+
 
 # Read in json file of timestamps for map and reduce tasks
 def get_json_input(fname):

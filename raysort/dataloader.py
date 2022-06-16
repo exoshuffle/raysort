@@ -5,11 +5,8 @@ import numpy as np
 import ray
 
 from raysort import config
-from raysort import ray_utils
-from raysort import sortlib
-from raysort import sort_utils
-from raysort import tracing_utils
 from raysort import main as sort_main
+from raysort import ray_utils, sort_utils, sortlib, tracing_utils
 from raysort.config import AppConfig
 from raysort.typing import PartId, PartInfo
 

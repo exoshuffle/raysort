@@ -47,8 +47,9 @@ sns.set_style("ticks")
 
 
 def lighten(c, amount=0.75):
-    import matplotlib.colors as mc
     import colorsys
+
+    import matplotlib.colors as mc
 
     c = colorsys.rgb_to_hls(*mc.to_rgb(c))
     return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])

@@ -2,14 +2,13 @@ import io
 import os
 from typing import Iterable, Optional
 
-import botocore
 import boto3
-from boto3.s3 import transfer
+import botocore
 import numpy as np
 import ray
+from boto3.s3 import transfer
 
-from raysort import constants
-from raysort import ray_utils
+from raysort import constants, ray_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 

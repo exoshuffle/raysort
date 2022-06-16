@@ -1,9 +1,9 @@
 import math
 import os
-from dataclasses import dataclass, field, InitVar
-from typing import Dict, Optional, List, Tuple
+from dataclasses import InitVar, dataclass, field
+from typing import Dict, List, Optional, Tuple
 
-from raysort.typing import AppStep, SpillingMode, InstanceLifetime
+from raysort.typing import AppStep, InstanceLifetime, SpillingMode
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
 S3_BUCKET = os.getenv("S3_BUCKET")
