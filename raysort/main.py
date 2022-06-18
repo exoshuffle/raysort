@@ -33,6 +33,23 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
     return blocks
 
 
+def mapper_sort_blocks(
+    cfg: AppConfig,
+    bounds: List[int],
+    pinfo: PartInfo,
+) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    start_time = time.time()
+    part = sort_utils.load_partition(cfg, pinfo)
+    assert part.size == cfg.input_part_size, (part.shape, pinfo, cfg)
+    load_duration = time.time() - start_time
+    tracing_utils.record_value("map_load_time", load_duration)
+    sort_fn = (
+        _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
+    )
+    blocks = sort_fn(part, bounds)
+    return part, blocks
+
+
 # Memory usage: input_part_size = 2GB
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
@@ -43,21 +60,28 @@ def mapper(
     bounds: List[int],
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
-    start_time = time.time()
-    part = sort_utils.load_partition(cfg, pinfo)
-    assert part.size == cfg.input_part_size, (part.shape, pinfo, cfg)
-    load_duration = time.time() - start_time
-    tracing_utils.record_value("map_load_time", load_duration)
-    sort_fn = (
-        _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
-    )
-    blocks = sort_fn(part, bounds)
+    part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
     if cfg.use_put:
         ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
     else:
         ret = [part[offset : offset + size] for offset, size in blocks]
     # Return an extra object for tracking task progress.
     return ret + [None]
+
+
+@ray.remote(num_cpus=0)
+@tracing_utils.timeit("map")
+def mapper_yield(
+    cfg: AppConfig,
+    _mapper_id: PartId,
+    bounds: List[int],
+    pinfo: PartInfo,
+) -> List[np.ndarray]:
+    part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
+    for offset, size in blocks:
+        yield part[offset : offset + size]
+    # Return an extra object for tracking task progress.
+    yield None
 
 
 def _dummy_merge(
@@ -103,7 +127,7 @@ def restore_block(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote(num_cpus=0)
 @tracing_utils.timeit("merge")
-def merge_mapper_blocks(
+def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: List[int],
@@ -156,6 +180,34 @@ def merge_mapper_blocks(
     assert len(ret) == len(bounds), (ret, bounds)
     ray_utils.wait(spill_tasks, wait_all=True)
     return ret
+
+
+@ray.remote(num_cpus=0)
+@tracing_utils.timeit("merge")
+def merge_blocks_yield(
+    cfg: AppConfig,
+    _merge_id: PartId,
+    bounds: List[int],
+    *blocks: Tuple[np.ndarray],
+) -> Union[List[PartInfo], List[np.ndarray]]:
+    blocks = list(blocks)
+    if isinstance(blocks[0], ray.ObjectRef):
+        blocks = ray.get(blocks)
+
+    M = len(blocks)
+    total_bytes = sum(b.size for b in blocks)
+    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
+
+    def get_block(i, d):
+        if i >= M or d > 0:
+            return None
+        return blocks[i]
+
+    merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
+    merger = merge_fn(M, get_block, num_records, False, bounds)
+
+    for datachunk in merger:
+        yield datachunk
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -348,7 +400,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(cfg.num_workers):
                 map_blocks = map_results_to_merge[w, :]
                 merge_id = constants.merge_part_ids(w, m)
-                merge_results[w + m * cfg.num_workers, :] = merge_mapper_blocks.options(
+                merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, merge_id, merge_bounds, *map_blocks)
 
@@ -376,6 +428,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         cfg.num_workers, cfg.num_reducers_per_worker
     )
 
+    map_fn = mapper_yield if cfg.use_yield else mapper
+    merge_fn = merge_blocks_yield if cfg.use_yield else merge_blocks
+
     mapper_opt = {"num_returns": cfg.num_workers + 1}
     merger_opt = {"num_returns": cfg.num_reducers_per_worker}
     merge_results = np.empty(
@@ -400,7 +455,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfo = parts[part_id]
             opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
-            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
+            refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs
             ref_recorder.record(
                 refs, lambda i, part_id=part_id: f"map_{part_id:010x}_{i}"
@@ -425,7 +480,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             for w in range(cfg.num_workers):
                 map_blocks = map_results[j * f : (j + 1) * f, w]
                 merge_id = constants.merge_part_ids(w, m)
-                refs = merge_mapper_blocks.options(
+                refs = merge_fn.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
                 merge_results[w, m, :] = refs
