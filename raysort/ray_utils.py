@@ -61,8 +61,8 @@ def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
     return {"resources": {f"node:{node_ip}": 1 / parallelism}}
 
 
-def node_i(cfg: AppConfig, node_i: int, parallelism: int = 1000) -> Dict:
-    return node_res(cfg.worker_ips[node_i % cfg.num_workers], parallelism)
+def node_i(cfg: AppConfig, node_idx: int, parallelism: int = 1000) -> Dict:
+    return node_res(cfg.worker_ips[node_idx % cfg.num_workers], parallelism)
 
 
 def _fail_and_restart_local_node(cfg: AppConfig):
@@ -102,32 +102,40 @@ def _fail_and_restart_remote_node(worker_ip: str):
     stop_cmd = "{python_dir}/ray stop -f".format(python_dir=python_dir)
     ssh = "ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     print("Killing worker node", worker_ip)
-    outs, errs = subprocess.Popen(
+    with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    print("Raylets before kill:", outs)
-    subprocess.Popen(
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets before kill:", out)
+    with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    outs, errs = subprocess.Popen(
+    ) as p:
+        _ = p.communicate()
+    with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    print("Raylets after kill:", outs)
-    subprocess.Popen(
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets after kill:", out)
+    with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=start_cmd),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
+    ) as p:
+        _ = p.communicate()
 
 
 def fail_and_restart_node(cfg: AppConfig):
@@ -159,8 +167,11 @@ def wait(
     if len(ready) == num_returns:
         return ready, not_ready
     logging.warning(
-        f"Only {len(ready)}/{num_returns} tasks ready in {soft_timeout} seconds; "
-        f"tasks hanging: {not_ready}"
+        "Only %d/%d tasks ready in %d seconds; tasks hanging: %s",
+        len(ready),
+        num_returns,
+        soft_timeout,
+        not_ready,
     )
     return wait(
         futures,
@@ -238,7 +249,7 @@ def _get_data_dirs():
 
 def _init_runtime_context(cfg: AppConfig):
     resources = ray.cluster_resources()
-    logging.info(f"Cluster resources: {resources}")
+    logging.info("Cluster resources: %s", resources)
     assert (
         constants.WORKER_RESOURCE in resources
     ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"

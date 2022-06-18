@@ -19,7 +19,7 @@ from raysort import (
     tracing_utils,
 )
 from raysort.config import AppConfig, JobConfig
-from raysort.typing import BlockInfo, PartId, PartInfo, Path, SpillingMode
+from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
 
 
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
@@ -39,7 +39,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 @tracing_utils.timeit("map")
 def mapper(
     cfg: AppConfig,
-    mapper_id: PartId,
+    _mapper_id: PartId,
     bounds: List[int],
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
@@ -239,8 +239,7 @@ def reduce_stage(
                 "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
                 "scheduling_strategy": "SPREAD",
             }
-        else:
-            return ray_utils.node_i(cfg, w)
+        return ray_utils.node_i(cfg, w)
 
     # Submit second-stage reduce tasks.
     reduce_results = np.empty(
@@ -311,7 +310,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
     all_map_results = []
     part_id = 0
-    for round in range(cfg.num_rounds):
+    for rnd in range(cfg.num_rounds):
         # Submit map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
         map_results = np.empty((cfg.num_workers, cfg.map_parallelism), dtype=object)
@@ -325,10 +324,10 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             part_id += 1
         all_map_results.append(map_results)
 
-        if (round + 1) % round_merge_factor == 0:
+        if (rnd + 1) % round_merge_factor == 0:
             # Make sure all merge tasks previous rounds finish.
             num_extra_rounds = (
-                round + 1
+                rnd + 1
             ) // round_merge_factor - cfg.num_concurrent_rounds
             if num_extra_rounds > 0:
                 ray_utils.wait(
@@ -337,15 +336,15 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 )
 
             # Submit merge tasks.
-            merge_start = round - round_merge_factor + 1
-            merge_end = round + 1
+            merge_start = rnd - round_merge_factor + 1
+            merge_end = rnd + 1
             map_results_to_merge = np.concatenate(
                 all_map_results[merge_start:merge_end], axis=1
             )
             # Release map result references.
             for i in range(merge_start, merge_end):
                 all_map_results[i] = []
-            m = round
+            m = rnd
             for w in range(cfg.num_workers):
                 map_blocks = map_results_to_merge[w, :]
                 merge_id = constants.merge_part_ids(w, m)
@@ -388,9 +387,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     all_map_results = []  # For Magnet.
     map_tasks = []
     part_id = 0
-    for round in range(cfg.num_rounds):
+    for rnd in range(cfg.num_rounds):
         # Wait for the previous round of map tasks to finish.
-        num_extra_rounds = round - cfg.num_concurrent_rounds + 1
+        num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
             ray_utils.wait(map_tasks, wait_all=True)
 
@@ -403,14 +402,16 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = part_id % num_map_tasks_per_round
             refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs
-            ref_recorder.record(refs, lambda i: f"map_{part_id:010x}_{i}")
+            ref_recorder.record(
+                refs, lambda i, part_id=part_id: f"map_{part_id:010x}_{i}"
+            )
             part_id += 1
 
         # Keep references to the map tasks but not to map output blocks.
         map_tasks = map_results[:, cfg.num_workers]
 
         # Wait for the previous round of merge tasks to finish.
-        num_extra_rounds = round - cfg.num_concurrent_rounds + 1
+        num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
             ray_utils.wait(
                 merge_results[:, :, 0].flatten(),
@@ -420,7 +421,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         # Submit a new round of merge tasks.
         f = int(np.ceil(num_map_tasks / cfg.merge_parallelism))
         for j in range(cfg.merge_parallelism):
-            m = round * cfg.merge_parallelism + j
+            m = rnd * cfg.merge_parallelism + j
             for w in range(cfg.num_workers):
                 map_blocks = map_results[j * f : (j + 1) * f, w]
                 merge_id = constants.merge_part_ids(w, m)
@@ -428,7 +429,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
                 merge_results[w, m, :] = refs
-                ref_recorder.record(refs, lambda i: f"merge_{merge_id:010x}_{i}")
+                ref_recorder.record(
+                    refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
+                )
 
         ref_recorder.flush()
 
@@ -472,7 +475,7 @@ def sort_main(cfg: AppConfig):
 
 def init(job_cfg: JobConfig, job_cfg_name: str) -> ray.actor.ActorHandle:
     logging_utils.init()
-    logging.info(f"Job config: {job_cfg_name}")
+    logging.info("Job config: %s", job_cfg_name)
     ray_utils.init(job_cfg)
     sort_utils.init(job_cfg.app)
     return tracing_utils.create_progress_tracker(job_cfg)

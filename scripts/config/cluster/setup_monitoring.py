@@ -27,7 +27,7 @@ def main():
     while True:
         cls.sleep(60, "monitoring worker IPs")
         ips = get_ips()
-        logging.info("updated service discovery file with IPs ", ips)
+        logging.info("updated service discovery file with IPs %s", ips)
         with open("/tmp/prometheus/service_discovery.json", "w") as fout:
             fout.write(cls.get_prometheus_sd_content(head_ip, ips))
 

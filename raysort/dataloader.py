@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 import time
 from typing import List
 
@@ -15,7 +16,7 @@ from raysort.typing import PartId, PartInfo
 @tracing_utils.timeit("map")
 def mapper(
     cfg: AppConfig,
-    mapper_id: PartId,
+    _mapper_id: PartId,
     bounds: List[int],
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
@@ -36,14 +37,14 @@ class Reducer:
         self.arrival_times = []
 
     @tracing_utils.timeit("reduce")
-    def consume(self, map_result):
+    def consume(self, _map_result):
         # For fine-grained pipelining
         t = time.time()
         self.arrival_times.append(t)
         tracing_utils.record_value("reduce_arrive", t)
 
     @tracing_utils.timeit("reduce")
-    def consume_and_shuffle(self, *map_results):
+    def consume_and_shuffle(self, *map_results):  # pylint: disable=no-self-use
         # Intra-partition shuffle
         catted = np.concatenate(map_results)
         reshaped = catted.reshape((-1, 100))  # 100 is the number of bytes in a record

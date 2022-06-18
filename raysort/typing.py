@@ -1,5 +1,5 @@
 import enum
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple, Optional, Tuple  # pylint: disable=import-self
 
 ByteCount = int
 PartId = int
