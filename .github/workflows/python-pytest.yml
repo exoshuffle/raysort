@@ -7,7 +7,7 @@ on:
     branches:
       - master
 jobs:
-  test:
+  pytest:
     runs-on: ubuntu-latest
     env:
       S3_BUCKET: raysort-github-ci

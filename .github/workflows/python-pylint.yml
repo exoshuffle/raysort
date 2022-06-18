@@ -1,4 +1,4 @@
-name: Python Unit Tests
+name: Python Linters
 on:
   push:
     branches:
@@ -7,7 +7,7 @@ on:
     branches:
       - master
 jobs:
-  test:
+  pylint:
     runs-on: ubuntu-latest
     env:
       S3_BUCKET: raysort-github-ci
@@ -26,6 +26,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements/worker.txt
           pip install pylint
+
+      - name: Install project package
+        run: |
+          pip install -e .
+          pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 
       - name: Run linter
         run: pylint raysort/**/*.py
