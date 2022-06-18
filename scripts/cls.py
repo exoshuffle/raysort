@@ -356,16 +356,14 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
-    with subprocess.Popen(cmd, shell=True):
-        pass
+    subprocess.Popen(cmd, shell=True)  # pylint: disable=consider-using-with
 
 
 def setup_grafana() -> None:
     cwd = str(SCRIPT_DIR.parent / "raysort/bin/grafana")
     cmd = f"{cwd}/bin/grafana-server"
     free_port(GRAFANA_SERVER_PORT)
-    with subprocess.Popen(cmd, cwd=cwd, shell=True):
-        pass
+    subprocess.Popen(cmd, cwd=cwd, shell=True)  # pylint: disable=consider-using-with
 
 
 # ------------------------------------------------------------
