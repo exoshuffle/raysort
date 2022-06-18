@@ -160,13 +160,15 @@ def generate_part(
             pinfo,
             max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
         )
-    logging.info(f"Generated input {pinfo}")
+    logging.info("Generated input %s", pinfo)
     return pinfo
 
 
 @ray.remote
 def drop_fs_cache(_: AppConfig):
-    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+    subprocess.run(
+        "sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", check=True, shell=True
+    )
     logging.info("Dropped filesystem cache")
 
 
@@ -186,7 +188,7 @@ def generate_input(cfg: AppConfig):
                 )
             )
             offset += size
-    logging.info(f"Generating {len(tasks)} partitions")
+    logging.info("Generating %d partitions", len(tasks))
     parts = ray.get(tasks)
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
@@ -211,10 +213,13 @@ def create_partition(part_size: int) -> np.ndarray:
 
 def _run_valsort(argstr: str):
     proc = subprocess.run(
-        f"{constants.VALSORT_PATH} {argstr}", shell=True, capture_output=True
+        f"{constants.VALSORT_PATH} {argstr}",
+        check=True,
+        shell=True,
+        capture_output=True,
     )
     if proc.returncode != 0:
-        logging.critical("\n" + proc.stderr.decode("ascii"))
+        logging.critical("\n%s", proc.stderr.decode("ascii"))
         raise RuntimeError(f"Validation failed: {argstr}")
 
 
@@ -238,7 +243,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
         os.remove(tmp_path)
     else:
         ret = _validate_part_impl(pinfo.path)
-    logging.info(f"Validated output {pinfo}")
+    logging.info("Validated output %s", pinfo)
     return ret
 
 
@@ -255,7 +260,7 @@ def validate_output(cfg: AppConfig):
             else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
         results.append(validate_part.options(**opt).remote(cfg, pinfo))
-    logging.info(f"Validating {len(results)} partitions")
+    logging.info("Validating %d partitions", len(results))
     results = ray.get(results)
     total = sum(sz for sz, _ in results)
     assert total == cfg.total_data_size, total - cfg.total_data_size

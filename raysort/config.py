@@ -1,3 +1,4 @@
+# pylint: disable=too-many-instance-attributes,use-dict-literal
 import math
 import os
 from dataclasses import InitVar, dataclass, field
@@ -183,7 +184,7 @@ class JobConfig:
         pass
 
 
-def get_steps(steps: List[AppStep] = []) -> Dict:
+def get_steps(steps: Optional[List[AppStep]] = None) -> Dict:
     """
     Return a dictionary of steps to run for AppConfig.
     """
@@ -676,24 +677,6 @@ __config__ = {
         app=dict(
             **get_steps(),
             total_gb=10000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
-        ),
-    ),
-    "10tb-2gb-s3-native-s3": JobConfig(
-        # 2960s, https://wandb.ai/raysort/raysort/runs/1r83qp4x
-        cluster=dict(
-            instance_count=20,
-            instance_type=r6i_2xl,
-        ),
-        system=dict(
-            max_fused_object_count=3,
-            s3_spill=16,
-        ),
-        app=dict(
-            **get_steps(),
-            total_gb=20000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,
