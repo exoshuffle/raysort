@@ -49,8 +49,7 @@ def main():
     # 1. Load the object ref mapping.
     ref_mapping = load_object_ref_mapping()
     # 2. Parse log files on each worker node.
-    node_resources = [r for r in ray.cluster_resources()
-                      if r.startswith("node:")]
+    node_resources = [r for r in ray.cluster_resources() if r.startswith("node:")]
     tasks = [
         parse_logs.options(resources={node: 1e-3}).remote() for node in node_resources
     ]

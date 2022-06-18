@@ -402,7 +402,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = part_id % num_map_tasks_per_round
             refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs
-            ref_recorder.record(refs, lambda i, part_id=part_id: f"map_{part_id:010x}_{i}")
+            ref_recorder.record(
+                refs, lambda i, part_id=part_id: f"map_{part_id:010x}_{i}"
+            )
             part_id += 1
 
         # Keep references to the map tasks but not to map output blocks.
@@ -427,7 +429,9 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
                 merge_results[w, m, :] = refs
-                ref_recorder.record(refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}")
+                ref_recorder.record(
+                    refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
+                )
 
         ref_recorder.flush()
 
