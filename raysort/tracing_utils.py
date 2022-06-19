@@ -39,6 +39,7 @@ def timeit(
                 if event == "sort":
                     tracker.record_start_time.remote()
                 try:
+                    tracker.inc.remote(f"{event}_started")
                     begin = time.time()
                     ret = execute(*args, **kwargs)
                     duration = time.time() - begin
