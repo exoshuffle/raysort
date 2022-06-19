@@ -314,6 +314,14 @@ __config__ = {
             use_put=True,
         ),
     ),
+    "LocalNativeYield": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            use_yield=True,
+        ),
+    ),
     "LocalMagnet": JobConfig(
         cluster=local_cluster,
         system=dict(),
