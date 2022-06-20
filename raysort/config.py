@@ -4,6 +4,8 @@ import os
 from dataclasses import InitVar, dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import ray
+
 from raysort.typing import AppStep, InstanceLifetime, SpillingMode
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
@@ -130,6 +132,8 @@ class AppConfig:
 
     # Runtime Context
     worker_ips: List[str] = field(default_factory=list)
+    worker_ids: List[ray.NodeID] = field(default_factory=list)
+    worker_ip_to_id: Dict[str, ray.NodeID] = field(default_factory=dict)
     data_dirs: List[str] = field(default_factory=list)
 
     def __post_init__(
@@ -519,6 +523,7 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
+            free_scheduling=True,
         ),
     ),
     # ------------------------------------------------------------

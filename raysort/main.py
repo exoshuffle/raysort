@@ -285,32 +285,62 @@ def reduce_stage(
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
-    def get_task_options(w: int) -> Dict:
-        if cfg.free_scheduling:
-            return {
-                "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
-                "scheduling_strategy": "SPREAD",
-            }
-        return ray_utils.node_i(cfg, w)
-
     # Submit second-stage reduce tasks.
     reduce_results = np.empty(
         (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
     )
-    for r in range(cfg.num_reducers_per_worker):
-        # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
-        if r >= cfg.reduce_parallelism:
+    if cfg.free_scheduling:
+        opt = {
+            "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
+            "scheduling_strategy": "SPREAD",
+        }
+        rnd = 0
+
+        def schedule(num_rounds: int) -> int:
+            nonlocal rnd
+            for r in range(num_rounds):
+                if rnd == cfg.num_reducers_per_worker:
+                    return r
+                reduce_results[:, rnd] = [
+                    final_merge.options(**opt).remote(
+                        cfg, w, rnd, *get_reduce_args(w, rnd)
+                    )
+                    for w in range(cfg.num_workers)
+                ]
+                post_reduce_callback(rnd)
+                rnd += 1
+            return num_rounds
+
+        wait_rnd = 0
+        def wait(num_rounds: int) -> None:
+            nonlocal wait_rnd
+            wait_rnd += num_rounds
             ray_utils.wait(
-                reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
+                reduce_results[:, : wait_rnd].flatten(),
                 wait_all=True,
             )
-        reduce_results[:, r] = [
-            final_merge.options(**get_task_options(w)).remote(
-                cfg, w, r, *get_reduce_args(w, r)
-            )
-            for w in range(cfg.num_workers)
-        ]
-        post_reduce_callback(r)
+
+        schedule(cfg.reduce_parallelism * 2)
+        while True:
+            wait(cfg.reduce_parallelism)
+            if schedule(cfg.reduce_parallelism) == 0:
+                break
+
+    else:
+        for r in range(cfg.num_reducers_per_worker):
+            # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
+            if r >= cfg.reduce_parallelism:
+                ray_utils.wait(
+                    reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
+                    wait_all=True,
+                )
+            reduce_results[:, r] = [
+                final_merge.options(**ray_utils.node_i(cfg, w)).remote(
+                    cfg, w, r, *get_reduce_args(w, r)
+                )
+                for w in range(cfg.num_workers)
+            ]
+            post_reduce_callback(r)
 
     return ray.get(reduce_results.flatten().tolist())
 
