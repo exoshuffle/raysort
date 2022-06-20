@@ -58,11 +58,6 @@ def current_node_aff() -> Dict:
     return node_aff(ray.get_runtime_context().node_id)
 
 
-def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
-    assert node_ip is not None, node_ip
-    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
-
-
 def node_ip_aff(cfg: AppConfig, node_ip: str) -> Dict:
     assert node_ip is not None, node_ip
     return node_aff(cfg.worker_ip_to_id[node_ip])
@@ -263,6 +258,11 @@ def _get_data_dirs():
     return [tempfile.gettempdir()]
 
 
+@ray.remote
+def get_node_id() -> ray.NodeID:
+    return ray.get_runtime_context().node_id
+
+
 def _init_runtime_context(cfg: AppConfig):
     resources = ray.cluster_resources()
     logging.info("Cluster resources: %s", resources)
@@ -277,7 +277,13 @@ def _init_runtime_context(cfg: AppConfig):
         if r.startswith("node:") and r != head_node_str
     ]
     assert cfg.num_workers == len(cfg.worker_ips), cfg
-    # TODO(@lsf) schedule one task on each node to get node_id, then fill worker_ids and worker_ip_to_id
+    cfg.worker_ids = ray.get(
+        [
+            get_node_id.options(resources={f"node:{node_ip}": 1e-3}).remote()
+            for node_ip in cfg.worker_ips
+        ]
+    )
+    cfg.worker_ip_to_id = dict(zip(cfg.worker_ips, cfg.worker_ids))
     cfg.data_dirs = _get_data_dirs()
 
 

@@ -1,4 +1,3 @@
-# pylint: disable=protected-access
 import time
 from typing import List
 
@@ -67,7 +66,7 @@ def sort(cfg: AppConfig):
         last_map = min(cfg.num_mappers, map_round + map_scheduled)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )
@@ -120,7 +119,7 @@ def sort_partial_streaming(cfg: AppConfig):
         last_map = min(cfg.num_mappers, map_round + map_scheduled)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )
@@ -172,7 +171,7 @@ def sort_streaming(cfg: AppConfig):
         )
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id - map_scheduled, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )
