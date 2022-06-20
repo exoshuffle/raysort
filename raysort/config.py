@@ -523,7 +523,7 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
-            free_scheduling=True,
+            # free_scheduling=True,
         ),
     ),
     # ------------------------------------------------------------
