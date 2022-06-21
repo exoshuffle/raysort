@@ -269,9 +269,9 @@ def get_boundaries(
     return map_bounds, merge_bounds
 
 
-def _get_node_res(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
+def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
     if pinfo.node:
-        return ray_utils.node_res(pinfo.node)
+        return ray_utils.node_ip_aff(cfg, pinfo.node)
     return ray_utils.node_i(cfg, part_id)
 
 
@@ -285,32 +285,63 @@ def reduce_stage(
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
-    def get_task_options(w: int) -> Dict:
-        if cfg.free_scheduling:
-            return {
-                "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
-                "scheduling_strategy": "SPREAD",
-            }
-        return ray_utils.node_i(cfg, w)
-
     # Submit second-stage reduce tasks.
     reduce_results = np.empty(
         (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
     )
-    for r in range(cfg.num_reducers_per_worker):
-        # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
-        if r >= cfg.reduce_parallelism:
+    if cfg.free_scheduling:
+        opt = {
+            "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
+            "scheduling_strategy": "SPREAD",
+        }
+        rnd = 0
+
+        def schedule(num_rounds: int) -> int:
+            nonlocal rnd
+            for r in range(num_rounds):
+                if rnd == cfg.num_reducers_per_worker:
+                    return r
+                reduce_results[:, rnd] = [
+                    final_merge.options(**opt).remote(
+                        cfg, w, rnd, *get_reduce_args(w, rnd)
+                    )
+                    for w in range(cfg.num_workers)
+                ]
+                post_reduce_callback(rnd)
+                rnd += 1
+            return num_rounds
+
+        wait_rnd = 0
+
+        def wait(num_rounds: int) -> None:
+            nonlocal wait_rnd
+            wait_rnd += num_rounds
             ray_utils.wait(
-                reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
+                reduce_results[:, :wait_rnd].flatten(),
                 wait_all=True,
             )
-        reduce_results[:, r] = [
-            final_merge.options(**get_task_options(w)).remote(
-                cfg, w, r, *get_reduce_args(w, r)
-            )
-            for w in range(cfg.num_workers)
-        ]
-        post_reduce_callback(r)
+
+        schedule(cfg.reduce_parallelism * 2)
+        while True:
+            wait(cfg.reduce_parallelism)
+            if schedule(cfg.reduce_parallelism) == 0:
+                break
+
+    else:
+        for r in range(cfg.num_reducers_per_worker):
+            # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
+            if r >= cfg.reduce_parallelism:
+                ray_utils.wait(
+                    reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
+                    wait_all=True,
+                )
+            reduce_results[:, r] = [
+                final_merge.options(**ray_utils.node_i(cfg, w)).remote(
+                    cfg, w, r, *get_reduce_args(w, r)
+                )
+                for w in range(cfg.num_workers)
+            ]
+            post_reduce_callback(r)
 
     return ray.get(reduce_results.flatten().tolist())
 
@@ -324,7 +355,7 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
     for part_id in range(cfg.num_mappers):
         pinfo = parts[part_id]
-        opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
+        opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
         map_results[part_id, :] = mapper.options(**opt).remote(
             cfg, part_id, bounds, pinfo
         )[: cfg.num_reducers]
@@ -368,7 +399,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((cfg.num_workers, cfg.map_parallelism), dtype=object)
         for i in range(num_map_tasks):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
             map_results[i % cfg.num_workers, i // cfg.num_workers] = mapper.options(
                 **opt
@@ -453,7 +484,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
             refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs

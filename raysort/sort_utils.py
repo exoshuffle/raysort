@@ -85,7 +85,7 @@ def make_data_dirs(cfg: AppConfig):
 
 
 def init(cfg: AppConfig):
-    ray.get(ray_utils.run_on_all_workers(cfg, make_data_dirs, include_head=True))
+    ray.get(ray_utils.run_on_all_workers(cfg, make_data_dirs, include_current=True))
     logging.info("Created data directories on all nodes")
 
 
@@ -109,7 +109,7 @@ def part_info(
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
-    node = ray.util.get_node_ip_address()
+    node = cfg.worker_ips[part_id % cfg.num_workers]
     return PartInfo(node, None, filepath)
 
 
@@ -255,7 +255,7 @@ def validate_output(cfg: AppConfig):
     results = []
     for pinfo in parts:
         opt = (
-            ray_utils.node_res(pinfo.node)
+            ray_utils.node_ip_aff(cfg, pinfo.node)
             if pinfo.node
             else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )

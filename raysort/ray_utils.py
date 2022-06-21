@@ -21,11 +21,13 @@ GiB = MiB * 1024
 
 
 def run_on_all_workers(
-    cfg: AppConfig, fn: ray.remote_function.RemoteFunction, include_head: bool = False
+    cfg: AppConfig,
+    fn: ray.remote_function.RemoteFunction,
+    include_current: bool = False,
 ) -> List[ray.ObjectRef]:
-    opts = [node_res(node) for node in cfg.worker_ips]
-    if include_head:
-        opts.append({"resources": {"head": 1e-3}})
+    opts = [node_aff(node) for node in cfg.worker_ids]
+    if include_current:
+        opts.append(current_node_aff())
     return [fn.options(**opt).remote(cfg) for opt in opts]
 
 
@@ -48,21 +50,30 @@ def remote(fn: Callable) -> RemoteFunction:
     """
     Return a remote function that runs on the current node with num_cpus=0.
     """
-    opt = dict(num_cpus=0, **current_node_res())
+    opt = dict(num_cpus=0, **current_node_aff())
     return ray.remote(**opt)(fn)
 
 
-def current_node_res(parallelism: int = 1000) -> Dict:
-    return node_res(ray.util.get_node_ip_address(), parallelism)
+def current_node_aff() -> Dict:
+    return node_aff(ray.get_runtime_context().node_id)
 
 
-def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
+def node_ip_aff(cfg: AppConfig, node_ip: str) -> Dict:
     assert node_ip is not None, node_ip
-    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+    return node_aff(cfg.worker_ip_to_id[node_ip])
 
 
-def node_i(cfg: AppConfig, node_idx: int, parallelism: int = 1000) -> Dict:
-    return node_res(cfg.worker_ips[node_idx % cfg.num_workers], parallelism)
+def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> Dict:
+    return {
+        "scheduling_strategy": ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+            node_id=node_id,
+            soft=soft,
+        )
+    }
+
+
+def node_i(cfg: AppConfig, node_idx: int) -> Dict:
+    return node_aff(cfg.worker_ids[node_idx % cfg.num_workers])
 
 
 def _fail_and_restart_local_node(cfg: AppConfig):
@@ -247,6 +258,11 @@ def _get_data_dirs():
     return [tempfile.gettempdir()]
 
 
+@ray.remote
+def get_node_id() -> ray.NodeID:
+    return ray.get_runtime_context().node_id
+
+
 def _init_runtime_context(cfg: AppConfig):
     resources = ray.cluster_resources()
     logging.info("Cluster resources: %s", resources)
@@ -261,6 +277,13 @@ def _init_runtime_context(cfg: AppConfig):
         if r.startswith("node:") and r != head_node_str
     ]
     assert cfg.num_workers == len(cfg.worker_ips), cfg
+    cfg.worker_ids = ray.get(
+        [
+            get_node_id.options(resources={f"node:{node_ip}": 1e-3}).remote()
+            for node_ip in cfg.worker_ips
+        ]
+    )
+    cfg.worker_ip_to_id = dict(zip(cfg.worker_ips, cfg.worker_ids))
     cfg.data_dirs = _get_data_dirs()
 
 
