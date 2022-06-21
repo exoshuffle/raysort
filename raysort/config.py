@@ -599,6 +599,22 @@ __config__ = {
             reduce_parallelism_multiplier=1,
         ),
     ),
+    "100tb-2gb-i4i-native-s3": JobConfig(
+        # TODO(@lsf)
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=100000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
