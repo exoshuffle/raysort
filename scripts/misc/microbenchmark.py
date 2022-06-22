@@ -8,8 +8,7 @@ import numpy as np
 import ray
 import tqdm
 
-from raysort import logging_utils
-from raysort import tracing_utils
+from raysort import logging_utils, tracing_utils
 
 
 def get_args(*args, **kwargs):

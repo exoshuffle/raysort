@@ -5,11 +5,8 @@ import numpy as np
 import ray
 
 from raysort import config
-from raysort import ray_utils
-from raysort import sortlib
-from raysort import sort_utils
-from raysort import tracing_utils
 from raysort import main as sort_main
+from raysort import ray_utils, sort_utils, sortlib, tracing_utils
 from raysort.config import AppConfig
 from raysort.typing import PartId, PartInfo
 
@@ -18,7 +15,7 @@ from raysort.typing import PartId, PartInfo
 @tracing_utils.timeit("map")
 def mapper(
     cfg: AppConfig,
-    mapper_id: PartId,
+    _mapper_id: PartId,
     bounds: List[int],
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
@@ -39,14 +36,14 @@ class Reducer:
         self.arrival_times = []
 
     @tracing_utils.timeit("reduce")
-    def consume(self, map_result):
+    def consume(self, _map_result):
         # For fine-grained pipelining
         t = time.time()
         self.arrival_times.append(t)
         tracing_utils.record_value("reduce_arrive", t)
 
     @tracing_utils.timeit("reduce")
-    def consume_and_shuffle(self, *map_results):
+    def consume_and_shuffle(self, *map_results):  # pylint: disable=no-self-use
         # Intra-partition shuffle
         catted = np.concatenate(map_results)
         reshaped = catted.reshape((-1, 100))  # 100 is the number of bytes in a record
@@ -69,7 +66,7 @@ def sort(cfg: AppConfig):
         last_map = min(cfg.num_mappers, map_round + map_scheduled)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )
@@ -122,7 +119,7 @@ def sort_partial_streaming(cfg: AppConfig):
         last_map = min(cfg.num_mappers, map_round + map_scheduled)
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )
@@ -174,7 +171,7 @@ def sort_streaming(cfg: AppConfig):
         )
         for part_id in range(map_scheduled, last_map):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **sort_main._get_node_res(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **sort_main.get_node_aff(cfg, pinfo, part_id))
             all_map_out[part_id - map_scheduled, :] = mapper.options(**opt).remote(
                 cfg, part_id, bounds, pinfo
             )

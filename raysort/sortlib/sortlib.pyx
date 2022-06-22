@@ -11,6 +11,7 @@ from typing import Callable, Iterable, List, Tuple, Union
 
 import numpy as np
 
+
 cdef extern from "src/csortlib.h" namespace "csortlib":
     const size_t HEADER_SIZE
     const size_t RECORD_SIZE

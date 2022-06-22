@@ -2,14 +2,13 @@ import io
 import os
 from typing import Iterable, Optional
 
-import botocore
 import boto3
-from boto3.s3 import transfer
+import botocore
 import numpy as np
 import ray
+from boto3.s3 import transfer
 
-from raysort import constants
-from raysort import ray_utils
+from raysort import constants, ray_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
@@ -44,14 +43,14 @@ def download_s3(
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if dst:
         s3().download_file(pinfo.bucket, pinfo.path, dst, Config=config)
-        return
+        return None
     ret = io.BytesIO()
     s3().download_fileobj(pinfo.bucket, pinfo.path, ret, Config=config)
     return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
 
 
 def upload_s3_buffer(
-    cfg: AppConfig, data: np.ndarray, pinfo: PartInfo, **kwargs
+    _cfg: AppConfig, data: np.ndarray, pinfo: PartInfo, **kwargs
 ) -> None:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     # TODO: avoid copying

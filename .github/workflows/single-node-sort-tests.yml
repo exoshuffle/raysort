@@ -66,6 +66,11 @@ jobs:
           CONFIG: LocalNativePut
         run: python raysort/main.py
 
+      - name: 1GB Ray native shuffle with generator tasks
+        env:
+          CONFIG: LocalNativeYield
+        run: python raysort/main.py
+
       - name: 1GB Ray native shuffle, Magnet version
         env:
           CONFIG: LocalMagnet

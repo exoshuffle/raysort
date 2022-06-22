@@ -9,14 +9,9 @@ from typing import Iterable, List, Optional, Tuple
 import numpy as np
 import ray
 
-from raysort import constants
-from raysort import logging_utils
-from raysort import ray_utils
-from raysort import s3_utils
-from raysort import tracing_utils
+from raysort import constants, logging_utils, ray_utils, s3_utils, tracing_utils
 from raysort.config import AppConfig
 from raysort.typing import PartId, PartInfo, Path, RecordCount, SpillingMode
-
 
 # ------------------------------------------------------------
 #     Loading and Saving Partitions
@@ -90,7 +85,7 @@ def make_data_dirs(cfg: AppConfig):
 
 
 def init(cfg: AppConfig):
-    ray.get(ray_utils.run_on_all_workers(cfg, make_data_dirs, include_head=True))
+    ray.get(ray_utils.run_on_all_workers(cfg, make_data_dirs, include_current=True))
     logging.info("Created data directories on all nodes")
 
 
@@ -114,7 +109,7 @@ def part_info(
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
-    node = ray.util.get_node_ip_address()
+    node = cfg.worker_ips[part_id % cfg.num_workers]
     return PartInfo(node, None, filepath)
 
 
@@ -165,13 +160,15 @@ def generate_part(
             pinfo,
             max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
         )
-    logging.info(f"Generated input {pinfo}")
+    logging.info("Generated input %s", pinfo)
     return pinfo
 
 
 @ray.remote
 def drop_fs_cache(_: AppConfig):
-    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+    subprocess.run(
+        "sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", check=True, shell=True
+    )
     logging.info("Dropped filesystem cache")
 
 
@@ -191,7 +188,7 @@ def generate_input(cfg: AppConfig):
                 )
             )
             offset += size
-    logging.info(f"Generating {len(tasks)} partitions")
+    logging.info("Generating %d partitions", len(tasks))
     parts = ray.get(tasks)
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
@@ -216,10 +213,13 @@ def create_partition(part_size: int) -> np.ndarray:
 
 def _run_valsort(argstr: str):
     proc = subprocess.run(
-        f"{constants.VALSORT_PATH} {argstr}", shell=True, capture_output=True
+        f"{constants.VALSORT_PATH} {argstr}",
+        check=True,
+        shell=True,
+        capture_output=True,
     )
     if proc.returncode != 0:
-        logging.critical("\n" + proc.stderr.decode("ascii"))
+        logging.critical("\n%s", proc.stderr.decode("ascii"))
         raise RuntimeError(f"Validation failed: {argstr}")
 
 
@@ -243,7 +243,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
         os.remove(tmp_path)
     else:
         ret = _validate_part_impl(pinfo.path)
-    logging.info(f"Validated output {pinfo}")
+    logging.info("Validated output %s", pinfo)
     return ret
 
 
@@ -255,12 +255,12 @@ def validate_output(cfg: AppConfig):
     results = []
     for pinfo in parts:
         opt = (
-            ray_utils.node_res(pinfo.node)
+            ray_utils.node_ip_aff(cfg, pinfo.node)
             if pinfo.node
             else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
         results.append(validate_part.options(**opt).remote(cfg, pinfo))
-    logging.info(f"Validating {len(results)} partitions")
+    logging.info("Validating %d partitions", len(results))
     results = ray.get(results)
     total = sum(sz for sz, _ in results)
     assert total == cfg.total_data_size, total - cfg.total_data_size

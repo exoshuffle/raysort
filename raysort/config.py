@@ -1,9 +1,12 @@
+# pylint: disable=too-many-instance-attributes,use-dict-literal
 import math
 import os
-from dataclasses import dataclass, field, InitVar
-from typing import Dict, Optional, List, Tuple
+from dataclasses import InitVar, dataclass, field
+from typing import Dict, List, Optional, Tuple
 
-from raysort.typing import AppStep, SpillingMode, InstanceLifetime
+import ray
+
+from raysort.typing import AppStep, InstanceLifetime, SpillingMode
 
 CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
 S3_BUCKET = os.getenv("S3_BUCKET")
@@ -112,6 +115,7 @@ class AppConfig:
 
     free_scheduling: bool = False
     use_put: bool = False
+    use_yield: bool = False
 
     simple_shuffle: bool = False
     riffle: bool = False
@@ -128,6 +132,8 @@ class AppConfig:
 
     # Runtime Context
     worker_ips: List[str] = field(default_factory=list)
+    worker_ids: List[ray.NodeID] = field(default_factory=list)
+    worker_ip_to_id: Dict[str, ray.NodeID] = field(default_factory=dict)
     data_dirs: List[str] = field(default_factory=list)
 
     def __post_init__(
@@ -182,7 +188,7 @@ class JobConfig:
         pass
 
 
-def get_steps(steps: List[AppStep] = []) -> Dict:
+def get_steps(steps: Optional[List[AppStep]] = None) -> Dict:
     """
     Return a dictionary of steps to run for AppConfig.
     """
@@ -310,6 +316,14 @@ __config__ = {
         app=dict(
             **local_app_config,
             use_put=True,
+        ),
+    ),
+    "LocalNativeYield": JobConfig(
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            use_yield=True,
         ),
     ),
     "LocalMagnet": JobConfig(
@@ -509,6 +523,7 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
+            # free_scheduling=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -578,6 +593,22 @@ __config__ = {
         app=dict(
             **get_steps(),
             total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    "100tb-2gb-i4i-native-s3": JobConfig(
+        # TODO(@lsf)
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=100000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
@@ -659,6 +690,7 @@ __config__ = {
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
+            reduce_parallelism_multiplier=1,
         ),
     ),
     "10tb-2gb-s3-native-s3": JobConfig(
@@ -674,24 +706,6 @@ __config__ = {
         app=dict(
             **get_steps(),
             total_gb=10000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
-        ),
-    ),
-    "10tb-2gb-s3-native-s3": JobConfig(
-        # 2960s, https://wandb.ai/raysort/raysort/runs/1r83qp4x
-        cluster=dict(
-            instance_count=20,
-            instance_type=r6i_2xl,
-        ),
-        system=dict(
-            max_fused_object_count=3,
-            s3_spill=16,
-        ),
-        app=dict(
-            **get_steps(),
-            total_gb=20000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,

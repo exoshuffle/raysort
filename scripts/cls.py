@@ -2,21 +2,20 @@
 import json
 import os
 import pathlib
-import psutil
-import signal
 import shutil
+import signal
 import string
 import subprocess
-from typing import Dict, List, Tuple, Union
-import yaml
+from typing import Dict, List, Optional, Tuple, Union
 
 import boto3
 import click
+import psutil
 import ray
+import yaml
+from util import error, run, run_output, sleep
 
 from raysort import config
-from raysort.typing import InstanceLifetime
-from util import error, run, run_output, sleep
 
 cfg, cfg_name = config.get()
 
@@ -93,7 +92,7 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
         if not must_exist:
             click.echo(f"Found existing configuration for {cluster_name}")
         return tf_dir
-    elif must_exist:
+    if must_exist:
         raise FileNotFoundError(f"Cluster configuration does not exist {tf_dir}")
 
     template_dir = TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
@@ -148,17 +147,17 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
     hosts = [get_item(ip) for ip in node_ips]
     ret = {
         "all": {
-            "hosts": {k: v for k, v in hosts},
+            "hosts": dict(hosts),
         },
     }
     return yaml.dump(ret)
 
 
 def get_or_create_ansible_inventory(
-    cluster_name: str, ips: List[str] = []
+    cluster_name: str, ips: Optional[List[str]] = None
 ) -> pathlib.Path:
     path = ANSIBLE_DIR / f"_{cluster_name}.yml"
-    if len(ips) == 0:
+    if not ips:
         if os.path.exists(path):
             return path
         raise ValueError("No hosts provided to Ansible")
@@ -172,7 +171,7 @@ def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
     *,
-    ev: Dict[str, str] = {},
+    ev: Optional[Dict[str, str]] = None,
     retries: int = 1,
     time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
@@ -180,7 +179,7 @@ def run_ansible_playbook(
         playbook += ".yml"
     playbook_path = ANSIBLE_DIR / playbook
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
-    if len(ev) > 0:
+    if ev:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
     return run(
         cmd,
@@ -311,14 +310,14 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
-    subprocess.Popen(cmd, shell=True)
+    subprocess.Popen(cmd, shell=True)  # pylint: disable=consider-using-with
 
 
 def setup_grafana() -> None:
     cwd = str(SCRIPT_DIR.parent / "raysort/bin/grafana")
     cmd = f"{cwd}/bin/grafana-server"
     free_port(GRAFANA_SERVER_PORT)
-    subprocess.Popen(cmd, cwd=cwd, shell=True)
+    subprocess.Popen(cmd, cwd=cwd, shell=True)  # pylint: disable=consider-using-with
 
 
 # ------------------------------------------------------------
@@ -415,9 +414,9 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
     return cmd, system_config
 
 
-def write_ray_system_config(config: Dict, path: str) -> None:
+def write_ray_system_config(conf: Dict, path: str) -> None:
     with open(path, "w") as fout:
-        yaml.dump(config, fout)
+        yaml.dump(conf, fout)
 
 
 def restart_ray(
@@ -531,7 +530,7 @@ def cli():
 
 @setup_command_options
 def up(
-    ray: bool,
+    ray: bool,  # pylint: disable=redefined-outer-name
     yarn: bool,
     clear_data_dir: bool,
 ):
@@ -561,7 +560,7 @@ def up(
     help="whether to skip common setup (file sync, mounts, etc)",
 )
 def setup(
-    ray: bool,
+    ray: bool,  # pylint: disable=redefined-outer-name
     yarn: bool,
     clear_data_dir: bool,
     no_common: bool,
