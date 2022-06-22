@@ -1,4 +1,4 @@
-cluster_name: ${CLUSTER_NAME}-autoscaler
+cluster_name: $CLUSTER_NAME-autoscaler
 
 max_workers: 10
 
@@ -43,10 +43,10 @@ setup_commands:
   # Set environment variables
   - >-
     echo 'export
-    RAY_STORAGE=s3://${S3_BUCKET}
-    S3_BUCKET=${S3_BUCKET}
-    CONFIG=${CONFIG}
-    WANDB_API_KEY=${WANDB_API_KEY}
+    RAY_STORAGE=s3://$S3_BUCKET
+    S3_BUCKET=$S3_BUCKET
+    CONFIG=$CONFIG
+    WANDB_API_KEY=$WANDB_API_KEY
     ' >> ~/.bashrc
   # Sync workdir
   - rsync -a ~/workdir/ ~/raysort
@@ -86,6 +86,6 @@ worker_start_ray_commands:
   # --metrics-export-port for exporting metrics
   - >-
     ulimit -n 65536;
-    ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076
+    ray start --address=$$RAY_HEAD_IP:6379 --object-manager-port=8076
     --resources='{"worker": 1}'
     --metrics-export-port=8090

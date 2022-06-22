@@ -1,5 +1,6 @@
 import os
 import pathlib
+import string
 import sys
 
 import click
@@ -10,10 +11,10 @@ SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 AUTOSCALER_DIR = SCRIPT_DIR / "config" / "autoscaler"
 AUTOSCALER_CONFIG_TEMPLATE_PATH = AUTOSCALER_DIR / "raysort-cluster-template.yaml"
 VARIABLES_TO_REPLACE = [
-    "${CLUSTER_NAME}",
-    "${S3_BUCKET}",
-    "${CONFIG}",
-    "${WANDB_API_KEY}",
+    "CLUSTER_NAME",
+    "S3_BUCKET",
+    "CONFIG",
+    "WANDB_API_KEY",
 ]
 
 
@@ -27,9 +28,17 @@ def get_or_create_autoscaler_config(cluster_name: str) -> pathlib.Path:
     assert os.path.exists(
         AUTOSCALER_CONFIG_TEMPLATE_PATH
     ), f"{AUTOSCALER_CONFIG_TEMPLATE_PATH} must exist"
-    run(
-        f"envsubst '{' '.join(VARIABLES_TO_REPLACE)}' < '{AUTOSCALER_CONFIG_TEMPLATE_PATH}' > '{config_path}'"
+
+    with open(AUTOSCALER_CONFIG_TEMPLATE_PATH, "r") as template_file:
+        template = string.Template(template_file.read())
+
+    config = template.substitute(
+        **{var: os.getenv(var) for var in VARIABLES_TO_REPLACE}
     )
+
+    with open(config_path, "w") as config_file:
+        config_file.write(config)
+
     click.echo(f"Created autoscaler config file for {cluster_name}")
     return config_path
 
