@@ -17,7 +17,7 @@ import yaml
 
 from raysort import config
 
-cfg, cfg_name = config.get()
+cfg = config.get()
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"

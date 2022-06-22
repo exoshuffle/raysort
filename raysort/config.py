@@ -175,17 +175,16 @@ class AppConfig:
 
 @dataclass
 class JobConfig:
+    name: str
     cluster: ClusterConfig
     system: SystemConfig
     app: AppConfig
 
-    def __init__(self, cluster: Dict, system: Dict, app: Dict):
+    def __init__(self, name: str, cluster: Dict, system: Dict, app: Dict):
+        self.name = name
         self.cluster = ClusterConfig(**cluster)
         self.system = SystemConfig(**system, _cluster=self.cluster)
         self.app = AppConfig(**app, _cluster=self.cluster)
-
-    def __post_init__(self):
-        pass
 
 
 def get_steps(steps: Optional[List[AppStep]] = None) -> Dict:
@@ -276,11 +275,12 @@ local_app_config = dict(
 )
 
 
-__config__ = {
+__configs__ = [
     # ------------------------------------------------------------
     #     Local experiments
     # ------------------------------------------------------------
-    "LocalSimple": JobConfig(
+    JobConfig(
+        name="LocalSimple",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -288,7 +288,8 @@ __config__ = {
             simple_shuffle=True,
         ),
     ),
-    "LocalManualSpillingDisk": JobConfig(
+    JobConfig(
+        name="LocalManualSpillingDisk",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -296,7 +297,8 @@ __config__ = {
             spilling=SpillingMode.DISK,
         ),
     ),
-    "LocalManualSpillingDiskParallel": JobConfig(
+    JobConfig(
+        name="LocalManualSpillingDiskParallel",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -305,12 +307,14 @@ __config__ = {
             io_parallelism=2,
         ),
     ),
-    "LocalNative": JobConfig(
+    JobConfig(
+        name="LocalNative",
         cluster=local_cluster,
         system=dict(),
         app=dict(**local_app_config),
     ),
-    "LocalNativePut": JobConfig(
+    JobConfig(
+        name="LocalNativePut",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -318,7 +322,8 @@ __config__ = {
             use_put=True,
         ),
     ),
-    "LocalNativeYield": JobConfig(
+    JobConfig(
+        name="LocalNativeYield",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -326,7 +331,8 @@ __config__ = {
             use_yield=True,
         ),
     ),
-    "LocalMagnet": JobConfig(
+    JobConfig(
+        name="LocalMagnet",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -334,7 +340,8 @@ __config__ = {
             magnet=True,
         ),
     ),
-    "LocalRiffle": JobConfig(
+    JobConfig(
+        name="LocalRiffle",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -346,7 +353,8 @@ __config__ = {
     # ------------------------------------------------------------
     #     Local fault tolerance experiments
     # ------------------------------------------------------------
-    "LocalSimpleFT": JobConfig(
+    JobConfig(
+        name="LocalSimpleFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -356,7 +364,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalNativeFT": JobConfig(
+    JobConfig(
+        name="LocalNativeFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -365,7 +374,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalNativePutFT": JobConfig(
+    JobConfig(
+        name="LocalNativePutFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -375,7 +385,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalMagnetFT": JobConfig(
+    JobConfig(
+        name="LocalMagnetFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -385,7 +396,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalRiffleFT": JobConfig(
+    JobConfig(
+        name="LocalRiffleFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -399,7 +411,8 @@ __config__ = {
     # ------------------------------------------------------------
     #     Local S3 spilling experiments
     # ------------------------------------------------------------
-    "LocalS3Spilling": JobConfig(
+    JobConfig(
+        name="LocalS3Spilling",
         cluster=local_cluster,
         system=dict(
             s3_spill=4,
@@ -408,7 +421,8 @@ __config__ = {
             **local_mini_app_config,
         ),
     ),
-    "LocalS3IO": JobConfig(
+    JobConfig(
+        name="LocalS3IO",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -416,7 +430,8 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
         ),
     ),
-    "LocalS3IOAndSpilling": JobConfig(
+    JobConfig(
+        name="LocalS3IOAndSpilling",
         cluster=local_cluster,
         system=dict(
             s3_spill=4,
@@ -426,7 +441,8 @@ __config__ = {
             s3_buckets=get_s3_buckets(),
         ),
     ),
-    "LocalS3IOManualSpillingS3": JobConfig(
+    JobConfig(
+        name="LocalS3IOManualSpillingS3",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -435,7 +451,8 @@ __config__ = {
             spilling=SpillingMode.S3,
         ),
     ),
-    "LocalS3IOManualSpillingS3Parallel": JobConfig(
+    JobConfig(
+        name="LocalS3IOManualSpillingS3Parallel",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -448,7 +465,8 @@ __config__ = {
     # ------------------------------------------------------------
     #     Local data loader experiments
     # ------------------------------------------------------------
-    "LocalNoStreamingDL": JobConfig(
+    JobConfig(
+        name="LocalNoStreamingDL",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -456,7 +474,8 @@ __config__ = {
             skip_input=True,
         ),
     ),
-    "LocalPartialStreamingDL": JobConfig(
+    JobConfig(
+        name="LocalPartialStreamingDL",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -465,7 +484,8 @@ __config__ = {
             dataloader_mode="partial",
         ),
     ),
-    "LocalFullStreamingDL": JobConfig(
+    JobConfig(
+        name="LocalFullStreamingDL",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -477,8 +497,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     d3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
-    "1tb-2gb-d3-cosco": JobConfig(
+    JobConfig(
         # currently slow due to https://github.com/ray-project/ray/issues/24667
+        name="1tb-2gb-d3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=d3_2xl,
@@ -493,8 +514,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     i3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
-    "1tb-2gb-i3-cosco": JobConfig(
+    JobConfig(
         # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        name="1tb-2gb-i3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -509,8 +531,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
-    "1tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
+        name="1tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=i4i_2xl,
@@ -529,8 +552,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 20 nodes
     # ------------------------------------------------------------
-    "2tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        name="2tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=20,
             instance_type=i4i_2xl,
@@ -548,8 +572,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 40 nodes
     # ------------------------------------------------------------
-    "4tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # 536s, https://wandb.ai/raysort/raysort/runs/14xr10t2
+        name="4tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=40,
             instance_type=i4i_2xl,
@@ -564,8 +589,9 @@ __config__ = {
             reduce_parallelism_multiplier=1,
         ),
     ),
-    "20tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # 2901s, https://wandb.ai/raysort/raysort/runs/q0w17xxi
+        name="20tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=40,
             instance_type=i4i_2xl,
@@ -583,8 +609,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 100 nodes
     # ------------------------------------------------------------
-    "10tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
+        name="10tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,
             instance_type=i4i_2xl,
@@ -599,8 +626,9 @@ __config__ = {
             reduce_parallelism_multiplier=1,
         ),
     ),
-    "100tb-2gb-i4i-native-s3": JobConfig(
+    JobConfig(
         # TODO(@lsf)
+        name="100tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,
             instance_type=i4i_2xl,
@@ -618,8 +646,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
-    "1tb-2gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+        name="1tb-2gb-s3-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -635,8 +664,9 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
-    "1tb-1gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 575s, https://wandb.ai/raysort/raysort/runs/3vk1b0aa
+        name="1tb-1gb-s3-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -652,8 +682,9 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
-    "1tb-2gb-s3-manual-s3": JobConfig(
+    JobConfig(
         # 650s, https://wandb.ai/raysort/raysort/runs/2d7d9ysa
+        name="1tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -673,9 +704,10 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 20 nodes
     # ------------------------------------------------------------
-    "2tb-2gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 650s, https://wandb.ai/raysort/raysort/runs/30rszs7y
         # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt (cannot reproduce)
+        name="2tb-2gb-s3-native-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -693,8 +725,9 @@ __config__ = {
             reduce_parallelism_multiplier=1,
         ),
     ),
-    "10tb-2gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 2906s, https://wandb.ai/raysort/raysort/runs/1r83qp4x
+        name="10tb-2gb-s3-native-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -711,8 +744,9 @@ __config__ = {
             io_parallelism=16,
         ),
     ),
-    "2tb-2gb-s3-manual-s3": JobConfig(
+    JobConfig(
         # 730s, https://wandb.ai/raysort/raysort/runs/2tlqlqpo
+        name="2tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -732,8 +766,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 40 nodes
     # ------------------------------------------------------------
-    "4tb-2gb-s3-manual-s3": JobConfig(
+    JobConfig(
         # 707s, https://wandb.ai/raysort/raysort/runs/2zekqq6m
+        name="4tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=40,
             instance_type=r6i_2xl,
@@ -750,8 +785,9 @@ __config__ = {
             io_parallelism=32,
         ),
     ),
-    "20tb-2gb-s3-manual-s3": JobConfig(
-        # running
+    JobConfig(
+        # TODO(@lsf)
+        name="20tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=40,
             instance_type=r6i_2xl,
@@ -771,7 +807,8 @@ __config__ = {
     # ------------------------------------------------------------
     #     Spot instances 20 nodes
     # ------------------------------------------------------------
-    "600gb-1gb-spot-s3": JobConfig(
+    JobConfig(
+        name="600gb-1gb-spot-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -792,8 +829,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     Spot version of i3.2xl 10 nodes 1TB
     # ------------------------------------------------------------
-    "1tb-2gb-i3-spot": JobConfig(
+    JobConfig(
         # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        name="1tb-2gb-i3-spot",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -806,12 +844,13 @@ __config__ = {
             input_part_gb=2,
         ),
     ),
-}
+]
+__config_dict__ = {cfg.name: cfg for cfg in __configs__}
 
 
-def get(config_name: Optional[str] = None) -> Tuple[JobConfig, str]:
+def get(config_name: Optional[str] = None) -> JobConfig:
     if config_name is None:
         config_name = os.getenv(CONFIG_NAME_ENV_VAR)
     assert config_name, f"No configuration specified, please set ${CONFIG_NAME_ENV_VAR}"
-    assert config_name in __config__, f"Unknown configuration: {config_name}"
-    return __config__[config_name], config_name
+    assert config_name in __config_dict__, f"Unknown configuration: {config_name}"
+    return __config_dict__[config_name]
