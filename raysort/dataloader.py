@@ -197,8 +197,8 @@ def sort_streaming(cfg: AppConfig):
 
 
 def main():
-    job_cfg, job_cfg_name = config.get()
-    tracker = sort_main.init(job_cfg, job_cfg_name)
+    job_cfg = config.get()
+    tracker = sort_main.init(job_cfg)
     cfg = job_cfg.app
     try:
         sort_utils.generate_input(cfg)
