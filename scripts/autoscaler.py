@@ -4,7 +4,6 @@ import string
 import sys
 
 import click
-
 from util import run
 
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
