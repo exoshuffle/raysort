@@ -104,9 +104,10 @@ def _make_trace_event(span: Span):
     }
 
 
+# pylint: disable=protected-access
 def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
-    summary = ray.internal.internal_api.memory_summary(
-        ray.worker._global_node.address,  # pylint: disable=protected-access
+    summary = ray._private.internal_api.memory_summary(
+        ray.worker._global_node.address,
         stats_only=True,
     )
     if print_ray_stats:
