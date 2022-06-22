@@ -16,7 +16,6 @@ import yaml
 from util import error, run, run_output, sleep
 
 from raysort import config
-from raysort.typing import InstanceLifetime
 
 cfg, cfg_name = config.get()
 
