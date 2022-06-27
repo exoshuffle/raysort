@@ -100,7 +100,6 @@ def part_info(
     *,
     kind: str = "input",
     s3: bool = False,
-    node: Optional[str] = None,
 ) -> PartInfo:
     if s3:
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
@@ -110,8 +109,11 @@ def part_info(
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
-    if node is None:
-        node = cfg.worker_ips[part_id % cfg.num_workers]
+    node = (
+        cfg.worker_ips[part_id % cfg.num_workers]
+        if cfg.is_local_cluster
+        else ray.util.get_node_ip_address()
+    )
     return PartInfo(node, None, filepath)
 
 
@@ -153,7 +155,7 @@ def generate_part(
         pinfo = part_info(cfg, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
-        pinfo = part_info(cfg, part_id, node=ray.util.get_node_ip_address())
+        pinfo = part_info(cfg, part_id)
         path = pinfo.path
     _run_gensort(offset, size, path, bool(cfg.s3_buckets))
     if cfg.s3_buckets:
