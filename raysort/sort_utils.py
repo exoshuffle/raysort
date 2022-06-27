@@ -100,6 +100,7 @@ def part_info(
     *,
     kind: str = "input",
     s3: bool = False,
+    node: Optional[str] = None,
 ) -> PartInfo:
     if s3:
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
@@ -109,7 +110,8 @@ def part_info(
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
-    node = cfg.worker_ips[part_id % cfg.num_workers]
+    if node is None:
+        node = cfg.worker_ips[part_id % cfg.num_workers]
     return PartInfo(node, None, filepath)
 
 
@@ -151,7 +153,7 @@ def generate_part(
         pinfo = part_info(cfg, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
     else:
-        pinfo = part_info(cfg, part_id)
+        pinfo = part_info(cfg, part_id, node=ray.util.get_node_ip_address())
         path = pinfo.path
     _run_gensort(offset, size, path, bool(cfg.s3_buckets))
     if cfg.s3_buckets:
@@ -198,6 +200,7 @@ def generate_input(cfg: AppConfig):
 
 
 def create_partition(part_size: int) -> np.ndarray:
+    # TODO(@lsf): replace this with gensort
     num_records = part_size // 100
     mat = np.empty((num_records, 100), dtype=np.uint8)
     mat[:, :10] = np.frombuffer(
