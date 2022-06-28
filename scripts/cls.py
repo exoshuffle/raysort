@@ -370,8 +370,8 @@ def setup_grafana() -> None:
 
 def take_grafana_snapshot(name: str) -> str:
     """Take a snapshot of the current Grafana dashboard.
-    
-    Args: 
+
+    Args:
         name: The name of the snapshot.
     Returns:
         The URL of the snapshot.
@@ -389,7 +389,9 @@ def take_grafana_snapshot(name: str) -> str:
     model_dir = str(SCRIPT_DIR.parent / "scripts/config/grafana/snapshot.json")
     f = open(model_dir, "r")
     model = json.load(f)
-    response = requests.post(url, headers=headers, json={"dashboard": model, "name": name})
+    response = requests.post(
+        url, headers=headers, json={"dashboard": model, "name": name}
+    )
     # TODO(ken): Actually do something with the response body.
     if response.status_code != 200:
         raise Exception(f"Failed to take snapshot: {response.text}")
@@ -695,6 +697,7 @@ def ssh(worker_id_or_ip: str):
     run(
         f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
+
 
 @cli.command()
 @click.argument("name", type=str, default=cfg.cluster.name)
