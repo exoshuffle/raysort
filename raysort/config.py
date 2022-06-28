@@ -1,11 +1,14 @@
+# pylint: disable=too-many-instance-attributes,use-dict-literal
 import math
 import os
-from dataclasses import dataclass, field, InitVar
-from typing import Dict, Optional, List, Tuple
+from dataclasses import InitVar, dataclass, field
+from typing import Dict, List, Optional
 
-from raysort.typing import AppStep, SpillingMode
+import ray
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME")
+from raysort.typing import AppStep, InstanceLifetime, SpillingMode
+
+CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
 S3_BUCKET = os.getenv("S3_BUCKET")
 
 CONFIG_NAME_ENV_VAR = "CONFIG"
@@ -19,38 +22,45 @@ MB = KB * 1000
 GB = MB * 1000
 
 
+def get_s3_buckets(count: int = 1) -> List[str]:
+    assert S3_BUCKET
+    return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
+
+
 @dataclass
 class InstanceType:
     name: str
     cpu: int
     memory_gib: float
     memory_bytes: int = field(init=False)
-    instance_disk_count: int = 0
-    disk_count: int = field(init=False)
+    disk_count: int = 0
     disk_device_offset: int = 1
     hdd: bool = False
 
     def __post_init__(self):
         self.memory_bytes = int(self.memory_gib * GiB)
-        self.disk_count = self.instance_disk_count
 
 
 @dataclass
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
+    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
 
     def __post_init__(self):
         if self.ebs:
-            self.instance_type.disk_count = self.instance_type.instance_disk_count + 1
+            self.instance_type.disk_count += 1
+        if self.instance_lifetime == InstanceLifetime.SPOT:
+            self.name += "-spot"
 
 
 @dataclass
 class SystemConfig:
     _cluster: InitVar[ClusterConfig]
+    max_fused_object_count: int = 2000
     object_spilling_threshold: float = 0.8
     object_store_memory_percent: float = 0.45
     object_store_memory_bytes: int = field(init=False)
@@ -95,18 +105,24 @@ class AppConfig:
     skip_sorting: bool = False
     skip_input: bool = False
     skip_output: bool = False
+    skip_first_stage: bool = False
     skip_final_reduce: bool = False
 
     spilling: SpillingMode = SpillingMode.RAY
 
+    dataloader_mode: str = None
+
+    record_object_refs: bool = False
+
     free_scheduling: bool = False
     use_put: bool = False
+    use_yield: bool = False
 
     simple_shuffle: bool = False
     riffle: bool = False
     magnet: bool = False
 
-    s3_bucket: Optional[str] = None
+    s3_buckets: List[str] = field(default_factory=list)
 
     fail_node: Optional[str] = None
     fail_time: int = 45
@@ -117,7 +133,10 @@ class AppConfig:
 
     # Runtime Context
     worker_ips: List[str] = field(default_factory=list)
+    worker_ids: List[ray.NodeID] = field(default_factory=list)
+    worker_ip_to_id: Dict[str, ray.NodeID] = field(default_factory=dict)
     data_dirs: List[str] = field(default_factory=list)
+    is_local_cluster: bool = False
 
     def __post_init__(
         self,
@@ -125,6 +144,7 @@ class AppConfig:
         map_parallelism_multiplier: float,
         reduce_parallelism_multiplier: float,
     ):
+        self.is_local_cluster = cluster.local
         self.total_data_size = int(self.total_gb * GB)
         self.input_part_size = int(self.input_part_gb * GB)
         self.map_parallelism = int(
@@ -144,6 +164,8 @@ class AppConfig:
         else:
             assert self.map_parallelism % self.merge_factor == 0, self
             self.merge_parallelism = self.map_parallelism // self.merge_factor
+        if self.skip_first_stage:
+            self.skip_input = True
         self.num_rounds = int(
             math.ceil(self.num_mappers / self.num_workers / self.map_parallelism)
         )
@@ -158,20 +180,19 @@ class AppConfig:
 
 @dataclass
 class JobConfig:
+    name: str
     cluster: ClusterConfig
     system: SystemConfig
     app: AppConfig
 
-    def __init__(self, cluster: Dict, system: Dict, app: Dict):
+    def __init__(self, name: str, cluster: Dict, system: Dict, app: Dict):
+        self.name = name
         self.cluster = ClusterConfig(**cluster)
         self.system = SystemConfig(**system, _cluster=self.cluster)
         self.app = AppConfig(**app, _cluster=self.cluster)
 
-    def __post_init__(self):
-        pass
 
-
-def get_steps(steps: List[AppStep] = []) -> Dict:
+def get_steps(steps: Optional[List[AppStep]] = None) -> Dict:
     """
     Return a dictionary of steps to run for AppConfig.
     """
@@ -182,6 +203,48 @@ def get_steps(steps: List[AppStep] = []) -> Dict:
         if not steps:
             steps = [AppStep.GENERATE_INPUT, AppStep.SORT, AppStep.VALIDATE_OUTPUT]
     return {step.value: True for step in steps}
+
+
+# ------------------------------------------------------------
+#     VM Types
+# ------------------------------------------------------------
+
+d3_xl = InstanceType(
+    name="d3.xlarge",
+    cpu=4,
+    memory_gib=32,
+    disk_count=3,
+    hdd=True,
+)
+
+d3_2xl = InstanceType(
+    name="d3.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=6,
+    hdd=True,
+)
+
+i3_2xl = InstanceType(
+    name="i3.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=1,
+    disk_device_offset=0,
+)
+
+i4i_2xl = InstanceType(
+    name="i4i.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+    disk_count=1,
+)
+
+r6i_2xl = InstanceType(
+    name="r6i.2xlarge",
+    cpu=8,
+    memory_gib=61.8,
+)
 
 
 # ------------------------------------------------------------
@@ -196,20 +259,6 @@ local_cluster = dict(
         memory_gib=0,  # not used
     ),
     local=True,
-)
-
-r6i_2xl = InstanceType(
-    name="r6i.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-)
-
-d3_2xl = InstanceType(
-    name="d3.2xlarge",
-    cpu=8,
-    memory_gib=61.8,
-    instance_disk_count=6,
-    hdd=True,
 )
 
 local_base_app_config = dict(
@@ -231,11 +280,12 @@ local_app_config = dict(
 )
 
 
-__config__ = {
+__configs__ = [
     # ------------------------------------------------------------
     #     Local experiments
     # ------------------------------------------------------------
-    "LocalSimple": JobConfig(
+    JobConfig(
+        name="LocalSimple",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -243,7 +293,8 @@ __config__ = {
             simple_shuffle=True,
         ),
     ),
-    "LocalManualSpillingDisk": JobConfig(
+    JobConfig(
+        name="LocalManualSpillingDisk",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -251,7 +302,8 @@ __config__ = {
             spilling=SpillingMode.DISK,
         ),
     ),
-    "LocalManualSpillingDiskParallel": JobConfig(
+    JobConfig(
+        name="LocalManualSpillingDiskParallel",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -260,12 +312,14 @@ __config__ = {
             io_parallelism=2,
         ),
     ),
-    "LocalNative": JobConfig(
+    JobConfig(
+        name="LocalNative",
         cluster=local_cluster,
         system=dict(),
         app=dict(**local_app_config),
     ),
-    "LocalNativePut": JobConfig(
+    JobConfig(
+        name="LocalNativePut",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -273,7 +327,17 @@ __config__ = {
             use_put=True,
         ),
     ),
-    "LocalMagnet": JobConfig(
+    JobConfig(
+        name="LocalNativeYield",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            use_yield=True,
+        ),
+    ),
+    JobConfig(
+        name="LocalMagnet",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -281,7 +345,8 @@ __config__ = {
             magnet=True,
         ),
     ),
-    "LocalRiffle": JobConfig(
+    JobConfig(
+        name="LocalRiffle",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -290,10 +355,20 @@ __config__ = {
             merge_factor=8,
         ),
     ),
+    JobConfig(
+        name="LocalNativeReduceOnly",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_first_stage=True,
+        ),
+    ),
     # ------------------------------------------------------------
     #     Local fault tolerance experiments
     # ------------------------------------------------------------
-    "LocalSimpleFT": JobConfig(
+    JobConfig(
+        name="LocalSimpleFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -303,7 +378,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalNativeFT": JobConfig(
+    JobConfig(
+        name="LocalNativeFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -312,7 +388,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalNativePutFT": JobConfig(
+    JobConfig(
+        name="LocalNativePutFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -322,7 +399,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalMagnetFT": JobConfig(
+    JobConfig(
+        name="LocalMagnetFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -332,7 +410,8 @@ __config__ = {
             fail_node=0,
         ),
     ),
-    "LocalRiffleFT": JobConfig(
+    JobConfig(
+        name="LocalRiffleFT",
         cluster=local_cluster,
         system=dict(),
         app=dict(
@@ -346,7 +425,8 @@ __config__ = {
     # ------------------------------------------------------------
     #     Local S3 spilling experiments
     # ------------------------------------------------------------
-    "LocalS3Spilling": JobConfig(
+    JobConfig(
+        name="LocalS3Spilling",
         cluster=local_cluster,
         system=dict(
             s3_spill=4,
@@ -355,48 +435,85 @@ __config__ = {
             **local_mini_app_config,
         ),
     ),
-    "LocalS3IO": JobConfig(
+    JobConfig(
+        name="LocalS3IO",
         cluster=local_cluster,
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
         ),
     ),
-    "LocalS3IOAndSpilling": JobConfig(
+    JobConfig(
+        name="LocalS3IOAndSpilling",
         cluster=local_cluster,
         system=dict(
             s3_spill=4,
         ),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
         ),
     ),
-    "LocalS3IOManualSpillingS3": JobConfig(
+    JobConfig(
+        name="LocalS3IOManualSpillingS3",
         cluster=local_cluster,
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
         ),
     ),
-    "LocalS3IOManualSpillingS3Parallel": JobConfig(
+    JobConfig(
+        name="LocalS3IOManualSpillingS3Parallel",
         cluster=local_cluster,
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=4,
         ),
     ),
     # ------------------------------------------------------------
+    #     Local data loader experiments
+    # ------------------------------------------------------------
+    JobConfig(
+        name="LocalNoStreamingDL",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+        ),
+    ),
+    JobConfig(
+        name="LocalPartialStreamingDL",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+            dataloader_mode="partial",
+        ),
+    ),
+    JobConfig(
+        name="LocalFullStreamingDL",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_input=True,
+            dataloader_mode="streaming",
+        ),
+    ),
+    # ------------------------------------------------------------
     #     d3.2xl 10 nodes 1TB (NSDI '22)
     # ------------------------------------------------------------
-    "1tb-2gb-d3-cosco": JobConfig(
+    JobConfig(
         # currently slow due to https://github.com/ray-project/ray/issues/24667
+        name="1tb-2gb-d3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=d3_2xl,
@@ -409,10 +526,213 @@ __config__ = {
         ),
     ),
     # ------------------------------------------------------------
+    #     i3.2xl 10 nodes 1TB (NSDI '22)
+    # ------------------------------------------------------------
+    JobConfig(
+        # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        name="1tb-2gb-i3-cosco",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     i4i.2xl 10 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 361s, https://wandb.ai/raysort/raysort/runs/1hdz0pqi
+        name="1tb-2gb-i4i",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     i4i.2xl 100 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 607s, https://wandb.ai/raysort/raysort/runs/3b6bjy93
+        # https://raysort.grafana.net/dashboard/snapshot/ODuYv9zKDbFnZc9GSS71mzyYC5MYdolK
+        name="10tb-2gb-i4i",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 3089s, https://wandb.ai/raysort/raysort/runs/35zd12xu
+        # https://raysort.grafana.net/dashboard/snapshot/D47iMJ63Vl2eskBynzE472E17DhQqRs0
+        name="50tb-2gb-i4i",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=50000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 10 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
+        name="1tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+            # free_scheduling=True,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 20 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        name="2tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=20,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 40 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 536s, https://wandb.ai/raysort/raysort/runs/14xr10t2
+        name="4tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 2901s, https://wandb.ai/raysort/raysort/runs/q0w17xxi
+        name="20tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=20000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 100 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
+        name="10tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # TODO(@lsf)
+        name="50tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=50000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # TODO(@lsf)
+        name="100tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=100000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
     #     S3 10 nodes 1TB
     # ------------------------------------------------------------
-    "1tb-2gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+        name="1tb-2gb-s3-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -424,12 +744,13 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
-    "1tb-1gb-s3-native-s3": JobConfig(
+    JobConfig(
         # 575s, https://wandb.ai/raysort/raysort/runs/3vk1b0aa
+        name="1tb-1gb-s3-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -441,12 +762,13 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=1,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
-    "1tb-2gb-s3-manual-s3": JobConfig(
+    JobConfig(
         # 650s, https://wandb.ai/raysort/raysort/runs/2d7d9ysa
+        name="1tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=10,
             instance_type=r6i_2xl,
@@ -458,7 +780,7 @@ __config__ = {
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
@@ -466,25 +788,49 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 20 nodes
     # ------------------------------------------------------------
-    "2tb-2gb-s3-native-s3": JobConfig(
-        # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt
+    JobConfig(
+        # 650s, https://wandb.ai/raysort/raysort/runs/30rszs7y
+        # 580s, https://wandb.ai/raysort/raysort/runs/3e7h09lt (cannot reproduce)
+        name="2tb-2gb-s3-native-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
         ),
         system=dict(
+            max_fused_object_count=3,
             s3_spill=16,
         ),
         app=dict(
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 2906s, https://wandb.ai/raysort/raysort/runs/1r83qp4x
+        name="10tb-2gb-s3-native-s3",
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+        ),
+        system=dict(
+            max_fused_object_count=3,
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
         ),
     ),
-    "2tb-2gb-s3-manual-s3": JobConfig(
-        # TODO
+    JobConfig(
+        # 730s, https://wandb.ai/raysort/raysort/runs/2tlqlqpo
+        name="2tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=20,
             instance_type=r6i_2xl,
@@ -496,7 +842,7 @@ __config__ = {
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
@@ -504,8 +850,9 @@ __config__ = {
     # ------------------------------------------------------------
     #     S3 40 nodes
     # ------------------------------------------------------------
-    "4tb-2gb-s3-manual-s3": JobConfig(
+    JobConfig(
         # 707s, https://wandb.ai/raysort/raysort/runs/2zekqq6m
+        name="4tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=40,
             instance_type=r6i_2xl,
@@ -517,13 +864,14 @@ __config__ = {
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
     ),
-    "20tb-2gb-s3-manual-s3": JobConfig(
-        # running
+    JobConfig(
+        # TODO(@lsf)
+        name="20tb-2gb-s3-manual-s3",
         cluster=dict(
             instance_count=40,
             instance_type=r6i_2xl,
@@ -535,17 +883,58 @@ __config__ = {
             **get_steps(),
             total_gb=20000,
             input_part_gb=2,
-            s3_bucket=S3_BUCKET,
+            s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=32,
         ),
     ),
-}
+    # ------------------------------------------------------------
+    #     Spot instances 20 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        name="600gb-1gb-spot-s3",
+        cluster=dict(
+            instance_count=20,
+            instance_type=r6i_2xl,
+            instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(
+            max_fused_object_count=3,
+            s3_spill=16,
+        ),
+        app=dict(
+            **get_steps(),
+            total_gb=600,
+            input_part_gb=1,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     Spot version of i3.2xl 10 nodes 1TB
+    # ------------------------------------------------------------
+    JobConfig(
+        # 584s, https://wandb.ai/raysort/raysort/runs/ky90ojwr
+        name="1tb-2gb-i3-spot",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+            instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+        ),
+    ),
+]
+__config_dict__ = {cfg.name: cfg for cfg in __configs__}
 
 
-def get(config_name: Optional[str] = None) -> Tuple[JobConfig, str]:
+def get(config_name: Optional[str] = None) -> JobConfig:
     if config_name is None:
         config_name = os.getenv(CONFIG_NAME_ENV_VAR)
     assert config_name, f"No configuration specified, please set ${CONFIG_NAME_ENV_VAR}"
-    assert config_name in __config__, f"Unknown configuration: {config_name}"
-    return __config__[config_name], config_name
+    assert config_name in __config_dict__, f"Unknown configuration: {config_name}"
+    return __config_dict__[config_name]

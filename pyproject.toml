@@ -1,0 +1,26 @@
+[tool.isort]
+profile = "black"
+
+[tool.pylint.master]
+ignore="ray-patch"
+
+[tool.pylint.basic]
+good-names="d,f,m,KiB,MiB,GiB"
+
+[tool.pylint.design]
+max-args=10
+max-locals=30
+
+[tool.pylint.messages_control]
+disable = """
+    C,
+    chained-comparison,
+    duplicate-code,
+    fixme,
+    no-member,
+    no-name-in-module,
+    no-value-for-parameter,
+    too-few-public-methods,
+    unexpected-keyword-arg,
+    unspecified-encoding,
+"""

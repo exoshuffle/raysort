@@ -1,5 +1,5 @@
 import enum
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Optional, Tuple  # pylint: disable=import-self
 
 ByteCount = int
 PartId = int
@@ -16,14 +16,26 @@ class AppStep(enum.Enum):
 
 
 class PartInfo(NamedTuple):
-    node: str
+    node: Optional[str]
+    bucket: Optional[str]
     path: Path
 
     def __repr__(self):
-        return f"{self.node}:{self.path}"
+        ret = ""
+        if self.node:
+            ret += f"{self.node}:"
+        if self.bucket:
+            ret += f"{self.bucket}:"
+        ret += self.path
+        return ret
 
 
 class SpillingMode(enum.Enum):
     RAY = "ray"
     DISK = "disk"
     S3 = "s3"
+
+
+class InstanceLifetime(enum.Enum):
+    DEDICATED = "dedicated"
+    SPOT = "spot"
