@@ -2,7 +2,7 @@
 import math
 import os
 from dataclasses import InitVar, dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import ray
 
@@ -105,6 +105,7 @@ class AppConfig:
     skip_sorting: bool = False
     skip_input: bool = False
     skip_output: bool = False
+    skip_first_stage: bool = False
     skip_final_reduce: bool = False
 
     spilling: SpillingMode = SpillingMode.RAY
@@ -135,6 +136,7 @@ class AppConfig:
     worker_ids: List[ray.NodeID] = field(default_factory=list)
     worker_ip_to_id: Dict[str, ray.NodeID] = field(default_factory=dict)
     data_dirs: List[str] = field(default_factory=list)
+    is_local_cluster: bool = False
 
     def __post_init__(
         self,
@@ -142,6 +144,7 @@ class AppConfig:
         map_parallelism_multiplier: float,
         reduce_parallelism_multiplier: float,
     ):
+        self.is_local_cluster = cluster.local
         self.total_data_size = int(self.total_gb * GB)
         self.input_part_size = int(self.input_part_gb * GB)
         self.map_parallelism = int(
@@ -161,6 +164,8 @@ class AppConfig:
         else:
             assert self.map_parallelism % self.merge_factor == 0, self
             self.merge_parallelism = self.map_parallelism // self.merge_factor
+        if self.skip_first_stage:
+            self.skip_input = True
         self.num_rounds = int(
             math.ceil(self.num_mappers / self.num_workers / self.map_parallelism)
         )
@@ -350,6 +355,15 @@ __configs__ = [
             merge_factor=8,
         ),
     ),
+    JobConfig(
+        name="LocalNativeReduceOnly",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            skip_first_stage=True,
+        ),
+    ),
     # ------------------------------------------------------------
     #     Local fault tolerance experiments
     # ------------------------------------------------------------
@@ -529,6 +543,59 @@ __configs__ = [
         ),
     ),
     # ------------------------------------------------------------
+    #     i4i.2xl 10 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 361s, https://wandb.ai/raysort/raysort/runs/1hdz0pqi
+        name="1tb-2gb-i4i",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     i4i.2xl 100 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 607s, https://wandb.ai/raysort/raysort/runs/3b6bjy93
+        # https://raysort.grafana.net/dashboard/snapshot/ODuYv9zKDbFnZc9GSS71mzyYC5MYdolK
+        name="10tb-2gb-i4i",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 3089s, https://wandb.ai/raysort/raysort/runs/35zd12xu
+        # https://raysort.grafana.net/dashboard/snapshot/D47iMJ63Vl2eskBynzE472E17DhQqRs0
+        name="50tb-2gb-i4i",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=50000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     JobConfig(
@@ -620,6 +687,23 @@ __configs__ = [
         app=dict(
             **get_steps(),
             total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(10),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # TODO(@lsf)
+        name="50tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=50000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
             io_parallelism=16,
