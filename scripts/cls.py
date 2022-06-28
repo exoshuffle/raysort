@@ -9,6 +9,7 @@ import string
 import subprocess
 import time
 from typing import Dict, List, Tuple, Union
+import requests
 import yaml
 
 import boto3
@@ -362,6 +363,34 @@ def setup_grafana() -> None:
     subprocess.Popen(cmd, cwd=cwd, shell=True)
 
 
+def take_grafana_snapshot(name: str) -> str:
+    """Take a snapshot of the current Grafana dashboard.
+    
+    Args: 
+        name: The name of the snapshot.
+    Returns:
+        The URL of the snapshot.
+    """
+
+    url = "https://raysort.grafana.net/api/snapshots"
+    key = os.getenv("GRAFANA_API_KEY")
+    if not key:
+        raise ValueError("GRAFANA_API_KEY is not set")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "Authorization": f"{key}",
+    }
+    model_dir = str(SCRIPT_DIR.parent / "scripts/config/grafana/snapshot.json")
+    f = open(model_dir, "r")
+    model = json.load(f)
+    response = requests.post(url, headers=headers, json={"dashboard": model, "name": name})
+    # TODO(ken): Actually do something with the response body.
+    if response.status_code != 200:
+        raise Exception(f"Failed to take snapshot: {response.text}")
+    return response.json()["url"]
+
+
 # ------------------------------------------------------------
 #     Interface Methods
 # ------------------------------------------------------------
@@ -660,6 +689,12 @@ def ssh(worker_id_or_ip: str):
     run(
         f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
+
+@cli.command()
+@click.argument("name", type=str, default=cfg.cluster.name)
+def snapshot(name: str):
+    url = take_grafana_snapshot(name)
+    click.echo(f"Snapshot URL: {url}")
 
 
 if __name__ == "__main__":
