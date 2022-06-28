@@ -564,7 +564,24 @@ __configs__ = [
     #     i4i.2xl 100 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # TODO(@lsf)
+        # 607s, https://wandb.ai/raysort/raysort/runs/3b6bjy93
+        # https://raysort.grafana.net/dashboard/snapshot/ODuYv9zKDbFnZc9GSS71mzyYC5MYdolK
+        name="10tb-2gb-i4i",
+        cluster=dict(
+            instance_count=100,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 3089s, https://wandb.ai/raysort/raysort/runs/35zd12xu
+        # https://raysort.grafana.net/dashboard/snapshot/D47iMJ63Vl2eskBynzE472E17DhQqRs0
         name="50tb-2gb-i4i",
         cluster=dict(
             instance_count=100,
