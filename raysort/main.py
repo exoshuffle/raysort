@@ -548,7 +548,7 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
             for w in range(cfg.num_workers):
                 merge_results[w, m, :] = mapper.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, None, bounds, None)[: num_returns]
+                ).remote(cfg, None, bounds, None)[:num_returns]
 
     def post_reduce(r: int) -> None:
         merge_results[:, :, r] = None
