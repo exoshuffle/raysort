@@ -38,7 +38,8 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
 
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:
-        return create_partition(cfg.input_part_size)
+        size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_final_reduce else 1)
+        return create_partition(size)
     if cfg.s3_buckets:
         return s3_utils.download_s3(pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:

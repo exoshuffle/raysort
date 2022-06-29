@@ -34,9 +34,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 
 def mapper_sort_blocks(
-    cfg: AppConfig,
-    bounds: List[int],
-    pinfo: PartInfo,
+    cfg: AppConfig, bounds: List[int], pinfo: PartInfo
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
     start_time = time.time()
     part = sort_utils.load_partition(cfg, pinfo)
@@ -55,10 +53,7 @@ def mapper_sort_blocks(
 @ray.remote(num_cpus=0)
 @tracing_utils.timeit("map")
 def mapper(
-    cfg: AppConfig,
-    _mapper_id: PartId,
-    bounds: List[int],
-    pinfo: PartInfo,
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
 ) -> List[np.ndarray]:
     part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
     if cfg.use_put:
@@ -72,10 +67,7 @@ def mapper(
 @ray.remote(num_cpus=0)
 @tracing_utils.timeit("map")
 def mapper_yield(
-    cfg: AppConfig,
-    _mapper_id: PartId,
-    bounds: List[int],
-    pinfo: PartInfo,
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
 ) -> List[np.ndarray]:
     part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
     for offset, size in blocks:
@@ -244,7 +236,7 @@ def final_merge(
             ret = ray.get(part)
             assert ret is None or isinstance(ret, np.ndarray), type(ret)
             return ret
-        raise RuntimeError(f"{cfg}")
+        raise RuntimeError(f"{type(part)} {part}")
 
     part_id = constants.merge_part_ids(worker_id, reducer_id)
     pinfo = sort_utils.part_info(cfg, part_id, kind="output", s3=bool(cfg.s3_buckets))
@@ -542,6 +534,33 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
+def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
+    num_returns = cfg.num_reducers_per_worker
+    bounds, _ = get_boundaries(num_returns)
+    merger_opt = {"num_returns": num_returns + 1}
+    merge_results = np.empty(
+        (cfg.num_workers, cfg.num_mergers_per_worker, num_returns),
+        dtype=object,
+    )
+    for rnd in range(cfg.num_rounds):
+        for j in range(cfg.merge_parallelism):
+            m = rnd * cfg.merge_parallelism + j
+            for w in range(cfg.num_workers):
+                merge_results[w, m, :] = mapper.options(
+                    **merger_opt, **ray_utils.node_i(cfg, w)
+                ).remote(cfg, None, bounds, None)[: num_returns]
+
+    def post_reduce(r: int) -> None:
+        merge_results[:, :, r] = None
+
+    return reduce_stage(
+        cfg,
+        merge_results,
+        lambda w, r: merge_results[w, :, r],
+        post_reduce,
+    )
+
+
 @tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
@@ -550,6 +569,8 @@ def sort_main(cfg: AppConfig):
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
         results = sort_riffle(cfg, parts)
+    elif cfg.skip_first_stage:
+        results = sort_reduce_only(cfg)
     else:
         results = sort_two_stage(cfg, parts)
 
