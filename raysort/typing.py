@@ -16,12 +16,13 @@ class AppStep(enum.Enum):
 
 
 class PartInfo(NamedTuple):
+    part_id: int
     node: Optional[str]
     bucket: Optional[str]
     path: Path
 
     def __repr__(self):
-        ret = ""
+        ret = f"{self.part_id:010x}@"
         if self.node:
             ret += f"{self.node}:"
         if self.bucket:

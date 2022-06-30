@@ -211,7 +211,7 @@ def final_merge(
     worker_id: PartId,
     reducer_id: PartId,
     *parts: List,
-) -> PartInfo:
+) -> List[PartInfo]:
     if isinstance(parts[0], PartInfo):
         if cfg.reduce_io_parallelism > 0:
             parts = ray_utils.schedule_tasks(
@@ -242,8 +242,7 @@ def final_merge(
     pinfo = sort_utils.part_info(cfg, part_id, kind="output", s3=bool(cfg.s3_buckets))
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
     merger = merge_fn(M, get_block)
-    sort_utils.save_partition(cfg, pinfo, merger)
-    return pinfo
+    return sort_utils.save_partition(cfg, pinfo, merger)
 
 
 def get_boundaries(
@@ -334,8 +333,8 @@ def reduce_stage(
                 for w in range(cfg.num_workers)
             ]
             post_reduce_callback(r)
-
-    return ray.get(reduce_results.flatten().tolist())
+    ret = ray.get(reduce_results.flatten().tolist())
+    return [x for xs in ret for x in xs]
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
