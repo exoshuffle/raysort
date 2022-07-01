@@ -116,9 +116,8 @@ def multi_upload(
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
 ) -> List[PartInfo]:
-    if cfg.reduce_single_upload:
-        return single_upload(cfg, pinfo, merger)
     # TODO(@lsf) make this a flag
+    # return single_upload(cfg, pinfo, merger)
     # return multi_upload(cfg, pinfo, merger)
     parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")
