@@ -1,6 +1,6 @@
 import io
 import os
-from typing import Iterable, Optional, List
+from typing import Iterable, List, Optional
 
 import boto3
 import botocore
