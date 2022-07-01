@@ -38,7 +38,6 @@ def mapper_sort_blocks(
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
     start_time = time.time()
     part = sort_utils.load_partition(cfg, pinfo)
-    assert part.size == cfg.input_part_size, (part.shape, pinfo, cfg)
     load_duration = time.time() - start_time
     tracing_utils.record_value("map_load_time", load_duration)
     sort_fn = (
