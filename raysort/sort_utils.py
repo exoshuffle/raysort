@@ -26,19 +26,20 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(cfg.worker_ips[i % cfg.num_workers], None, None)
+            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None)
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [PartInfo(node, bucket, path) for node, bucket, path in reader]
+        ret = [PartInfo.from_csv_row(row) for row in reader]
         return ret
 
 
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:
-        return create_partition(cfg.input_part_size)
+        size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
+        return create_partition(size)
     if cfg.s3_buckets:
         return s3_utils.download_s3(pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
@@ -47,7 +48,7 @@ def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
 
 def save_partition(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> None:
+) -> List[PartInfo]:
     if cfg.skip_output:
         first_chunk = True
         for datachunk in merger:
@@ -61,12 +62,13 @@ def save_partition(
                     log_to_wandb=True,
                 )
             del datachunk
-    elif cfg.s3_buckets:
-        s3_utils.multipart_upload(cfg, pinfo, merger)
-    else:
-        with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
-            for datachunk in merger:
-                fout.write(datachunk)
+        return [pinfo]
+    if cfg.s3_buckets:
+        return s3_utils.multipart_upload(cfg, pinfo, merger)
+    with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
+        for datachunk in merger:
+            fout.write(datachunk)
+    return [pinfo]
 
 
 # ------------------------------------------------------------
@@ -105,7 +107,7 @@ def part_info(
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
         path = _get_part_path(part_id, shard=shard, kind=kind)
         bucket = cfg.s3_buckets[shard % len(cfg.s3_buckets)]
-        return PartInfo(None, bucket, path)
+        return PartInfo(part_id, None, bucket, path)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
@@ -114,7 +116,7 @@ def part_info(
         if cfg.is_local_cluster
         else ray.util.get_node_ip_address()
     )
-    return PartInfo(node, None, filepath)
+    return PartInfo(part_id, node, None, filepath)
 
 
 def _get_part_path(
@@ -196,7 +198,8 @@ def generate_input(cfg: AppConfig):
     parts = ray.get(tasks)
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
-        writer.writerows(parts)
+        for pinfo in parts:
+            writer.writerow(pinfo.to_csv_row())
     if not cfg.s3_buckets:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
@@ -256,7 +259,6 @@ def validate_output(cfg: AppConfig):
     if cfg.skip_sorting or cfg.skip_output:
         return
     parts = load_manifest(cfg, kind="output")
-    assert len(parts) == cfg.num_reducers, (len(parts), cfg)
     results = []
     for pinfo in parts:
         opt = (

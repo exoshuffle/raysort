@@ -613,7 +613,42 @@ __configs__ = [
             s3_buckets=get_s3_buckets(),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
-            # free_scheduling=True,
+        ),
+    ),
+    JobConfig(
+        # 451s, https://wandb.ai/raysort/raysort/runs/umnyuwgs
+        name="1tb-2gb-i4i-native-s3-yield",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+            use_yield=True,
+        ),
+    ),
+    JobConfig(
+        # TODO(@lsf)
+        name="1tb-2gb-i4i-native-s3-reduce",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+            skip_first_stage=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -652,7 +687,7 @@ __configs__ = [
             total_gb=4000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
+            io_parallelism=24,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -678,6 +713,7 @@ __configs__ = [
     # ------------------------------------------------------------
     JobConfig(
         # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
+        # 795s with multi upload
         name="10tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,
@@ -694,7 +730,9 @@ __configs__ = [
         ),
     ),
     JobConfig(
-        # TODO(@lsf)
+        # 4153s, https://wandb.ai/raysort/raysort/runs/qcw9riog (multi upload)
+        # https://raysort.grafana.net/dashboard/snapshot/41UCIyP11JsWOawGx3S0KMiyfmgBEjkt
+        # 4028s, https://wandb.ai/raysort/raysort/runs/g03tgbgz (single upload)
         name="50tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,

@@ -51,5 +51,5 @@ def merge_part_ids(*part_ids: List[PartId], skip_places: int = 4) -> PartId:
     mul = 1
     for p in reversed(part_ids):
         ret += p * mul
-        mul *= 16**skip_places
+        mul <<= skip_places * 4
     return ret

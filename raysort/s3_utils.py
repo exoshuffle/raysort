@@ -1,6 +1,6 @@
 import io
 import os
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional
 
 import boto3
 import botocore
@@ -8,7 +8,7 @@ import numpy as np
 import ray
 from boto3.s3 import transfer
 
-from raysort import constants, ray_utils
+from raysort import constants, ray_utils, sort_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
@@ -57,9 +57,68 @@ def upload_s3_buffer(
     s3().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
 
 
+def single_upload(
+    cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
+) -> List[PartInfo]:
+    buf = io.BytesIO()
+    for datachunk in merger:
+        buf.write(datachunk)
+    upload_s3_buffer(cfg, buf.getbuffer(), pinfo)
+    return [pinfo]
+
+
+def multi_upload(
+    cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
+) -> List[PartInfo]:
+    parallelism = cfg.reduce_io_parallelism
+    tasks = []
+    chunk_id = 0
+
+    def upload(data, chunk_id):
+        sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
+        sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", s3=True)
+        upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
+        return sub_pinfo
+
+    upload_remote = ray_utils.remote(upload)
+
+    def upload_part(data):
+        nonlocal chunk_id
+        if parallelism > 0 and len(tasks) > parallelism:
+            ray_utils.wait(tasks, num_returns=len(tasks) - parallelism)
+        if parallelism > 0:
+            task = upload_remote.remote(data, chunk_id)
+        else:
+            task = upload(data, chunk_id)
+        tasks.append(task)
+        chunk_id += 1
+
+    # The merger produces a bunch of small chunks towards the end, which
+    # we need to fuse into one chunk before uploading to S3.
+    tail = io.BytesIO()
+    for datachunk in merger:
+        if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
+            # There should never be large chunks once we start seeing
+            # small chunks towards the end.
+            assert tail.getbuffer().nbytes == 0
+            upload_part(datachunk.tobytes())
+        else:
+            tail.write(datachunk)
+
+    if tail.getbuffer().nbytes > 0:
+        tail.seek(0)
+        upload_part(tail.getbuffer())
+
+    # Wait for all upload tasks to complete.
+    return ray.get(tasks) if parallelism > 0 else tasks
+
+
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> None:
+) -> List[PartInfo]:
+    # TODO(@lsf) make this a flag
+    # return single_upload(cfg, pinfo, merger)
+    # return multi_upload(cfg, pinfo, merger)
     parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")
     mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
@@ -121,3 +180,4 @@ def multipart_upload(
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],
     )
+    return [pinfo]

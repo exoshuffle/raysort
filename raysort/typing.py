@@ -1,5 +1,5 @@
 import enum
-from typing import NamedTuple, Optional, Tuple  # pylint: disable=import-self
+from typing import List, NamedTuple, Optional, Tuple  # pylint: disable=import-self
 
 ByteCount = int
 PartId = int
@@ -16,6 +16,7 @@ class AppStep(enum.Enum):
 
 
 class PartInfo(NamedTuple):
+    part_id: int
     node: Optional[str]
     bucket: Optional[str]
     path: Path
@@ -28,6 +29,13 @@ class PartInfo(NamedTuple):
             ret += f"{self.bucket}:"
         ret += self.path
         return ret
+
+    def to_csv_row(self) -> List[str]:
+        return [f"{self.part_id:010x}", self.node, self.bucket, self.path]
+
+    @classmethod
+    def from_csv_row(cls, row: List[str]) -> "PartInfo":
+        return cls(int(row[0], 16), row[1], row[2], row[3])
 
 
 class SpillingMode(enum.Enum):
