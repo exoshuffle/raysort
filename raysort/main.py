@@ -582,6 +582,7 @@ def main():
             sort_utils.validate_output(cfg)
     finally:
         ray.get(tracker.performance_report.remote())
+        ray.shutdown()
 
 
 if __name__ == "__main__":
