@@ -107,7 +107,6 @@ class AppConfig:
     skip_output: bool = False
     skip_first_stage: bool = False
     skip_final_reduce: bool = False
-    reduce_single_upload: bool = False
 
     spilling: SpillingMode = SpillingMode.RAY
 
@@ -632,25 +631,6 @@ __configs__ = [
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
             use_yield=True,
-        ),
-    ),
-    JobConfig(
-        # 492s, https://wandb.ai/raysort/raysort/runs/umnyuwgs
-        name="1tb-2gb-i4i-native-s3-yield-single-upload",
-        cluster=dict(
-            instance_count=10,
-            instance_type=i4i_2xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=1000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
-            reduce_parallelism_multiplier=1,
-            use_yield=True,
-            reduce_single_upload=True,
         ),
     ),
     JobConfig(
