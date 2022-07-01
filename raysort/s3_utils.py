@@ -72,26 +72,26 @@ def multi_upload(
 ) -> List[PartInfo]:
     parallelism = cfg.reduce_io_parallelism
     tasks = []
-    mpu_part_id = 1
+    chunk_id = 0
 
     def upload(data, chunk_id):
         sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
         sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", s3=True)
-        upload_s3_buffer(cfg, data, sub_pinfo)
-        return pinfo
+        upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
+        return sub_pinfo
 
     upload_remote = ray_utils.remote(upload)
 
     def upload_part(data):
-        nonlocal mpu_part_id
+        nonlocal chunk_id
         if parallelism > 0 and len(tasks) > parallelism:
-            ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
+            ray_utils.wait(tasks, num_returns=len(tasks) - parallelism)
         if parallelism > 0:
-            task = upload_remote.remote(data, mpu_part_id)
-            tasks.append(task)
+            task = upload_remote.remote(data, chunk_id)
         else:
-            task = upload(data, mpu_part_id)
-        mpu_part_id += 1
+            task = upload(data, chunk_id)
+        tasks.append(task)
+        chunk_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
     # we need to fuse into one chunk before uploading to S3.
@@ -107,7 +107,7 @@ def multi_upload(
 
     if tail.getbuffer().nbytes > 0:
         tail.seek(0)
-        upload_part(tail)
+        upload_part(tail.getbuffer())
 
     # Wait for all upload tasks to complete.
     return ray.get(tasks) if parallelism > 0 else tasks
@@ -118,6 +118,7 @@ def multipart_upload(
 ) -> List[PartInfo]:
     if cfg.reduce_single_upload:
         return single_upload(cfg, pinfo, merger)
+    # TODO(@lsf) make this a flag
     # return multi_upload(cfg, pinfo, merger)
     parallelism = cfg.reduce_io_parallelism
     s3_client = boto3.client("s3")

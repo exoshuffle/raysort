@@ -707,7 +707,7 @@ __configs__ = [
             total_gb=4000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
+            io_parallelism=24,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -733,6 +733,7 @@ __configs__ = [
     # ------------------------------------------------------------
     JobConfig(
         # 681s, https://wandb.ai/raysort/raysort/runs/39gvukz0
+        # 795s with multi upload
         name="10tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,
@@ -749,7 +750,9 @@ __configs__ = [
         ),
     ),
     JobConfig(
-        # TODO(@lsf)
+        # 4153s, https://wandb.ai/raysort/raysort/runs/qcw9riog (multi upload)
+        # https://raysort.grafana.net/dashboard/snapshot/41UCIyP11JsWOawGx3S0KMiyfmgBEjkt
+        # 4028s, https://wandb.ai/raysort/raysort/runs/g03tgbgz (single upload)
         name="50tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=100,

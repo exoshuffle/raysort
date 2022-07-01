@@ -32,16 +32,13 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [
-            PartInfo(int(part_id, base=16), node, bucket, path)
-            for part_id, node, bucket, path in reader
-        ]
+        ret = [PartInfo.from_csv_row(row) for row in reader]
         return ret
 
 
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:
-        size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_final_reduce else 1)
+        size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
         return create_partition(size)
     if cfg.s3_buckets:
         return s3_utils.download_s3(pinfo)
@@ -201,7 +198,8 @@ def generate_input(cfg: AppConfig):
     parts = ray.get(tasks)
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
-        writer.writerows(parts)
+        for pinfo in parts:
+            writer.writerow(pinfo.to_csv_row())
     if not cfg.s3_buckets:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
@@ -261,7 +259,6 @@ def validate_output(cfg: AppConfig):
     if cfg.skip_sorting or cfg.skip_output:
         return
     parts = load_manifest(cfg, kind="output")
-    assert len(parts) == cfg.num_reducers, (len(parts), cfg)
     results = []
     for pinfo in parts:
         opt = (

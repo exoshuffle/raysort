@@ -545,7 +545,7 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
         for j in range(cfg.merge_parallelism):
             m = rnd * cfg.merge_parallelism + j
             for w in range(cfg.num_workers):
-                merge_results[w, m, :] = mapper.options(
+                merge_results[w, m, :] = mapper_yield.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, None, bounds, None)[:num_returns]
 
@@ -576,7 +576,8 @@ def sort_main(cfg: AppConfig):
     if not cfg.skip_output:
         with open(sort_utils.get_manifest_file(cfg, kind="output"), "w") as fout:
             writer = csv.writer(fout)
-            writer.writerows(results)
+            for pinfo in results:
+                writer.writerow(pinfo.to_csv_row())
 
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
@@ -602,6 +603,7 @@ def main():
             sort_utils.validate_output(cfg)
     finally:
         ray.get(tracker.performance_report.remote())
+        ray.shutdown()
 
 
 if __name__ == "__main__":
