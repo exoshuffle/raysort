@@ -1,4 +1,5 @@
 import csv
+import functools
 import logging
 import os
 import random
@@ -20,6 +21,10 @@ from raysort import (
 )
 from raysort.config import AppConfig, JobConfig
 from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
+
+
+def flatten(xss: List[List]) -> List:
+    return [x for xs in xss for x in xs]
 
 
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
@@ -114,6 +119,14 @@ def restore_block(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     raise RuntimeError(f"{cfg}")
 
 
+def _get_block(blocks: np.ndarray, i: int, d: int):
+    if i >= len(blocks) or d > 0:
+        return None
+    ret = blocks[i]
+    blocks[i] = None
+    return ret
+
+
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote(num_cpus=0)
@@ -122,7 +135,7 @@ def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: List[int],
-    *blocks: Tuple[np.ndarray],
+    blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     blocks = list(blocks)
     if isinstance(blocks[0], ray.ObjectRef):
@@ -130,12 +143,8 @@ def merge_blocks(
 
     M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
-    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
-
-    def get_block(i, d):
-        if i >= M or d > 0:
-            return None
-        return blocks[i]
+    num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+    get_block = functools.partial(_get_block, blocks)
 
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
     merger = merge_fn(M, get_block, num_records, False, bounds)
@@ -179,7 +188,7 @@ def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
     bounds: List[int],
-    *blocks: Tuple[np.ndarray],
+    blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     blocks = list(blocks)
     if isinstance(blocks[0], ray.ObjectRef):
@@ -187,12 +196,8 @@ def merge_blocks_yield(
 
     M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
-    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
-
-    def get_block(i, d):
-        if i >= M or d > 0:
-            return None
-        return blocks[i]
+    num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+    get_block = functools.partial(_get_block, blocks)
 
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
     merger = merge_fn(M, get_block, num_records, False, bounds)
@@ -265,75 +270,42 @@ def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
     return ray_utils.node_i(cfg, part_id)
 
 
+@ray.remote(num_cpus=0)
+@tracing_utils.timeit("reduce_master")
+def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[PartInfo]:
+    tasks = []
+    for r in range(cfg.num_reducers_per_worker):
+        if r >= cfg.reduce_parallelism:
+            ray_utils.wait(tasks[: r - cfg.reduce_parallelism + 1], wait_all=True)
+        tasks.append(
+            final_merge.options(**ray_utils.node_i(cfg, worker_id)).remote(
+                cfg, worker_id, r, *merge_parts[r]
+            )
+        )
+    return flatten(ray.get(tasks))
+
+
+@tracing_utils.timeit("reduce_stage")
 def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
     get_reduce_args: Callable[[int, int], List],
-    post_reduce_callback: Callable[[int], None] = lambda _: None,
-) -> List[PartInfo]:
+) -> List[ray.ObjectRef]:
     if cfg.skip_final_reduce:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
 
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
-    )
-    if cfg.free_scheduling:
-        opt = {
-            "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
-            "scheduling_strategy": "SPREAD",
-        }
-        rnd = 0
+    # TODO(@lsf) can optimize away 10000 function calls
+    def get_reduce_master_args(w: int) -> List:
+        return [get_reduce_args(w, i) for i in range(cfg.num_reducers_per_worker)]
 
-        def schedule(num_rounds: int) -> int:
-            nonlocal rnd
-            for r in range(num_rounds):
-                if rnd == cfg.num_reducers_per_worker:
-                    return r
-                reduce_results[:, rnd] = [
-                    final_merge.options(**opt).remote(
-                        cfg, w, rnd, *get_reduce_args(w, rnd)
-                    )
-                    for w in range(cfg.num_workers)
-                ]
-                post_reduce_callback(rnd)
-                rnd += 1
-            return num_rounds
-
-        wait_rnd = 0
-
-        def wait(num_rounds: int) -> None:
-            nonlocal wait_rnd
-            wait_rnd += num_rounds
-            ray_utils.wait(
-                reduce_results[:, :wait_rnd].flatten(),
-                wait_all=True,
-            )
-
-        schedule(cfg.reduce_parallelism * 2)
-        while True:
-            wait(cfg.reduce_parallelism)
-            if schedule(cfg.reduce_parallelism) == 0:
-                break
-
-    else:
-        for r in range(cfg.num_reducers_per_worker):
-            # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
-            if r >= cfg.reduce_parallelism:
-                ray_utils.wait(
-                    reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
-                    wait_all=True,
-                )
-            reduce_results[:, r] = [
-                final_merge.options(**ray_utils.node_i(cfg, w)).remote(
-                    cfg, w, r, *get_reduce_args(w, r)
-                )
-                for w in range(cfg.num_workers)
-            ]
-            post_reduce_callback(r)
-    ret = ray.get(reduce_results.flatten().tolist())
-    return [x for xs in ret for x in xs]
+    tasks = [
+        reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
+            cfg, w, get_reduce_master_args(w)
+        )
+        for w in range(cfg.num_workers)
+    ]
+    return flatten(ray.get(tasks))
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
@@ -423,7 +395,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds, *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds, map_blocks.tolist())
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
@@ -503,7 +475,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 refs = merge_fn.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds[w], map_blocks.tolist())
                 merge_results[w, m, :] = refs
                 ref_recorder.record(
                     refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
@@ -521,14 +493,10 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             ray_utils.fail_and_restart_node(cfg)
             start_time = None
 
-    def post_reduce(r: int) -> None:
-        merge_results[:, :, r] = None
-
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[w, :, r],
-        post_reduce,
+        lambda w, r: merge_results[w, :, r],  # TODO(@lsf): also clean up refs
     )
 
 
@@ -548,14 +516,10 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, None, bounds, None)[:num_returns]
 
-    def post_reduce(r: int) -> None:
-        merge_results[:, :, r] = None
-
     return reduce_stage(
         cfg,
         merge_results,
         lambda w, r: merge_results[w, :, r],
-        post_reduce,
     )
 
 
