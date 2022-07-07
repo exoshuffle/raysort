@@ -205,30 +205,6 @@ r6i_2xl = InstanceType(
     memory_gib=61.8,
 )
 
-i3_2xl_simple = InstanceType(
-    name="i3.2xlarge",
-    cpu=8,
-    memory_gib=0,
-)
-
-i3_2xl_riffle = InstanceType(
-    name="i3.2xlarge",
-    cpu=32,
-    memory_gib=0,
-)
-
-i3_2xl_magnet = InstanceType(
-    name="i3.2xlarge",
-    cpu=32,
-    memory_gib=0,
-)
-
-i3_2xl_cosco = InstanceType(
-    name="i3.2xlarge",
-    cpu=8,
-    memory_gib=0,
-)
-
 local_base_app_config = dict(
     **get_steps(),
     map_parallelism_multiplier=1,
@@ -413,34 +389,35 @@ __config__ = {
     # ------------------------------------------------------------
     #     i3.2xl 10 nodes 1TB NSDI '23
     # ------------------------------------------------------------
-    "1tb-2tb-i3i-simple-1": JobConfig(
+    "1tb-2gb-i3i-simple-1": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_simple,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
         app=dict(
+            **get_steps(),
             fail_node=0,
-            generate_input=True,
+            #generate_input=False,
             input_part_gb=2,
             map_parallelism_multiplier=0.25,
             merge_factor=2,
             num_concurrent_rounds=2,
             reduce_parallelism_multiplier=0.5,
             simple_shuffle=True,
-            sort=True,
+            #sort=False,
             total_gb=1000,
-            validate_output=True,
+            #validate_output=False,
         ),
     ),
 
-    "1tb-2tb-i3i-simple-2": JobConfig(
+    "1tb-1gb-i3i-simple-2": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_simple,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -459,11 +436,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-simple-3": JobConfig(
+    "1tb-5gb-i3i-simple-3": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_simple,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -482,11 +459,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-riffle-1": JobConfig(
+    "1tb-2gb-i3i-riffle-1": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_riffle,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -494,10 +471,10 @@ __config__ = {
             fail_node=0,
             generate_input=True,
             input_part_gb=2,
-            map_parallelism_multiplier=0.0625,
+            map_parallelism_multiplier=0.25,
             merge_factor=2,
             num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.125,
+            reduce_parallelism_multiplier=0.5,
             riffle=True,
             sort=True,
             total_gb=1000,
@@ -505,11 +482,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-riffle-2": JobConfig(
+    "1tb-1gb-i3i-riffle-2": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_riffle,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -517,10 +494,10 @@ __config__ = {
             fail_node=0,
             generate_input=True,
             input_part_gb=1,
-            map_parallelism_multiplier=0.125,
+            map_parallelism_multiplier=0.5,
             merge_factor=4,
             num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.125,
+            reduce_parallelism_multiplier=0.5,
             riffle=True,
             sort=True,
             total_gb=1000,
@@ -528,11 +505,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-magnet-1": JobConfig(
+    "1tb-2gb-i3i-magnet-1": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_magnet,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -541,21 +518,21 @@ __config__ = {
             generate_input=True,
             magnet=True,
             input_part_gb=2,
-            map_parallelism_multiplier=0.125,
+            map_parallelism_multiplier=0.5,
             merge_factor=2,
             num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.125,
+            reduce_parallelism_multiplier=0.5,
             sort=True,
             total_gb=1000,
             validate_output=True,
         ),
     ),
 
-    "1tb-2tb-i3i-magnet-2": JobConfig(
+    "1tb-1gb-i3i-magnet-2": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_magnet,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -564,21 +541,21 @@ __config__ = {
             generate_input=True,
             magnet=True,
             input_part_gb=1,
-            map_parallelism_multiplier=0.125,
+            map_parallelism_multiplier=0.5,
             merge_factor=2,
             num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.125,
+            reduce_parallelism_multiplier=0.5,
             sort=True,
             total_gb=1000,
             validate_output=True,
         ),
     ),
 
-    "1tb-2tb-i3i-magnet-3": JobConfig(
+    "1tb-5gb-i3i-magnet-3": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_magnet,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -587,21 +564,21 @@ __config__ = {
             generate_input=True,
             magnet=True,
             input_part_gb=5,
-            map_parallelism_multiplier=0.125,
+            map_parallelism_multiplier=0.5,
             merge_factor=2,
             num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.125,
+            reduce_parallelism_multiplier=0.5,
             sort=True,
             total_gb=1000,
             validate_output=True,
         ),
     ),
 
-    "1tb-2tb-i3i-cosco-1": JobConfig(
+    "1tb-2gb-i3i-cosco-1": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_cosco,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -619,11 +596,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-cosco-2": JobConfig(
+    "1tb-1gb-i3i-cosco-2": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_cosco,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
@@ -641,11 +618,11 @@ __config__ = {
         ),
     ),
 
-    "1tb-2tb-i3i-cosco-3": JobConfig(
+    "1tb-5gb-i3i-cosco-3": JobConfig(
         # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
         cluster=dict(
             instance_count=10,
-            instance_type=i3_2xl_cosco,
+            instance_type=i3_2xl,
             local=False,
         ),
         system=dict(),
