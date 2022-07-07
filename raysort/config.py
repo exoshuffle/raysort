@@ -45,7 +45,7 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
-    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
+    instance_lifetime: InstanceLifetime = InstanceLifetime.SPOT
     name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
