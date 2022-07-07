@@ -10,10 +10,13 @@ import subprocess
 import time
 from typing import Dict, List, Tuple, Union
 import yaml
+import sys
 
 import boto3
 import click
 import ray
+import wandb
+from zipfile import ZipFile
 
 from raysort import config
 
@@ -590,7 +593,6 @@ def up(
     if yarn:
         restart_yarn(inventory_path)
     print_after_setup(cluster_name)
-
 
 @setup_command_options
 @click.option(
