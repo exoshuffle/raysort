@@ -2,35 +2,36 @@
 import json
 import os
 import pathlib
-import psutil
-import signal
 import shutil
+import signal
 import string
 import subprocess
-import time
-from typing import Dict, List, Tuple, Union
-import yaml
-import sys
+from typing import Dict, List, Optional, Tuple, Union
 
 import boto3
 import click
+import psutil
 import ray
-import wandb
-from zipfile import ZipFile
+import yaml
+from util import error, run, run_output, sleep
 
 from raysort import config
 
-cfg, cfg_name = config.get()
+cfg = config.get()
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"
 PARALLELISM = os.cpu_count() * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
-ANSIBLE_DIR = "config/ansible"
-HADOOP_TEMPLATE_DIR = "config/hadoop"
-TERRAFORM_DIR = "config/terraform"
-TERRAFORM_TEMPLATE_DIR = "aws-template"
+ANSIBLE_DIR = SCRIPT_DIR / "config" / "ansible"
+HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
+TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
+TERRAFORM_TEMPLATE_DIR = (
+    "aws-template"
+    if cfg.cluster.instance_lifetime == "DEDICATED"
+    else "aws-spot-template"
+)
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
 GRAFANA_SERVER_PORT = 3000
@@ -43,59 +44,13 @@ KiB = 1024
 MiB = KiB * 1024
 
 
-def error(*args, **kwargs):
-    click.secho(fg="red", *args, **kwargs)
-    raise RuntimeError()
-
-
-def sleep(duration: float, reason: str = ""):
-    msg = f"Waiting for {duration} seconds"
-    if reason:
-        msg += f" ({reason})"
-    click.echo(msg)
-    time.sleep(duration)
-
-
-def run(
-    cmd: str,
-    *,
-    echo: bool = True,
-    retries: int = 0,
-    time_between_retries: float = 30,
-    **kwargs,
-) -> subprocess.CompletedProcess:
-    if echo:
-        click.secho(f"> {cmd}", fg="cyan")
-    try:
-        return subprocess.run(cmd, shell=True, check=True, **kwargs)
-    except subprocess.CalledProcessError as e:
-        if retries == 0:
-            raise e
-        click.secho(f"> {e.cmd} failed with code {e.returncode}", fg="yellow")
-        sleep(time_between_retries, f"{retries} times left")
-        return run(
-            cmd,
-            retries=retries - 1,
-            time_between_retries=time_between_retries,
-            **kwargs,
-        )
-
-
-def run_output(cmd: str, **kwargs) -> str:
-    return (
-        run(cmd, stdout=subprocess.PIPE, echo=False, **kwargs)
-        .stdout.decode("ascii")
-        .strip()
-    )
-
-
 # ------------------------------------------------------------
 #     Terraform and AWS
 # ------------------------------------------------------------
 
 
 def get_tf_dir(cluster_name: str) -> pathlib.Path:
-    return SCRIPT_DIR / TERRAFORM_DIR / f"_{cluster_name}"
+    return TERRAFORM_DIR / f"_{cluster_name}"
 
 
 def get_instances(filters: Dict[str, str]) -> List[Dict]:
@@ -137,10 +92,10 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
         if not must_exist:
             click.echo(f"Found existing configuration for {cluster_name}")
         return tf_dir
-    elif must_exist:
+    if must_exist:
         raise FileNotFoundError(f"Cluster configuration does not exist {tf_dir}")
 
-    template_dir = SCRIPT_DIR / TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
+    template_dir = TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
     assert not os.path.exists(tf_dir), f"{tf_dir} must not exist"
     assert os.path.exists(template_dir), f"{template_dir} must exist"
     shutil.copytree(template_dir, tf_dir)
@@ -190,25 +145,19 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
         return host, {"ansible_host": ip}
 
     hosts = [get_item(ip) for ip in node_ips]
-    ansible_vars = {
-        "ansible_user": "ubuntu",
-        "ansible_ssh_private_key_file": "/home/ubuntu/.aws/login-us-west-2.pem",
-        "ansible_host_key_checking": False,
-    }
     ret = {
         "all": {
-            "hosts": {k: v for k, v in hosts},
-            "vars": ansible_vars,
-        }
+            "hosts": dict(hosts),
+        },
     }
     return yaml.dump(ret)
 
 
 def get_or_create_ansible_inventory(
-    cluster_name: str, ips: List[str] = []
+    cluster_name: str, ips: Optional[List[str]] = None
 ) -> pathlib.Path:
-    path = SCRIPT_DIR / ANSIBLE_DIR / f"_{cluster_name}.yml"
-    if len(ips) == 0:
+    path = ANSIBLE_DIR / f"_{cluster_name}.yml"
+    if not ips:
         if os.path.exists(path):
             return path
         raise ValueError("No hosts provided to Ansible")
@@ -222,17 +171,22 @@ def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
     *,
-    ev: Dict[str, str] = {},
+    ev: Optional[Dict[str, str]] = None,
     retries: int = 1,
     time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
     if not playbook.endswith(".yml"):
         playbook += ".yml"
-    playbook_path = SCRIPT_DIR / ANSIBLE_DIR / playbook
+    playbook_path = ANSIBLE_DIR / playbook
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
-    if len(ev) > 0:
+    if ev:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
-    return run(cmd, retries=retries, time_between_retries=time_between_retries)
+    return run(
+        cmd,
+        cwd=ANSIBLE_DIR,
+        retries=retries,
+        time_between_retries=time_between_retries,
+    )
 
 
 def get_data_disks() -> List[str]:
@@ -290,7 +244,7 @@ def update_workers_file(ips: List[str]) -> None:
 def update_hadoop_xml(
     filename: str, head_ip: str, mnt_paths: List[str], is_hdd: bool
 ) -> None:
-    with open(SCRIPT_DIR / HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
+    with open(HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
         template = string.Template(fin.read())
     content = template.substitute(
         DEFAULT_FS=f"hdfs://{head_ip}:9000",
@@ -356,14 +310,14 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
-    subprocess.Popen(cmd, shell=True)
+    subprocess.Popen(cmd, shell=True)  # pylint: disable=consider-using-with
 
 
 def setup_grafana() -> None:
     cwd = str(SCRIPT_DIR.parent / "raysort/bin/grafana")
     cmd = f"{cwd}/bin/grafana-server"
     free_port(GRAFANA_SERVER_PORT)
-    subprocess.Popen(cmd, cwd=cwd, shell=True)
+    subprocess.Popen(cmd, cwd=cwd, shell=True)  # pylint: disable=consider-using-with
 
 
 # ------------------------------------------------------------
@@ -396,7 +350,10 @@ def json_dump_no_space(data) -> str:
 
 
 def get_ray_start_cmd() -> Tuple[str, Dict]:
-    system_config = {"object_spilling_threshold": cfg.system.object_spilling_threshold}
+    system_config = {
+        "max_fused_object_count": cfg.system.max_fused_object_count,
+        "object_spilling_threshold": cfg.system.object_spilling_threshold,
+    }
     if cfg.system.s3_spill > 0:
         # system_config.update(
         #     **{
@@ -457,15 +414,14 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
     return cmd, system_config
 
 
-def write_ray_system_config(config: Dict, path: str) -> None:
+def write_ray_system_config(conf: Dict, path: str) -> None:
     with open(path, "w") as fout:
-        yaml.dump(config, fout)
+        yaml.dump(conf, fout)
 
 
 def restart_ray(
     inventory_path: pathlib.Path,
     clear_data_dir: bool,
-    reinstall_ray: bool,
 ) -> None:
     # Clear all mounts in case the previous setup has more mounts than we have.
     run(f"sudo rm -rf {MNT_PATH_PATTERN}")
@@ -479,7 +435,6 @@ def restart_ray(
     ev = {
         "head_ip": head_ip,
         "clear_data_dir": clear_data_dir,
-        "reinstall_ray": reinstall_ray,
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
         "ray_object_store_memory": cfg.system.object_store_memory_bytes,
@@ -526,6 +481,15 @@ def print_after_setup(cluster_name: str) -> None:
     click.echo(f"  Ray system config written to: {RAY_SYSTEM_CONFIG_FILE_PATH}")
 
 
+def pip_install_upgrade() -> None:
+    requirement_dir = SCRIPT_DIR.parent / "requirements"
+    requirements = " ".join(
+        f"-r {requirement_dir}/{requirement_file}"
+        for requirement_file in ["dev.txt", "worker.txt"]
+    )
+    run(f"pip install --no-cache-dir --upgrade {requirements}")
+
+
 # ------------------------------------------------------------
 #     CLI Interface
 # ------------------------------------------------------------
@@ -552,12 +516,6 @@ def setup_command_options(cli_fn):
             is_flag=True,
             help="whether to remove input data directory",
         ),
-        click.option(
-            "--reinstall_ray",
-            default=False,
-            is_flag=True,
-            help="whether to reinstall Ray nightly",
-        ),
     ]
     ret = cli_fn
     for dec in decorators:
@@ -572,11 +530,11 @@ def cli():
 
 @setup_command_options
 def up(
-    ray: bool,
+    ray: bool,  # pylint: disable=redefined-outer-name
     yarn: bool,
     clear_data_dir: bool,
-    reinstall_ray: bool,
 ):
+    pip_install_upgrade()
     cluster_name = cfg.cluster.name
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
@@ -588,7 +546,6 @@ def up(
         restart_ray(
             inventory_path,
             clear_data_dir,
-            reinstall_ray,
         )
     if yarn:
         restart_yarn(inventory_path)
@@ -602,10 +559,9 @@ def up(
     help="whether to skip common setup (file sync, mounts, etc)",
 )
 def setup(
-    ray: bool,
+    ray: bool,  # pylint: disable=redefined-outer-name
     yarn: bool,
     clear_data_dir: bool,
-    reinstall_ray: bool,
     no_common: bool,
 ):
     cluster_name = cfg.cluster.name
@@ -617,7 +573,6 @@ def setup(
         restart_ray(
             inventory_path,
             clear_data_dir,
-            reinstall_ray,
         )
     if yarn:
         restart_yarn(inventory_path)

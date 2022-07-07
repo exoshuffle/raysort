@@ -1,16 +1,10 @@
-variable "cluster_name" {
+variable "bucket_prefix" {
   type        = string
   description = "a unique name that identifies the cluster and its instances"
 }
 
-variable "instance_count" {
+variable "bucket_count" {
   type        = number
   description = "the number of instances to launch"
   default     = 1
-}
-
-variable "instance_type" {
-  type        = string
-  description = "the type of instances to launch"
-  default     = "r6i.2xlarge"
 }

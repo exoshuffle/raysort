@@ -10,6 +10,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      S3_BUCKET: raysort-github-ci
       WANDB_MODE: offline
     steps:
       - name: Mount tmpfs
@@ -61,6 +64,16 @@ jobs:
       - name: 1GB Ray native shuffle with ray.put()
         env:
           CONFIG: LocalNativePut
+        run: python raysort/main.py
+
+      - name: 1GB Ray native shuffle with generator tasks
+        env:
+          CONFIG: LocalNativeYield
+        run: python raysort/main.py
+
+      - name: 1GB Ray native shuffle, reduce only
+        env:
+          CONFIG: LocalNativeReduceOnly
         run: python raysort/main.py
 
       - name: 1GB Ray native shuffle, Magnet version

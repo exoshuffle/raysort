@@ -20,6 +20,17 @@ MiB = KiB * 1024
 GiB = MiB * 1024
 
 
+def run_on_all_workers(
+    cfg: AppConfig,
+    fn: ray.remote_function.RemoteFunction,
+    include_current: bool = False,
+) -> List[ray.ObjectRef]:
+    opts = [node_aff(node) for node in cfg.worker_ids]
+    if include_current:
+        opts.append(current_node_aff())
+    return [fn.options(**opt).remote(cfg) for opt in opts]
+
+
 def schedule_tasks(
     fn: Callable, task_args: List[Tuple], parallelism: int = 0
 ) -> List[ray.ObjectRef]:
@@ -39,21 +50,30 @@ def remote(fn: Callable) -> RemoteFunction:
     """
     Return a remote function that runs on the current node with num_cpus=0.
     """
-    opt = dict(num_cpus=0, **current_node_res())
+    opt = dict(num_cpus=0, **current_node_aff())
     return ray.remote(**opt)(fn)
 
 
-def current_node_res(parallelism: int = 1000) -> Dict:
-    return node_res(ray.util.get_node_ip_address(), parallelism)
+def current_node_aff() -> Dict:
+    return node_aff(ray.get_runtime_context().node_id)
 
 
-def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
+def node_ip_aff(cfg: AppConfig, node_ip: str) -> Dict:
     assert node_ip is not None, node_ip
-    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
+    return node_aff(cfg.worker_ip_to_id[node_ip])
 
 
-def node_i(cfg: AppConfig, node_i: int, parallelism: int = 1000) -> Dict:
-    return node_res(cfg.worker_ips[node_i % cfg.num_workers], parallelism)
+def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> Dict:
+    return {
+        "scheduling_strategy": ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+            node_id=node_id,
+            soft=soft,
+        )
+    }
+
+
+def node_i(cfg: AppConfig, node_idx: int) -> Dict:
+    return node_aff(cfg.worker_ids[node_idx % cfg.num_workers])
 
 
 def _fail_and_restart_local_node(cfg: AppConfig):
@@ -93,32 +113,40 @@ def _fail_and_restart_remote_node(worker_ip: str):
     stop_cmd = "{python_dir}/ray stop -f".format(python_dir=python_dir)
     ssh = "ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
     print("Killing worker node", worker_ip)
-    outs, errs = subprocess.Popen(
+    with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    print("Raylets before kill:", outs)
-    subprocess.Popen(
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets before kill:", out)
+    with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    outs, errs = subprocess.Popen(
+    ) as p:
+        _ = p.communicate()
+    with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
-    print("Raylets after kill:", outs)
-    subprocess.Popen(
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets after kill:", out)
+    with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=start_cmd),
+        check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-    ).communicate()
+    ) as p:
+        _ = p.communicate()
 
 
 def fail_and_restart_node(cfg: AppConfig):
@@ -150,8 +178,11 @@ def wait(
     if len(ready) == num_returns:
         return ready, not_ready
     logging.warning(
-        f"Only {len(ready)}/{num_returns} tasks ready in {soft_timeout} seconds; "
-        f"tasks hanging: {not_ready}"
+        "Only %d/%d tasks ready in %d seconds; tasks hanging: %s",
+        len(ready),
+        num_returns,
+        soft_timeout,
+        not_ready,
     )
     return wait(
         futures,
@@ -227,9 +258,14 @@ def _get_data_dirs():
     return [tempfile.gettempdir()]
 
 
+@ray.remote
+def get_node_id() -> ray.NodeID:
+    return ray.get_runtime_context().node_id
+
+
 def _init_runtime_context(cfg: AppConfig):
     resources = ray.cluster_resources()
-    logging.info(f"Cluster resources: {resources}")
+    logging.info("Cluster resources: %s", resources)
     assert (
         constants.WORKER_RESOURCE in resources
     ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"
@@ -241,6 +277,13 @@ def _init_runtime_context(cfg: AppConfig):
         if r.startswith("node:") and r != head_node_str
     ]
     assert cfg.num_workers == len(cfg.worker_ips), cfg
+    cfg.worker_ids = ray.get(
+        [
+            get_node_id.options(resources={f"node:{node_ip}": 1e-3}).remote()
+            for node_ip in cfg.worker_ips
+        ]
+    )
+    cfg.worker_ip_to_id = dict(zip(cfg.worker_ips, cfg.worker_ids))
     cfg.data_dirs = _get_data_dirs()
 
 

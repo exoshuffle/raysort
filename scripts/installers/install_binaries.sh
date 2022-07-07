@@ -47,7 +47,7 @@ _install_github_binary() {
 }
 
 install_prometheus() {
-    _install_github_binary prometheus prometheus 2.33.4 .
+    _install_github_binary prometheus prometheus 2.36.2 .
 }
 
 install_node_exporter() {

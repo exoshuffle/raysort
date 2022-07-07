@@ -1,69 +1,77 @@
 import collections
 import dataclasses
 import functools
+import inspect
 import json
 import logging
 import os
 import re
 import shutil
 import time
-from typing import Dict
-import yaml
+from typing import Callable, Dict, Iterable
 
 import ray
-from ray.util import metrics
 import requests
 import wandb
+import yaml
+from ray.util import metrics
 
-from raysort import constants
-from raysort import logging_utils
+from raysort import constants, logging_utils
 from raysort.config import JobConfig
 
 Span = collections.namedtuple(
     "Span",
     ["time", "duration", "event", "address", "pid"],
 )
+SAVE_SPANS_EVERY = 100
 
 
 def timeit(
     event: str,
-    report_in_progress: bool = True,
     report_completed: bool = True,
     log_to_wandb: bool = False,
 ):
     def decorator(f):
-        @functools.wraps(f)
-        def wrapped_f(*args, **kwargs):
-            tracker = get_progress_tracker()
-            tracker.inc.remote(
-                f"{event}_in_progress",
-                echo=report_in_progress,
-            )
-            if event == "sort":
-                tracker.record_start_time.remote()
-            try:
-                begin = time.time()
-                ret = f(*args, **kwargs)
-                duration = time.time() - begin
-                tracker.record_span.remote(
-                    Span(
-                        begin,
-                        duration,
-                        event,
-                        ray.util.get_node_ip_address(),
-                        os.getpid(),
-                    ),
-                    log_to_wandb=log_to_wandb,
-                )
-                tracker.inc.remote(
-                    f"{event}_completed",
-                    echo=report_completed,
-                )
-                return ret
-            finally:
-                tracker.dec.remote(f"{event}_in_progress")
+        def factory(execute):
+            @functools.wraps(f)
+            def wrapped_fn(*args, **kwargs):
+                tracker = get_progress_tracker()
+                if event == "sort":
+                    tracker.record_start_time.remote()
+                try:
+                    tracker.inc.remote(f"{event}_started")
+                    begin = time.time()
+                    ret = execute(*args, **kwargs)
+                    duration = time.time() - begin
+                    tracker.record_span.remote(
+                        Span(
+                            begin,
+                            duration,
+                            event,
+                            ray.util.get_node_ip_address(),
+                            os.getpid(),
+                        ),
+                        log_to_wandb=log_to_wandb,
+                    )
+                    return ret
+                finally:
+                    tracker.inc.remote(
+                        f"{event}_completed",
+                        echo=report_completed,
+                    )
 
-        return wrapped_f
+            return wrapped_fn
+
+        def execute_generator(*args, **kwargs):
+            for val in f(*args, **kwargs):
+                yield val
+
+        def execute_fn(*args, **kwargs):
+            return f(*args, **kwargs)
+
+        return factory(
+            execute_generator if inspect.isgeneratorfunction(f) else execute_fn
+        )
 
     return decorator
 
@@ -96,9 +104,11 @@ def _make_trace_event(span: Span):
     }
 
 
+# pylint: disable=protected-access
 def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
-    summary = ray.internal.internal_api.memory_summary(
-        ray.worker._global_node.address, stats_only=True
+    summary = ray._private.internal_api.memory_summary(
+        ray.worker._global_node.address,
+        stats_only=True,
     )
     if print_ray_stats:
         print(summary)
@@ -119,7 +129,7 @@ def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
 class _DefaultDictWithKey(collections.defaultdict):
     def __missing__(self, key):
         if self.default_factory:
-            self[key] = self.default_factory(key)
+            self[key] = self.default_factory(key)  # pylint: disable=not-callable
             return self[key]
         return super().__missing__(key)
 
@@ -130,6 +140,22 @@ def symlink(src: str, dst: str, **kwargs):
     except FileExistsError:
         os.remove(dst)
         os.symlink(src, dst, **kwargs)
+
+
+def save_prometheus_snapshot():
+    try:
+        snapshot_json = requests.post(
+            "http://localhost:9090/api/v1/admin/tsdb/snapshot"
+        ).json()
+        snapshot_name = snapshot_json["data"]["name"]
+        shutil.make_archive(
+            f"/tmp/prometheus-{snapshot_name}",
+            "zip",
+            f"/tmp/prometheus/snapshots/{snapshot_name}",
+        )
+        wandb.save(f"/tmp/prometheus-{snapshot_name}.zip", base_path="/tmp")
+    except requests.exceptions.ConnectionError:
+        logging.info("Prometheus not running, skipping snapshot save")
 
 
 @ray.remote(resources={"head": 1e-3})
@@ -168,7 +194,7 @@ class ProgressTracker:
         self.counts[metric] += value
         self.gauges[metric].set(self.counts[metric])
         if echo:
-            logging.info(f"{metric} {self.counts[metric]}")
+            logging.info("%s %s", metric, self.counts[metric])
         if log_to_wandb:
             wandb.log({metric: self.counts[metric]})
 
@@ -187,15 +213,15 @@ class ProgressTracker:
             value -= self.start_time
         self.series[metric].append(value)
         if echo:
-            logging.info(f"{metric} {value}")
+            logging.info("%s %s", metric, value)
         if log_to_wandb:
             wandb.log({metric: value})
 
-    def record_span(self, span: Span, record_value=True, log_to_wandb=False):
+    def record_span(self, span: Span, also_record_value=True, log_to_wandb=False):
         self.spans.append(span)
-        if record_value:
+        if also_record_value:
             self.record_value(span.event, span.duration, log_to_wandb=log_to_wandb)
-        if len(self.spans) % 10 == 0:
+        if len(self.spans) % SAVE_SPANS_EVERY == 0:
             self.save_trace()
 
     def record_start_time(self):
@@ -240,23 +266,31 @@ class ProgressTracker:
         if save_to_wandb:
             wandb.save(filename, base_path="/tmp")
 
-    def save_prometheus_snapshot(self):
-        try:
-            snapshot_json = requests.post(
-                "http://localhost:9090/api/v1/admin/tsdb/snapshot"
-            ).json()
-            snapshot_name = snapshot_json["data"]["name"]
-            shutil.make_archive(
-                f"/tmp/prometheus-{snapshot_name}",
-                "zip",
-                f"/tmp/prometheus/snapshots/{snapshot_name}",
-            )
-            wandb.save(f"/tmp/prometheus-{snapshot_name}.zip", base_path="/tmp")
-        except requests.exceptions.ConnectionError:
-            logging.info("Prometheus not running, skipping snapshot save")
-
     def performance_report(self):
         self.save_trace(save_to_wandb=True)
-        self.save_prometheus_snapshot()
+        save_prometheus_snapshot()
         self.report_spilling()
         self.report()
+
+
+class ObjectRefRecorder:
+    def __init__(self, enabled: bool = True):
+        self._enabled = enabled
+        self._filename = f"/tmp/raysort-{int(time.time())}-objects.txt"
+        self._records = []
+        with open(self._filename, "w"):
+            pass
+        symlink(self._filename, "/tmp/raysort-latest-objects.txt")
+
+    def record(self, refs: Iterable[ray.ObjectRef], get_name: Callable[[int], str]):
+        if not self._enabled:
+            return
+        for i, ref in enumerate(refs):
+            self._records.append(f"{ref.hex()} {get_name(i)}\n")
+
+    def flush(self):
+        if not self._enabled:
+            return
+        with open(self._filename, "a") as fout:
+            fout.writelines(self._records)
+        self._records = []

@@ -10,19 +10,13 @@
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     clear_data_dir: false
-    reinstall_ray: false
     ray_object_manager_port: 8076
     ray_merics_export_port: 8090
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
   environment:
-    RAY_STORAGE: s3://raysort-lsf
+    RAY_STORAGE: "s3://{{ lookup('env', 'S3_BUCKET') }}"
+    S3_BUCKET: "{{ lookup('env', 'S3_BUCKET') }}"
   tasks:
-    - name: Install nightly Ray
-      ansible.builtin.shell: >
-        {{ pythondir }}/pip install https://s3-us-west-2.amazonaws.com/ray-wheels/latest/ray-2.0.0.dev0-cp39-cp39-manylinux2014_x86_64.whl
-      changed_when: true
-      when: reinstall_ray
-
     - name: Sync Ray patches
       ansible.posix.synchronize:
         src: "{{ workdir }}/ray-patch/"

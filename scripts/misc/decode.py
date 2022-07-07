@@ -1,7 +1,5 @@
-from absl import app
-from absl import flags
-
 import numpy as np
+from absl import app, flags
 
 HEADER_SIZE = 10
 RECORD_SIZE = 100

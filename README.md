@@ -28,10 +28,10 @@ It should complete without errors with an `All OK!` message. The detailed config
 ## Starting up a Cluster
 
 1. Install Terraform: `scripts/installers/install_terraform.sh`
-2. Run `export CONFIG=1tb-s3-native-s3 && python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
+2. Run `export CONFIG=1tb-1gb-s3-native-s3 && python scripts/cls.py up --ray` to launch a Ray cluster, or `--yarn` to launch a YARN cluster for Spark
 3. Run a test run on the cluster: `python raysort/main.py 2>&1 | tee main.log`
 
-The `1tb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB sort using S3 for I/O and for shuffle spilling.
+The `1tb-1gb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB sort with 1GB partitions using S3 for I/O and for shuffle spilling.
 
 ## Cluster Management
 
@@ -41,6 +41,14 @@ The `1tb-s3-native-s3` config launches 10 `r6i.2xlarge` nodes, and runs a 1TB so
 - `python scripts/cls.py setup` skips Terraform and only runs Ansible for software setup. Add `--ray` or `--yarn` to start a Ray or a YARN cluster.
 - `python scripts/cls.py down` terminates the cluster via Terraform. Tip: when you're done for the day, run `python scripts/cls.py down && sudo shutdown -h now` to terminate the cluster and stop your head node.
 - `python scripts/cls.py start/stop/reboot` calls the AWS CLI tool to start/stop/reboot all your machines in the cluster. Useful when you want to stop the cluster but not terminate the machines.
+
+## Autoscaler Management
+
+While `scripts/cls.py` uses Terraform to manage the cluster, `scripts/autoscaler.py` uses the [Ray autoscaler](https://docs.ray.io/en/latest/cluster/sdk.html) to manage the cluster.
+
+- `python scripts/autoscaler.py up -y` launches a cluster via the Ray autoscaler.
+- `python scripts/autoscaler.py submit scripts/main.py` submits a job to be executed by the Ray autoscaler that has been launched.
+- `python scripts/autoscaler.py down -y` terminates the cluster.
 
 ## Misc
 

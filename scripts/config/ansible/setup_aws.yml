@@ -1,5 +1,6 @@
 ---
 - hosts: all
+  gather_facts: false
   strategy: free
   vars:
     data_disks:
