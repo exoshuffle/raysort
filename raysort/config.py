@@ -480,8 +480,9 @@ __configs__ = [
     # ------------------------------------------------------------
     #     i3.2xl 10 nodes 1TB NSDI '23
     # ------------------------------------------------------------
-    "1tb-2gb-i3i-simple-1": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 571s, https://wandb.ai/raysort/raysort/runs/2ib2wl1l
+        name="1tb-2gb-i3i-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -490,22 +491,17 @@ __configs__ = [
         system=dict(),
         app=dict(
             **get_steps(),
-            fail_node=0,
-            #generate_input=False,
-            input_part_gb=2,
-            map_parallelism_multiplier=0.25,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            simple_shuffle=True,
-            #sort=False,
             total_gb=1000,
-            #validate_output=False,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+            simple_shuffle=True,
         ),
+
     ),
 
-    "1tb-1gb-i3i-simple-2": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 675s, https://wandb.ai/raysort/raysort/runs/15gi7d6y
+        name="1tb-1gb-i3i-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -513,22 +509,17 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=1,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
+            reduce_parallelism_multiplier=1,
             simple_shuffle=True,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
         ),
     ),
 
-    "1tb-5gb-i3i-simple-3": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 1038s, https://wandb.ai/raysort/raysort/runs/217qjb59
+        name="1tb-.5gb-i3i-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -536,22 +527,17 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=False,
-            input_part_gb=5,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            simple_shuffle=True,
-            sort=True,
+            **get_steps(),
             total_gb=1000,
-            validate_output=False,
+            input_part_gb=0.5,
+            reduce_parallelism_multiplier=1,
+            simple_shuffle=True,
         ),
     ),
 
-    "1tb-2gb-i3i-riffle-1": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 804s, https://wandb.ai/raysort/raysort/runs/2kuh08o8
+        name="1tb-2gb-i3i-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -559,22 +545,18 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=2,
-            map_parallelism_multiplier=0.25,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
+            reduce_parallelism_multiplier=1,
             riffle=True,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
+            merge_factor=8,
         ),
     ),
 
-    "1tb-1gb-i3i-riffle-2": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 705s, https://wandb.ai/raysort/raysort/runs/16gj5var
+        name="1tb-1gb-i3i-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -582,22 +564,18 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=1,
-            map_parallelism_multiplier=0.5,
-            merge_factor=4,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
+            reduce_parallelism_multiplier=1,
             riffle=True,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
+            merge_factor=8,
         ),
     ),
 
-    "1tb-2gb-i3i-magnet-1": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 770s, https://wandb.ai/raysort/raysort/runs/wp9zs9qb
+        name="1tb-.5gb-i3i-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -605,22 +583,36 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
-            magnet=True,
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=0.5,
+            reduce_parallelism_multiplier=1,
+            riffle=True,
+            merge_factor=8,
+        ),
+    ),
+
+    JobConfig(
+        # 623s, https://wandb.ai/raysort/raysort/runs/1x8b6ggk
+        name="1tb-2gb-i3i-magnet",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+            local=False,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=2,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
+            reduce_parallelism_multiplier=1,
+            magnet=True,
         ),
     ),
 
-    "1tb-1gb-i3i-magnet-2": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 608s, https://wandb.ai/raysort/raysort/runs/2qn6b7e7
+        name="1tb-1gb-i3i-magnet",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -628,45 +620,17 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
-            magnet=True,
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=1,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
-        ),
-    ),
-
-    "1tb-5gb-i3i-magnet-3": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
-        cluster=dict(
-            instance_count=10,
-            instance_type=i3_2xl,
-            local=False,
-        ),
-        system=dict(),
-        app=dict(
-            fail_node=0,
-            generate_input=True,
+            reduce_parallelism_multiplier=1,
             magnet=True,
-            input_part_gb=5,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
         ),
     ),
 
-    "1tb-2gb-i3i-cosco-1": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 630s, https://wandb.ai/raysort/raysort/runs/3c71pxms
+        name="1tb-.5gb-i3i-magnet",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -674,21 +638,34 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=0.5,
+            reduce_parallelism_multiplier=1,
+            magnet=True,
+        ),
+    ),
+
+    JobConfig(
+        # 597s, https://wandb.ai/raysort/raysort/runs/2ot7wyr4
+        name="1tb-2gb-i3i-cosco",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i3_2xl,
+            local=False,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=2,
-            map_parallelism_multiplier=0.25,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
+            reduce_parallelism_multiplier=1,
         ),
     ),
 
-    "1tb-1gb-i3i-cosco-2": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 612s, https://wandb.ai/raysort/raysort/runs/1fkhss8g
+        name="1tb-1gb-i3i-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -696,21 +673,16 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
+            **get_steps(),
+            total_gb=1000,
             input_part_gb=1,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
-            total_gb=1000,
-            validate_output=True,
+            reduce_parallelism_multiplier=1,
         ),
     ),
 
-    "1tb-5gb-i3i-cosco-3": JobConfig(
-        # 570s, https://wandb.ai/raysort/raysort/runs/2n652zza
+    JobConfig(
+        # 651s, https://wandb.ai/raysort/raysort/runs/1iatcdc6
+        name="1tb-.5gb-i3i-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -718,16 +690,10 @@ __configs__ = [
         ),
         system=dict(),
         app=dict(
-            fail_node=0,
-            generate_input=True,
-            input_part_gb=5,
-            map_parallelism_multiplier=0.5,
-            merge_factor=2,
-            num_concurrent_rounds=2,
-            reduce_parallelism_multiplier=0.5,
-            sort=True,
+            **get_steps(),
             total_gb=1000,
-            validate_output=True,
+            input_part_gb=0.5,
+            reduce_parallelism_multiplier=1,
         ),
     ),
     
