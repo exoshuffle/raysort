@@ -289,15 +289,11 @@ def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[Par
 def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
-    get_reduce_args: Callable[[int, int], List],
+    get_reduce_master_args: Callable[[int], List],
 ) -> List[ray.ObjectRef]:
     if cfg.skip_final_reduce:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
-
-    # TODO(@lsf) can optimize away 10000 function calls
-    def get_reduce_master_args(w: int) -> List:
-        return [get_reduce_args(w, i) for i in range(cfg.num_reducers_per_worker)]
 
     tasks = [
         reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
@@ -334,7 +330,10 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         map_results[:, 0],
-        lambda w, r: map_results[:, w * cfg.num_reducers_per_worker + r],
+        lambda w: [
+            map_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
     )
 
 
@@ -410,7 +409,10 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[:, w * cfg.num_reducers_per_worker + r],
+        lambda w: [
+            merge_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
     )
 
 
@@ -439,7 +441,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for the previous round of map tasks to finish.
         num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            ray_utils.wait(map_tasks, wait_all=True)
+            ray_utils.wait(map_tasks)
 
         # Submit a new round of map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
@@ -496,7 +498,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[w, :, r],  # TODO(@lsf): also clean up refs
+        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
     )
 
 
@@ -519,7 +521,7 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[w, :, r],
+        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
     )
 
 
