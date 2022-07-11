@@ -153,6 +153,7 @@ def generate_part(
     offset: RecordCount,
 ) -> PartInfo:
     logging_utils.init()
+    assert size > 0, (cfg, size)
     if cfg.s3_buckets:
         pinfo = part_info(cfg, part_id, s3=True)
         path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")

@@ -237,7 +237,7 @@ def _init_local_cluster(job_cfg: JobConfig):
         object_store_memory=1 * GiB,
         storage=job_cfg.system.ray_storage,
     )
-    num_nodes = os.cpu_count() // 2
+    num_nodes = job_cfg.cluster.instance_count
     cluster = _build_cluster(num_nodes, ray_args, system_config)
     return cluster
 
