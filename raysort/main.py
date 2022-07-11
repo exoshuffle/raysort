@@ -208,7 +208,7 @@ def merge_blocks_yield(
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
-@ray.remote
+@ray.remote(num_cpus=0)
 @tracing_utils.timeit("reduce")
 def final_merge(
     cfg: AppConfig,
