@@ -40,7 +40,7 @@ class Reducer:
             self.arrival_times.append(t)
             tracing_utils.record_value("reduce_arrive", t)
 
-    def consume_and_shuffle(self, *map_results):  # pylint: disable=no-self-use
+    def consume_and_shuffle(self, *map_results):
         with tracing_utils.timeit("reduce"):
             # Intra-partition shuffle
             catted = np.concatenate(map_results)
