@@ -42,7 +42,6 @@ PROM_NODE_EXPORTER_PORT = 8091
 
 # Convenience functions
 def bytes_to_records(n_bytes: ByteCount) -> RecordCount:
-    assert n_bytes % RECORD_SIZE == 0
     return int(n_bytes / RECORD_SIZE)
 
 

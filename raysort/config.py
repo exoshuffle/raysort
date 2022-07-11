@@ -252,7 +252,7 @@ r6i_2xl = InstanceType(
 # ------------------------------------------------------------
 
 local_cluster = dict(
-    instance_count=os.cpu_count() // 2,
+    instance_count=os.cpu_count(),
     instance_type=InstanceType(
         name="local",
         cpu=2,
