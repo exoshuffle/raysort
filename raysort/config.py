@@ -666,9 +666,10 @@ __configs__ = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(2),
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
+            use_yield=True,
         ),
     ),
     # ------------------------------------------------------------

@@ -1,7 +1,5 @@
 import collections
 import dataclasses
-import functools
-import inspect
 import json
 import logging
 import os
@@ -26,66 +24,60 @@ Span = collections.namedtuple(
 SAVE_SPANS_EVERY = 100
 
 
-def timeit(
-    event: str,
-    report_completed: bool = True,
-    log_to_wandb: bool = False,
-):
-    def decorator(f):
-        def factory(execute):
-            @functools.wraps(f)
-            def wrapped_fn(*args, **kwargs):
-                tracker = get_progress_tracker()
-                if event == "sort":
-                    tracker.record_start_time.remote()
-                try:
-                    tracker.inc.remote(f"{event}_started")
-                    begin = time.time()
-                    ret = execute(*args, **kwargs)
-                    duration = time.time() - begin
-                    tracker.record_span.remote(
-                        Span(
-                            begin,
-                            duration,
-                            event,
-                            ray.util.get_node_ip_address(),
-                            os.getpid(),
-                        ),
-                        log_to_wandb=log_to_wandb,
-                    )
-                    return ret
-                finally:
-                    tracker.inc.remote(
-                        f"{event}_completed",
-                        echo=report_completed,
-                    )
+class timeit:
+    def __init__(
+        self,
+        event: str,
+        report_completed: bool = True,
+        log_to_wandb: bool = False,
+    ):
+        self.event = event
+        self.report_completed = report_completed
+        self.log_to_wandb = log_to_wandb
+        self.tracker = None
+        self.begin_time = time.time()
 
-            return wrapped_fn
+    def _get_tracker(self) -> ray.actor.ActorHandle:
+        if self.tracker is None:
+            self.tracker = get_progress_tracker()
+        return self.tracker
 
-        def execute_generator(*args, **kwargs):
-            for val in f(*args, **kwargs):
-                yield val
+    def __enter__(self) -> None:
+        tracker = self._get_tracker()
+        if self.event == "sort":
+            tracker.record_start_time.remote()
+        tracker.inc.remote(f"{self.event}_started")
 
-        def execute_fn(*args, **kwargs):
-            return f(*args, **kwargs)
-
-        return factory(
-            execute_generator if inspect.isgeneratorfunction(f) else execute_fn
+    def __exit__(self, *_args) -> bool:
+        duration = time.time() - self.begin_time
+        tracker = self._get_tracker()
+        tracker.record_span.remote(
+            Span(
+                self.begin_time,
+                duration,
+                self.event,
+                ray.util.get_node_ip_address(),
+                os.getpid(),
+            ),
+            log_to_wandb=self.log_to_wandb,
         )
-
-    return decorator
+        tracker.inc.remote(
+            f"{self.event}_completed",
+            echo=self.report_completed,
+        )
+        return False
 
 
 def record_value(*args, **kwargs):
-    progress_tracker = get_progress_tracker()
-    progress_tracker.record_value.remote(*args, **kwargs)
+    tracker = get_progress_tracker()
+    tracker.record_value.remote(*args, **kwargs)
 
 
-def get_progress_tracker():
+def get_progress_tracker() -> ray.actor.ActorHandle:
     return ray.get_actor(constants.PROGRESS_TRACKER_ACTOR)
 
 
-def create_progress_tracker(*args, **kwargs):
+def create_progress_tracker(*args, **kwargs) -> ray.actor.ActorHandle:
     return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(
         *args, **kwargs
     )
