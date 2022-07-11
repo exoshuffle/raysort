@@ -135,7 +135,7 @@ def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: List[int],
-    blocks: Tuple[np.ndarray],
+    *blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     blocks = list(blocks)
     if isinstance(blocks[0], ray.ObjectRef):
@@ -188,7 +188,7 @@ def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
     bounds: List[int],
-    blocks: Tuple[np.ndarray],
+    *blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     blocks = list(blocks)
     if isinstance(blocks[0], ray.ObjectRef):
@@ -394,7 +394,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds, map_blocks.tolist())
+                ).remote(cfg, merge_id, merge_bounds, *map_blocks)
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
@@ -477,7 +477,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 refs = merge_fn.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds[w], map_blocks.tolist())
+                ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
                 merge_results[w, m, :] = refs
                 ref_recorder.record(
                     refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
