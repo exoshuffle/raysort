@@ -255,7 +255,7 @@ local_cluster = dict(
     instance_count=os.cpu_count(),
     instance_type=InstanceType(
         name="local",
-        cpu=1,
+        cpu=2,
         memory_gib=0,  # not used
     ),
     local=True,
