@@ -44,7 +44,9 @@ class Reducer:
         with tracing_utils.timeit("reduce"):
             # Intra-partition shuffle
             catted = np.concatenate(map_results)
-            reshaped = catted.reshape((-1, 100))  # 100 is the number of bytes in a record
+            reshaped = catted.reshape(
+                (-1, 100)
+            )  # 100 is the number of bytes in a record
             np.random.shuffle(reshaped)
 
 
