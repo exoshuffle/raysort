@@ -20,7 +20,7 @@ def mapper(
 ) -> List[np.ndarray]:
     with tracing_utils.timeit("map"):
         tracing_utils.record_value("map_arrive", time.time())
-        with tracing_utils.timeit("map_load"):
+        with tracing_utils.timeit("map_load", report_completed=False):
             part = sort_utils.load_partition(cfg, pinfo)
         sort_fn = sortlib.sort_and_partition
         blocks = sort_fn(part, bounds)

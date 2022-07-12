@@ -41,7 +41,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 def mapper_sort_blocks(
     cfg: AppConfig, bounds: List[int], pinfo: PartInfo
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
-    with tracing_utils.timeit("map_load"):
+    with tracing_utils.timeit("map_load", report_completed=False):
         part = sort_utils.load_partition(cfg, pinfo)
     sort_fn = (
         _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
