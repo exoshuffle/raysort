@@ -60,7 +60,9 @@ def get_args(*args, **kwargs):
 
 def drop_cache():
     logging.info("Dropping filesystem cache")
-    subprocess.run("sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", shell=True)
+    subprocess.run(
+        "sudo bash -c 'sync; echo 3 > /proc/sys/vm/drop_caches'", check=True, shell=True
+    )
 
 
 @ray.remote
@@ -69,71 +71,75 @@ def consume(*xs):
     return sum(x.size for x in xs)
 
 
-@tracing_utils.timeit("consume_one_arg")
 def consume_one_arg(args, refs):
-    tasks = [
-        consume.remote(*refs[t : t + 1])
-        for t in range(args.num_tasks * args.num_objects_per_task)
-    ]
-    with tqdm.tqdm(total=len(tasks)) as pbar:
-        not_ready = tasks
-        while not_ready:
-            _, not_ready = ray.wait(not_ready, fetch_local=False)
-            pbar.update(1)
-    print(ray.get(tasks))
+    with tracing_utils.timeit("consume_one_arg"):
+        tasks = [
+            consume.remote(*refs[t : t + 1])
+            for t in range(args.num_tasks * args.num_objects_per_task)
+        ]
+        with tqdm.tqdm(total=len(tasks)) as pbar:
+            not_ready = tasks
+            while not_ready:
+                _, not_ready = ray.wait(not_ready, fetch_local=False)
+                pbar.update(1)
+        print(ray.get(tasks))
 
 
-@tracing_utils.timeit("consume_one_by_one")
 def consume_one_by_one(args, refs):
-    task = None
-    for t in tqdm.tqdm(range(args.num_tasks)):
-        if task is not None:
-            ray.get(task)
-        task = consume.remote(
-            *refs[t * args.num_objects_per_task : (t + 1) * args.num_objects_per_task]
-        )
-    ray.get(task)
+    with tracing_utils.timeit("consume_one_by_one"):
+        task = None
+        for t in tqdm.tqdm(range(args.num_tasks)):
+            if task is not None:
+                ray.get(task)
+            task = consume.remote(
+                *refs[
+                    t * args.num_objects_per_task : (t + 1) * args.num_objects_per_task
+                ]
+            )
+        ray.get(task)
 
 
-@tracing_utils.timeit("consume_all")
 def consume_all(args, refs):
-    tasks = [
-        consume.remote(
-            *refs[t * args.num_objects_per_task : (t + 1) * args.num_objects_per_task]
-        )
-        for t in range(args.num_tasks)
-    ]
-    with tqdm.tqdm(total=len(tasks)) as pbar:
-        not_ready = tasks
-        while not_ready:
-            _, not_ready = ray.wait(not_ready, fetch_local=False)
-            pbar.update(1)
-    print(ray.get(tasks))
+    with tracing_utils.timeit("consume_all"):
+        tasks = [
+            consume.remote(
+                *refs[
+                    t * args.num_objects_per_task : (t + 1) * args.num_objects_per_task
+                ]
+            )
+            for t in range(args.num_tasks)
+        ]
+        with tqdm.tqdm(total=len(tasks)) as pbar:
+            not_ready = tasks
+            while not_ready:
+                _, not_ready = ray.wait(not_ready, fetch_local=False)
+                pbar.update(1)
+        print(ray.get(tasks))
 
 
-@tracing_utils.timeit("produce_all")
 def produce_all(args):
-    refs = []
-    for i in tqdm.tqdm(range(args.num_objects)):
-        obj = np.full(args.object_size, i % 256, dtype=np.uint8)
-        refs.append(ray.put(obj))
-    drop_cache()
-    return refs
+    with tracing_utils.timeit("produce_all"):
+        refs = []
+        for i in tqdm.tqdm(range(args.num_objects)):
+            obj = np.full(args.object_size, i % 256, dtype=np.uint8)
+            refs.append(ray.put(obj))
+        drop_cache()
+        return refs
 
 
-@tracing_utils.timeit("e2e")
 def microbenchmark(args):
-    logging.info("Produce")
-    refs = produce_all(args)
+    with tracing_utils.timeit("e2e"):
+        logging.info("Produce")
+        refs = produce_all(args)
 
-    if not args.no_fusing:
-        # Skip consume if we're running no-fusing.
-        logging.info("Consume")
-        consume_one_by_one(args, refs)
-        drop_cache()
-        consume_all(args, refs)
-        drop_cache()
-        consume_one_arg(args, refs)
+        if not args.no_fusing:
+            # Skip consume if we're running no-fusing.
+            logging.info("Consume")
+            consume_one_by_one(args, refs)
+            drop_cache()
+            consume_all(args, refs)
+            drop_cache()
+            consume_one_arg(args, refs)
 
 
 def init_ray(args):

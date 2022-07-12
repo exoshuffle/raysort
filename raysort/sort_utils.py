@@ -145,30 +145,30 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
 
 
 @ray.remote
-@tracing_utils.timeit("generate_part")
 def generate_part(
     cfg: AppConfig,
     part_id: PartId,
     size: RecordCount,
     offset: RecordCount,
 ) -> PartInfo:
-    logging_utils.init()
-    assert size > 0, (cfg, size)
-    if cfg.s3_buckets:
-        pinfo = part_info(cfg, part_id, s3=True)
-        path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
-    else:
-        pinfo = part_info(cfg, part_id)
-        path = pinfo.path
-    _run_gensort(offset, size, path, bool(cfg.s3_buckets))
-    if cfg.s3_buckets:
-        s3_utils.upload_s3(
-            path,
-            pinfo,
-            max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
-        )
-    logging.info("Generated input %s", pinfo)
-    return pinfo
+    with tracing_utils.timeit("generate_part"):
+        assert size > 0, (cfg, size)
+        logging_utils.init()
+        if cfg.s3_buckets:
+            pinfo = part_info(cfg, part_id, s3=True)
+            path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
+        else:
+            pinfo = part_info(cfg, part_id)
+            path = pinfo.path
+        _run_gensort(offset, size, path, bool(cfg.s3_buckets))
+        if cfg.s3_buckets:
+            s3_utils.upload_s3(
+                path,
+                pinfo,
+                max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
+            )
+        logging.info("Generated input %s", pinfo)
+        return pinfo
 
 
 @ray.remote
