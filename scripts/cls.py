@@ -299,9 +299,6 @@ def get_prometheus_sd_content(head_ip: str, ips: List[str]) -> str:
 
 def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     prometheus_data_path = "/tmp/prometheus"
-    # TODO: only remove this when data is too big
-    if os.path.exists(prometheus_data_path):
-        shutil.rmtree(prometheus_data_path)
     os.makedirs(prometheus_data_path, exist_ok=True)
     with open("/tmp/prometheus/service_discovery.json", "w") as fout:
         fout.write(get_prometheus_sd_content(head_ip, ips))
