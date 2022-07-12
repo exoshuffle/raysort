@@ -89,10 +89,9 @@ def _make_trace_event(span: Span):
         "name": span.event,
         "pid": span.address,
         "tid": span.pid,
-        "ts": span.time * 1_000_000,
-        "dur": span.duration * 1_000_000,
+        "ts": int(span.time * 1_000_000),
+        "dur": int(span.duration * 1_000_000),
         "ph": "X",
-        "args": {},
     }
 
 
@@ -158,7 +157,6 @@ class ProgressTracker:
         self.gauges = _DefaultDictWithKey(metrics.Gauge)
         self.series = collections.defaultdict(list)
         self.spans = []
-        self.reset_gauges()
         self.initial_spilling_stats = _get_spilling_stats()
         self.start_time = None
         logging_utils.init()
@@ -177,10 +175,6 @@ class ProgressTracker:
             with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
                 wandb.config.update(yaml.safe_load(fin))
         logging.info(wandb.config)
-
-    def reset_gauges(self):
-        for g in self.gauges.values():
-            g.set(0)
 
     def inc(self, metric: str, value: float = 1, echo=False, log_to_wandb=False):
         self.counts[metric] += value
@@ -249,7 +243,6 @@ class ProgressTracker:
             wandb.log({k: v - v0})
 
     def save_trace(self, save_to_wandb=False):
-        self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:
