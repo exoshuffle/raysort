@@ -23,7 +23,9 @@ def get_or_create_autoscaler_config(raysort_config: str) -> pathlib.Path:
         click.echo(f"Found existing configuration for {raysort_config} config")
         return autoscaler_config_path
 
-    assert not os.path.exists(autoscaler_config_path), f"{autoscaler_config_path} must not exist"
+    assert not os.path.exists(
+        autoscaler_config_path
+    ), f"{autoscaler_config_path} must not exist"
     assert os.path.exists(
         AUTOSCALER_CONFIG_TEMPLATE_PATH
     ), f"{AUTOSCALER_CONFIG_TEMPLATE_PATH} must exist"
