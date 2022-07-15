@@ -1,4 +1,5 @@
 import csv
+import functools
 import logging
 import os
 import random
@@ -22,6 +23,10 @@ from raysort.config import AppConfig, JobConfig
 from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
 
 
+def flatten(xss: List[List]) -> List:
+    return [x for xs in xss for x in xs]
+
+
 def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
     N = len(bounds)
     offset = 0
@@ -36,10 +41,8 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 def mapper_sort_blocks(
     cfg: AppConfig, bounds: List[int], pinfo: PartInfo
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
-    start_time = time.time()
-    part = sort_utils.load_partition(cfg, pinfo)
-    load_duration = time.time() - start_time
-    tracing_utils.record_value("map_load_time", load_duration)
+    with tracing_utils.timeit("map_load", report_completed=False):
+        part = sort_utils.load_partition(cfg, pinfo)
     sort_fn = (
         _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
     )
@@ -50,29 +53,29 @@ def mapper_sort_blocks(
 # Memory usage: input_part_size = 2GB
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
-@tracing_utils.timeit("map")
 def mapper(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
 ) -> List[np.ndarray]:
-    part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
-    if cfg.use_put:
-        ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
-    else:
-        ret = [part[offset : offset + size] for offset, size in blocks]
-    # Return an extra object for tracking task progress.
-    return ret + [None]
+    with tracing_utils.timeit("map"):
+        part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
+        if cfg.use_put:
+            ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
+        else:
+            ret = [part[offset : offset + size] for offset, size in blocks]
+        # Return an extra object for tracking task progress.
+        return ret + [None]
 
 
 @ray.remote(num_cpus=0)
-@tracing_utils.timeit("map")
 def mapper_yield(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
 ) -> List[np.ndarray]:
-    part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
-    for offset, size in blocks:
-        yield part[offset : offset + size]
-    # Return an extra object for tracking task progress.
-    yield None
+    with tracing_utils.timeit("map"):
+        part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
+        for offset, size in blocks:
+            yield part[offset : offset + size]
+        # Return an extra object for tracking task progress.
+        yield None
 
 
 def _dummy_merge(
@@ -114,134 +117,136 @@ def restore_block(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     raise RuntimeError(f"{cfg}")
 
 
+def _get_block(blocks: np.ndarray, i: int, d: int):
+    if i >= len(blocks) or d > 0:
+        return None
+    ret = blocks[i]
+    blocks[i] = None
+    return ret
+
+
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote(num_cpus=0)
-@tracing_utils.timeit("merge")
 def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: List[int],
     *blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    blocks = list(blocks)
-    if isinstance(blocks[0], ray.ObjectRef):
-        blocks = ray.get(blocks)
+    with tracing_utils.timeit("merge"):
+        blocks = list(blocks)
+        if isinstance(blocks[0], ray.ObjectRef):
+            blocks = ray.get(blocks)
 
-    M = len(blocks)
-    total_bytes = sum(b.size for b in blocks)
-    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
+        M = len(blocks)
+        total_bytes = sum(b.size for b in blocks)
+        num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+        get_block = functools.partial(_get_block, blocks)
 
-    def get_block(i, d):
-        if i >= M or d > 0:
-            return None
-        return blocks[i]
+        merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
+        merger = merge_fn(M, get_block, num_records, False, bounds)
 
-    merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block, num_records, False, bounds)
-
-    ret = []
-    spill_tasks = []
-    spill_remote = ray_utils.remote(spill_block)
-    for i, datachunk in enumerate(merger):
-        if cfg.spilling == SpillingMode.RAY:
-            if cfg.use_put:
-                ret.append(ray.put(datachunk))
+        ret = []
+        spill_tasks = []
+        spill_remote = ray_utils.remote(spill_block)
+        for i, datachunk in enumerate(merger):
+            if cfg.spilling == SpillingMode.RAY:
+                if cfg.use_put:
+                    ret.append(ray.put(datachunk))
+                else:
+                    ret.append(np.copy(datachunk))
+                # TODO(@lsf): this function is using more memory in this branch
+                # than in the else branch. `del datachunk` helped a little but
+                # memory usage is still high. This does not make sense since
+                # ray.put() should only use shared memory. Need to investigate.
+                del datachunk
+                continue
+            part_id = constants.merge_part_ids(merge_id, i)
+            pinfo = sort_utils.part_info(
+                cfg, part_id, kind="temp", s3=(cfg.spilling == SpillingMode.S3)
+            )
+            if cfg.merge_io_parallelism > 0:
+                spill_tasks.append(spill_remote.remote(cfg, pinfo, datachunk))
+                if i >= cfg.merge_io_parallelism:
+                    ray_utils.wait(
+                        spill_tasks, num_returns=i - cfg.merge_io_parallelism + 1
+                    )
             else:
-                ret.append(np.copy(datachunk))
-            # TODO(@lsf): this function is using more memory in this branch
-            # than in the else branch. `del datachunk` helped a little but
-            # memory usage is still high. This does not make sense since
-            # ray.put() should only use shared memory. Need to investigate.
-            del datachunk
-            continue
-        part_id = constants.merge_part_ids(merge_id, i)
-        pinfo = sort_utils.part_info(
-            cfg, part_id, kind="temp", s3=(cfg.spilling == SpillingMode.S3)
-        )
-        if cfg.merge_io_parallelism > 0:
-            spill_tasks.append(spill_remote.remote(cfg, pinfo, datachunk))
-            if i >= cfg.merge_io_parallelism:
-                ray_utils.wait(
-                    spill_tasks, num_returns=i - cfg.merge_io_parallelism + 1
-                )
-        else:
-            spill_block(cfg, pinfo, datachunk)
-        ret.append(pinfo)
-    assert len(ret) == len(bounds), (ret, bounds)
-    ray_utils.wait(spill_tasks, wait_all=True)
-    return ret
+                spill_block(cfg, pinfo, datachunk)
+            ret.append(pinfo)
+        assert len(ret) == len(bounds), (ret, bounds)
+        ray_utils.wait(spill_tasks, wait_all=True)
+        return ret
 
 
 @ray.remote(num_cpus=0)
-@tracing_utils.timeit("merge")
 def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
     bounds: List[int],
     *blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    blocks = list(blocks)
-    if isinstance(blocks[0], ray.ObjectRef):
-        blocks = ray.get(blocks)
+    with tracing_utils.timeit("merge"):
+        blocks = list(blocks)
+        if isinstance(blocks[0], ray.ObjectRef):
+            blocks = ray.get(blocks)
 
-    M = len(blocks)
-    total_bytes = sum(b.size for b in blocks)
-    num_records = int(total_bytes / len(bounds) * 2 // constants.RECORD_SIZE)
+        M = len(blocks)
+        total_bytes = sum(b.size for b in blocks)
+        num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+        get_block = functools.partial(_get_block, blocks)
 
-    def get_block(i, d):
-        if i >= M or d > 0:
-            return None
-        return blocks[i]
+        merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
+        merger = merge_fn(M, get_block, num_records, False, bounds)
 
-    merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block, num_records, False, bounds)
-
-    for datachunk in merger:
-        yield datachunk
+        for datachunk in merger:
+            yield datachunk
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
-@ray.remote
-@tracing_utils.timeit("reduce")
+@ray.remote(num_cpus=0)
 def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
     reducer_id: PartId,
     *parts: List,
 ) -> List[PartInfo]:
-    if isinstance(parts[0], PartInfo):
-        if cfg.reduce_io_parallelism > 0:
-            parts = ray_utils.schedule_tasks(
-                restore_block,
-                [(cfg, p) for p in parts],
-                parallelism=cfg.reduce_io_parallelism,
-            )
-        else:
-            parts = [restore_block(cfg, p) for p in parts]
+    with tracing_utils.timeit("reduce"):
+        if isinstance(parts[0], PartInfo):
+            if cfg.reduce_io_parallelism > 0:
+                parts = ray_utils.schedule_tasks(
+                    restore_block,
+                    [(cfg, p) for p in parts],
+                    parallelism=cfg.reduce_io_parallelism,
+                )
+            else:
+                parts = [restore_block(cfg, p) for p in parts]
 
-    M = len(parts)
+        M = len(parts)
 
-    def get_block(i: int, d: int) -> np.ndarray:
-        if i >= M or d > 0:
-            return None
-        part = parts[i]
-        if part is None:
-            return None
-        if isinstance(part, np.ndarray):
-            return part
-        if isinstance(part, ray.ObjectRef):
-            ret = ray.get(part)
-            assert ret is None or isinstance(ret, np.ndarray), type(ret)
-            return ret
-        raise RuntimeError(f"{type(part)} {part}")
+        def get_block(i: int, d: int) -> np.ndarray:
+            if i >= M or d > 0:
+                return None
+            part = parts[i]
+            if part is None:
+                return None
+            if isinstance(part, np.ndarray):
+                return part
+            if isinstance(part, ray.ObjectRef):
+                ret = ray.get(part)
+                assert ret is None or isinstance(ret, np.ndarray), type(ret)
+                return ret
+            raise RuntimeError(f"{type(part)} {part}")
 
-    part_id = constants.merge_part_ids(worker_id, reducer_id)
-    pinfo = sort_utils.part_info(cfg, part_id, kind="output", s3=bool(cfg.s3_buckets))
-    merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-    merger = merge_fn(M, get_block)
-    return sort_utils.save_partition(cfg, pinfo, merger)
+        part_id = constants.merge_part_ids(worker_id, reducer_id)
+        pinfo = sort_utils.part_info(
+            cfg, part_id, kind="output", s3=bool(cfg.s3_buckets)
+        )
+        merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
+        merger = merge_fn(M, get_block)
+        return sort_utils.save_partition(cfg, pinfo, merger)
 
 
 def get_boundaries(
@@ -265,75 +270,38 @@ def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
     return ray_utils.node_i(cfg, part_id)
 
 
+@ray.remote(num_cpus=0)
+def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[PartInfo]:
+    with tracing_utils.timeit("reduce_master"):
+        tasks = []
+        for r in range(cfg.num_reducers_per_worker):
+            if r >= cfg.reduce_parallelism:
+                ray_utils.wait(tasks[: r - cfg.reduce_parallelism + 1], wait_all=True)
+            tasks.append(
+                final_merge.options(**ray_utils.node_i(cfg, worker_id)).remote(
+                    cfg, worker_id, r, *merge_parts[r]
+                )
+            )
+        return flatten(ray.get(tasks))
+
+
 def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
-    get_reduce_args: Callable[[int, int], List],
-    post_reduce_callback: Callable[[int], None] = lambda _: None,
-) -> List[PartInfo]:
-    if cfg.skip_final_reduce:
-        ray_utils.wait(merge_results.flatten(), wait_all=True)
-        return []
+    get_reduce_master_args: Callable[[int], List],
+) -> List[ray.ObjectRef]:
+    with tracing_utils.timeit("reduce_stage"):
+        if cfg.skip_final_reduce:
+            ray_utils.wait(merge_results.flatten(), wait_all=True)
+            return []
 
-    # Submit second-stage reduce tasks.
-    reduce_results = np.empty(
-        (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
-    )
-    if cfg.free_scheduling:
-        opt = {
-            "resources": {constants.WORKER_RESOURCE: 1 / cfg.reduce_parallelism},
-            "scheduling_strategy": "SPREAD",
-        }
-        rnd = 0
-
-        def schedule(num_rounds: int) -> int:
-            nonlocal rnd
-            for r in range(num_rounds):
-                if rnd == cfg.num_reducers_per_worker:
-                    return r
-                reduce_results[:, rnd] = [
-                    final_merge.options(**opt).remote(
-                        cfg, w, rnd, *get_reduce_args(w, rnd)
-                    )
-                    for w in range(cfg.num_workers)
-                ]
-                post_reduce_callback(rnd)
-                rnd += 1
-            return num_rounds
-
-        wait_rnd = 0
-
-        def wait(num_rounds: int) -> None:
-            nonlocal wait_rnd
-            wait_rnd += num_rounds
-            ray_utils.wait(
-                reduce_results[:, :wait_rnd].flatten(),
-                wait_all=True,
+        tasks = [
+            reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
+                cfg, w, get_reduce_master_args(w)
             )
-
-        schedule(cfg.reduce_parallelism * 2)
-        while True:
-            wait(cfg.reduce_parallelism)
-            if schedule(cfg.reduce_parallelism) == 0:
-                break
-
-    else:
-        for r in range(cfg.num_reducers_per_worker):
-            # At most (cfg.reduce_parallelism * cfg.num_workers) concurrent tasks.
-            if r >= cfg.reduce_parallelism:
-                ray_utils.wait(
-                    reduce_results[:, : r - cfg.reduce_parallelism + 1].flatten(),
-                    wait_all=True,
-                )
-            reduce_results[:, r] = [
-                final_merge.options(**ray_utils.node_i(cfg, w)).remote(
-                    cfg, w, r, *get_reduce_args(w, r)
-                )
-                for w in range(cfg.num_workers)
-            ]
-            post_reduce_callback(r)
-    ret = ray.get(reduce_results.flatten().tolist())
-    return [x for xs in ret for x in xs]
+            for w in range(cfg.num_workers)
+        ]
+        return flatten(ray.get(tasks))
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
@@ -362,7 +330,10 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         map_results[:, 0],
-        lambda w, r: map_results[:, w * cfg.num_reducers_per_worker + r],
+        lambda w: [
+            map_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
     )
 
 
@@ -438,7 +409,10 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[:, w * cfg.num_reducers_per_worker + r],
+        lambda w: [
+            merge_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
     )
 
 
@@ -467,7 +441,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for the previous round of map tasks to finish.
         num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            ray_utils.wait(map_tasks, wait_all=True)
+            ray_utils.wait(map_tasks)
 
         # Submit a new round of map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
@@ -521,14 +495,10 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             ray_utils.fail_and_restart_node(cfg)
             start_time = None
 
-    def post_reduce(r: int) -> None:
-        merge_results[:, :, r] = None
-
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[w, :, r],
-        post_reduce,
+        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
     )
 
 
@@ -548,18 +518,13 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
                     **merger_opt, **ray_utils.node_i(cfg, w)
                 ).remote(cfg, None, bounds, None)[:num_returns]
 
-    def post_reduce(r: int) -> None:
-        merge_results[:, :, r] = None
-
     return reduce_stage(
         cfg,
         merge_results,
-        lambda w, r: merge_results[w, :, r],
-        post_reduce,
+        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
     )
 
 
-@tracing_utils.timeit("sort", log_to_wandb=True)
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
 
@@ -596,7 +561,8 @@ def main():
             sort_utils.generate_input(cfg)
 
         if cfg.sort:
-            sort_main(cfg)
+            with tracing_utils.timeit("sort", log_to_wandb=True):
+                sort_main(cfg)
 
         if cfg.validate_output:
             sort_utils.validate_output(cfg)

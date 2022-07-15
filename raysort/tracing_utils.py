@@ -1,7 +1,5 @@
 import collections
 import dataclasses
-import functools
-import inspect
 import json
 import logging
 import os
@@ -26,66 +24,60 @@ Span = collections.namedtuple(
 SAVE_SPANS_EVERY = 100
 
 
-def timeit(
-    event: str,
-    report_completed: bool = True,
-    log_to_wandb: bool = False,
-):
-    def decorator(f):
-        def factory(execute):
-            @functools.wraps(f)
-            def wrapped_fn(*args, **kwargs):
-                tracker = get_progress_tracker()
-                if event == "sort":
-                    tracker.record_start_time.remote()
-                try:
-                    tracker.inc.remote(f"{event}_started")
-                    begin = time.time()
-                    ret = execute(*args, **kwargs)
-                    duration = time.time() - begin
-                    tracker.record_span.remote(
-                        Span(
-                            begin,
-                            duration,
-                            event,
-                            ray.util.get_node_ip_address(),
-                            os.getpid(),
-                        ),
-                        log_to_wandb=log_to_wandb,
-                    )
-                    return ret
-                finally:
-                    tracker.inc.remote(
-                        f"{event}_completed",
-                        echo=report_completed,
-                    )
+class timeit:
+    def __init__(
+        self,
+        event: str,
+        report_completed: bool = True,
+        log_to_wandb: bool = False,
+    ):
+        self.event = event
+        self.report_completed = report_completed
+        self.log_to_wandb = log_to_wandb
+        self.tracker = None
+        self.begin_time = time.time()
 
-            return wrapped_fn
+    def _get_tracker(self) -> ray.actor.ActorHandle:
+        if self.tracker is None:
+            self.tracker = get_progress_tracker()
+        return self.tracker
 
-        def execute_generator(*args, **kwargs):
-            for val in f(*args, **kwargs):
-                yield val
+    def __enter__(self) -> None:
+        tracker = self._get_tracker()
+        if self.event == "sort":
+            tracker.record_start_time.remote()
+        tracker.inc.remote(f"{self.event}_started")
 
-        def execute_fn(*args, **kwargs):
-            return f(*args, **kwargs)
-
-        return factory(
-            execute_generator if inspect.isgeneratorfunction(f) else execute_fn
+    def __exit__(self, *_args) -> bool:
+        duration = time.time() - self.begin_time
+        tracker = self._get_tracker()
+        tracker.record_span.remote(
+            Span(
+                self.begin_time,
+                duration,
+                self.event,
+                ray.util.get_node_ip_address(),
+                os.getpid(),
+            ),
+            log_to_wandb=self.log_to_wandb,
         )
-
-    return decorator
+        tracker.inc.remote(
+            f"{self.event}_completed",
+            echo=self.report_completed,
+        )
+        return False
 
 
 def record_value(*args, **kwargs):
-    progress_tracker = get_progress_tracker()
-    progress_tracker.record_value.remote(*args, **kwargs)
+    tracker = get_progress_tracker()
+    tracker.record_value.remote(*args, **kwargs)
 
 
-def get_progress_tracker():
+def get_progress_tracker() -> ray.actor.ActorHandle:
     return ray.get_actor(constants.PROGRESS_TRACKER_ACTOR)
 
 
-def create_progress_tracker(*args, **kwargs):
+def create_progress_tracker(*args, **kwargs) -> ray.actor.ActorHandle:
     return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(
         *args, **kwargs
     )
@@ -97,10 +89,9 @@ def _make_trace_event(span: Span):
         "name": span.event,
         "pid": span.address,
         "tid": span.pid,
-        "ts": span.time * 1_000_000,
-        "dur": span.duration * 1_000_000,
+        "ts": int(span.time * 1_000_000),
+        "dur": int(span.duration * 1_000_000),
         "ph": "X",
-        "args": {},
     }
 
 
@@ -166,7 +157,6 @@ class ProgressTracker:
         self.gauges = _DefaultDictWithKey(metrics.Gauge)
         self.series = collections.defaultdict(list)
         self.spans = []
-        self.reset_gauges()
         self.initial_spilling_stats = _get_spilling_stats()
         self.start_time = None
         logging_utils.init()
@@ -185,10 +175,6 @@ class ProgressTracker:
             with open(constants.RAY_SYSTEM_CONFIG_FILE) as fin:
                 wandb.config.update(yaml.safe_load(fin))
         logging.info(wandb.config)
-
-    def reset_gauges(self):
-        for g in self.gauges.values():
-            g.set(0)
 
     def inc(self, metric: str, value: float = 1, echo=False, log_to_wandb=False):
         self.counts[metric] += value
@@ -257,7 +243,6 @@ class ProgressTracker:
             wandb.log({k: v - v0})
 
     def save_trace(self, save_to_wandb=False):
-        self.spans.sort(key=lambda span: span.time)
         ret = [_make_trace_event(span) for span in self.spans]
         filename = f"/tmp/raysort-{self.start_time}.json"
         with open(filename, "w") as fout:

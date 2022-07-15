@@ -12,22 +12,20 @@ from raysort.typing import PartId, PartInfo
 
 
 @ray.remote
-@tracing_utils.timeit("map")
 def mapper(
     cfg: AppConfig,
     _mapper_id: PartId,
     bounds: List[int],
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
-    start_time = time.time()
-    tracing_utils.record_value("map_arrive", start_time)
-    part = sort_utils.load_partition(cfg, pinfo)
-    load_duration = time.time() - start_time
-    tracing_utils.record_value("map_load_time", load_duration)
-    sort_fn = sortlib.sort_and_partition
-    blocks = sort_fn(part, bounds)
-    ret = [part[offset : offset + size] for offset, size in blocks]
-    return ret if len(ret) > 1 else ret[0]
+    with tracing_utils.timeit("map"):
+        tracing_utils.record_value("map_arrive", time.time())
+        with tracing_utils.timeit("map_load", report_completed=False):
+            part = sort_utils.load_partition(cfg, pinfo)
+        sort_fn = sortlib.sort_and_partition
+        blocks = sort_fn(part, bounds)
+        ret = [part[offset : offset + size] for offset, size in blocks]
+        return ret if len(ret) > 1 else ret[0]
 
 
 @ray.remote(num_cpus=0)
@@ -35,22 +33,23 @@ class Reducer:
     def __init__(self):
         self.arrival_times = []
 
-    @tracing_utils.timeit("reduce")
     def consume(self, _map_result):
-        # For fine-grained pipelining
-        t = time.time()
-        self.arrival_times.append(t)
-        tracing_utils.record_value("reduce_arrive", t)
+        with tracing_utils.timeit("reduce"):
+            # For fine-grained pipelining
+            t = time.time()
+            self.arrival_times.append(t)
+            tracing_utils.record_value("reduce_arrive", t)
 
-    @tracing_utils.timeit("reduce")
-    def consume_and_shuffle(self, *map_results):  # pylint: disable=no-self-use
-        # Intra-partition shuffle
-        catted = np.concatenate(map_results)
-        reshaped = catted.reshape((-1, 100))  # 100 is the number of bytes in a record
-        np.random.shuffle(reshaped)
+    def consume_and_shuffle(self, *map_results):
+        with tracing_utils.timeit("reduce"):
+            # Intra-partition shuffle
+            catted = np.concatenate(map_results)
+            reshaped = catted.reshape(
+                (-1, 100)
+            )  # 100 is the number of bytes in a record
+            np.random.shuffle(reshaped)
 
 
-@tracing_utils.timeit("sort")
 def sort(cfg: AppConfig):
     # Traditional unpipelined sort
 
@@ -98,7 +97,6 @@ def sort(cfg: AppConfig):
     print("OK")
 
 
-@tracing_utils.timeit("sort")
 def sort_partial_streaming(cfg: AppConfig):
     # Medium-grained pipelining: shuffle within small batches
 
@@ -148,7 +146,6 @@ def sort_partial_streaming(cfg: AppConfig):
     print("OK")
 
 
-@tracing_utils.timeit("sort")
 def sort_streaming(cfg: AppConfig):
     # Fine-grained application pipelining: no intra-partition shuffle
 
@@ -208,7 +205,8 @@ def main():
             elif cfg.dataloader_mode == "partial":
                 sort_partial_streaming(cfg)
         else:
-            sort(cfg)
+            with tracing_utils.timeit("sort"):
+                sort(cfg)
     finally:
         ray.get(tracker.performance_report.remote())
 
