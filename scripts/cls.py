@@ -548,6 +548,7 @@ def up(
         restart_yarn(inventory_path)
     print_after_setup(cluster_name)
 
+
 @setup_command_options
 @click.option(
     "--no-common",
