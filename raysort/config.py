@@ -476,7 +476,6 @@ __configs__ = [
             io_parallelism=4,
         ),
     ),
-
     # ------------------------------------------------------------
     #     i3.2xl 10 nodes 1TB NSDI '23
     # ------------------------------------------------------------
@@ -496,9 +495,7 @@ __configs__ = [
             reduce_parallelism_multiplier=1,
             simple_shuffle=True,
         ),
-
     ),
-
     JobConfig(
         # 675s, https://wandb.ai/raysort/raysort/runs/15gi7d6y
         name="1tb-1gb-i3i-simple",
@@ -516,7 +513,6 @@ __configs__ = [
             simple_shuffle=True,
         ),
     ),
-
     JobConfig(
         # 1038s, https://wandb.ai/raysort/raysort/runs/217qjb59
         name="1tb-.5gb-i3i-simple",
@@ -534,7 +530,6 @@ __configs__ = [
             simple_shuffle=True,
         ),
     ),
-
     JobConfig(
         # 804s, https://wandb.ai/raysort/raysort/runs/2kuh08o8
         name="1tb-2gb-i3i-riffle",
@@ -553,7 +548,6 @@ __configs__ = [
             merge_factor=8,
         ),
     ),
-
     JobConfig(
         # 705s, https://wandb.ai/raysort/raysort/runs/16gj5var
         name="1tb-1gb-i3i-riffle",
@@ -572,7 +566,6 @@ __configs__ = [
             merge_factor=8,
         ),
     ),
-
     JobConfig(
         # 770s, https://wandb.ai/raysort/raysort/runs/wp9zs9qb
         name="1tb-.5gb-i3i-riffle",
@@ -591,7 +584,6 @@ __configs__ = [
             merge_factor=8,
         ),
     ),
-
     JobConfig(
         # 623s, https://wandb.ai/raysort/raysort/runs/1x8b6ggk
         name="1tb-2gb-i3i-magnet",
@@ -609,7 +601,6 @@ __configs__ = [
             magnet=True,
         ),
     ),
-
     JobConfig(
         # 608s, https://wandb.ai/raysort/raysort/runs/2qn6b7e7
         name="1tb-1gb-i3i-magnet",
@@ -627,7 +618,6 @@ __configs__ = [
             magnet=True,
         ),
     ),
-
     JobConfig(
         # 630s, https://wandb.ai/raysort/raysort/runs/3c71pxms
         name="1tb-.5gb-i3i-magnet",
@@ -645,7 +635,6 @@ __configs__ = [
             magnet=True,
         ),
     ),
-
     JobConfig(
         # 597s, https://wandb.ai/raysort/raysort/runs/2ot7wyr4
         name="1tb-2gb-i3i-cosco",
@@ -662,7 +651,6 @@ __configs__ = [
             reduce_parallelism_multiplier=1,
         ),
     ),
-
     JobConfig(
         # 612s, https://wandb.ai/raysort/raysort/runs/1fkhss8g
         name="1tb-1gb-i3i-cosco",
@@ -679,7 +667,6 @@ __configs__ = [
             reduce_parallelism_multiplier=1,
         ),
     ),
-
     JobConfig(
         # 651s, https://wandb.ai/raysort/raysort/runs/1iatcdc6
         name="1tb-.5gb-i3i-cosco",
@@ -696,8 +683,6 @@ __configs__ = [
             reduce_parallelism_multiplier=1,
         ),
     ),
-    
-
     # ------------------------------------------------------------
     #     Local data loader experiments
     # ------------------------------------------------------------
