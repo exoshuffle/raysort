@@ -4,7 +4,7 @@ import string
 import sys
 
 import click
-import util
+import shell_utils
 
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 AUTOSCALER_DIR = SCRIPT_DIR / "config" / "autoscaler"
@@ -43,15 +43,15 @@ def get_or_create_autoscaler_config(cluster_name: str) -> pathlib.Path:
 
 
 def run_once(config_path: str):
-    util.run(f"ray up -y '{config_path}'")
+    shell_utils.run(f"ray up -y '{config_path}'")
     check_ready(config_path)
-    util.run(f"ray submit '{config_path}' raysort/main.py")
-    util.run(f"ray down -y '{config_path}'")
+    shell_utils.run(f"ray submit '{config_path}' raysort/main.py")
+    shell_utils.run(f"ray down -y '{config_path}'")
 
 
 def check_ready(config_path, num_tries=7, wait_time=60):
     while num_tries > 0:
-        status = util.run_output(
+        status = shell_utils.run_output(
             f"ray exec '{config_path}' 'conda activate raysort && ray status'"
         )
         if "no pending nodes" in status:
@@ -60,9 +60,9 @@ def check_ready(config_path, num_tries=7, wait_time=60):
         click.echo(
             f"Ray cluster is not ready yet, sleeping for {wait_time} secs, current status=\n{status}"
         )
-        util.sleep(wait_time, "worker nodes starting up...")
+        shell_utils.sleep(wait_time, "worker nodes starting up...")
         num_tries -= 1
-    util.run(f"ray down -y '{config_path}'")
+    shell_utils.run(f"ray down -y '{config_path}'")
     raise RuntimeError("Ray cluster is not ready")
 
 
@@ -75,7 +75,7 @@ def main():
     if sys.argv[1] == "run_once":
         run_once(config_path)
     else:
-        util.run(f"ray {sys.argv[1]} '{config_path}' {' '.join(sys.argv[2:])}")
+        shell_utils.run(f"ray {sys.argv[1]} '{config_path}' {' '.join(sys.argv[2:])}")
 
 
 if __name__ == "__main__":
