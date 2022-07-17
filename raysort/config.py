@@ -62,14 +62,21 @@ class SystemConfig:
     _cluster: InitVar[ClusterConfig]
     max_fused_object_count: int = 2000
     object_spilling_threshold: float = 0.8
-    object_store_memory_percent: float = 0.45
+    # How much system memory to allocate for the object store.
+    object_store_memory_percent: float = 0.6
     object_store_memory_bytes: int = field(init=False)
+    # How much larger should /dev/shm be compared to the object store.
+    shared_memory_multiplier: float = 1.001
+    shared_memory_bytes: int = field(init=False)
     ray_storage: Optional[str] = f"s3://{S3_BUCKET}" if S3_BUCKET else None
     s3_spill: int = 0
 
     def __post_init__(self, cluster: ClusterConfig):
         self.object_store_memory_bytes = int(
             cluster.instance_type.memory_bytes * self.object_store_memory_percent
+        )
+        self.shared_memory_bytes = int(
+            self.object_store_memory_bytes * self.shared_memory_multiplier
         )
 
 
@@ -543,7 +550,7 @@ __configs__ = [
         ),
     ),
     # ------------------------------------------------------------
-    #     i4i.2xl 10 nodes
+    #     i4i.2xl 10, 20 nodes
     # ------------------------------------------------------------
     JobConfig(
         # 361s, https://wandb.ai/raysort/raysort/runs/1hdz0pqi
@@ -599,25 +606,8 @@ __configs__ = [
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
-        name="1tb-2gb-i4i-native-s3",
-        cluster=dict(
-            instance_count=10,
-            instance_type=i4i_2xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=1000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
-            reduce_parallelism_multiplier=1,
-        ),
-    ),
-    JobConfig(
         # 451s, https://wandb.ai/raysort/raysort/runs/umnyuwgs
-        name="1tb-2gb-i4i-native-s3-yield",
+        name="1tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=10,
             instance_type=i4i_2xl,

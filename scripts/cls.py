@@ -435,6 +435,7 @@ def restart_ray(
         "ray_object_manager_port": RAY_OBJECT_MANAGER_PORT,
         "ray_merics_export_port": RAY_METRICS_EXPORT_PORT,
         "ray_object_store_memory": cfg.system.object_store_memory_bytes,
+        "shared_memory_bytes": cfg.system.shared_memory_bytes,
         "mnt_paths": get_mnt_paths(),
     }
     run_ansible_playbook(inventory_path, "ray", ev=ev)

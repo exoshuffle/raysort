@@ -13,10 +13,21 @@
     ray_object_manager_port: 8076
     ray_merics_export_port: 8090
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
+    shared_memory_bytes: "{{ (28 * 1024 + 1) * 1024 * 1024 }}"
   environment:
     RAY_STORAGE: "s3://{{ lookup('env', 'S3_BUCKET') }}"
     S3_BUCKET: "{{ lookup('env', 'S3_BUCKET') }}"
   tasks:
+    - name: Remount /dev/shm
+      become: true
+      ansible.posix.mount:
+        path: /dev/shm
+        src: tmpfs
+        fstype: tmpfs
+        state: remounted
+        opts: "size={{ shared_memory_bytes }}"
+      when: tmpfs_path
+
     - name: Sync Ray patches
       ansible.posix.synchronize:
         src: "{{ workdir }}/ray-patch/"
