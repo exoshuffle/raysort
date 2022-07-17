@@ -12,8 +12,8 @@ import boto3
 import click
 import psutil
 import ray
+import shell_utils
 import yaml
-from util import error, run, run_output, sleep
 
 from raysort import config
 
@@ -78,7 +78,7 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     cnt = len(instances)
     ret = cnt > 0
     if raise_if_exists and ret:
-        error(f"{cluster_name} must not exist (found {cnt} instances)")
+        shell_utils.error(f"{cluster_name} must not exist (found {cnt} instances)")
     return ret
 
 
@@ -106,20 +106,20 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
 
 def terraform_provision(cluster_name: str) -> None:
     tf_dir = get_or_create_tf_dir(cluster_name)
-    run("terraform init", cwd=tf_dir)
+    shell_utils.run("terraform init", cwd=tf_dir)
     cmd = "terraform apply -auto-approve" + get_terraform_vars(
         cluster_name=cluster_name,
         instance_count=cfg.cluster.instance_count,
         instance_type=cfg.cluster.instance_type.name,
     )
-    run(cmd, cwd=tf_dir)
+    shell_utils.run(cmd, cwd=tf_dir)
 
 
 def get_tf_output(
     cluster_name: str, key: Union[str, List[str]]
 ) -> Union[List[str], List[List[str]]]:
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
-    p = run("terraform output -json", cwd=tf_dir, stdout=subprocess.PIPE)
+    p = shell_utils.run("terraform output -json", cwd=tf_dir, stdout=subprocess.PIPE)
     data = json.loads(p.stdout.decode("ascii"))
     if isinstance(key, list):
         return [data[k]["value"] for k in key]
@@ -181,7 +181,7 @@ def run_ansible_playbook(
     cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
     if ev:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
-    return run(
+    return shell_utils.run(
         cmd,
         cwd=ANSIBLE_DIR,
         retries=retries,
@@ -228,14 +228,14 @@ def update_hosts_file(ips: List[str]) -> None:
     for i, ip in enumerate(ips):
         content += f"{ip} dn{i + 1}\n"
 
-    run(f"sudo cp {PATH} {PATH}.backup")
-    run(f"sudo echo <<EOF\n{content}\nEOF > {PATH}")
+    shell_utils.run(f"sudo cp {PATH} {PATH}.backup")
+    shell_utils.run(f"sudo echo <<EOF\n{content}\nEOF > {PATH}")
     click.secho(f"Updated {PATH}", fg="green")
 
 
 def update_workers_file(ips: List[str]) -> None:
     PATH = os.path.join(os.getenv("HADOOP_HOME"), "etc/hadoop/workers")
-    run(f"cp {PATH} {PATH}.backup")
+    shell_utils.run(f"cp {PATH} {PATH}.backup")
     with open(PATH, "w") as fout:
         fout.write("\n".join(ips))
     click.secho(f"Updated {PATH}", fg="green")
@@ -323,7 +323,7 @@ def setup_grafana() -> None:
 
 
 def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
-    head_ip = run_output("ec2metadata --local-ipv4")
+    head_ip = shell_utils.run_output("ec2metadata --local-ipv4")
     ips = get_tf_output(cluster_name, "instance_ips")
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
     if not os.environ.get("HADOOP_HOME"):
@@ -334,7 +334,7 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
         update_hadoop_config(head_ip, get_mnt_paths(), cfg.cluster.instance_type.hdd)
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
     if not cluster_exists:
-        sleep(60, "worker nodes starting up")
+        shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
     run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
@@ -421,14 +421,14 @@ def restart_ray(
     clear_data_dir: bool,
 ) -> None:
     # Clear all mounts in case the previous setup has more mounts than we have.
-    run(f"sudo rm -rf {MNT_PATH_PATTERN}")
+    shell_utils.run(f"sudo rm -rf {MNT_PATH_PATTERN}")
     for mnt in get_mnt_paths():
-        run(f"sudo mkdir -m 777 -p {mnt}")
-    run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
-    run("ray stop -f")
+        shell_utils.run(f"sudo mkdir -m 777 -p {mnt}")
+    shell_utils.run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
+    shell_utils.run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd()
-    run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage))
-    head_ip = run_output("ec2metadata --local-ipv4")
+    shell_utils.run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage))
+    head_ip = shell_utils.run_output("ec2metadata --local-ipv4")
     ev = {
         "head_ip": head_ip,
         "clear_data_dir": clear_data_dir,
@@ -438,8 +438,8 @@ def restart_ray(
         "mnt_paths": get_mnt_paths(),
     }
     run_ansible_playbook(inventory_path, "ray", ev=ev)
-    sleep(3, "waiting for Ray nodes to connect")
-    run("ray status")
+    shell_utils.sleep(3, "waiting for Ray nodes to connect")
+    shell_utils.run("ray status")
     write_ray_system_config(ray_system_config, RAY_SYSTEM_CONFIG_FILE_PATH)
 
 
@@ -453,15 +453,15 @@ def restart_yarn(inventory_path: pathlib.Path) -> None:
     HADOOP_HOME = os.getenv("HADOOP_HOME")
     SPARK_HOME = os.getenv("SPARK_HOME")
     SPARK_EVENTS_DIR = "hdfs:///spark-events"
-    run(f"{SPARK_HOME}/sbin/stop-history-server.sh")
-    run(f"{HADOOP_HOME}/sbin/stop-yarn.sh", env=env)
-    run(f"{HADOOP_HOME}/sbin/stop-dfs.sh", env=env)
-    run(f"{HADOOP_HOME}/bin/hdfs namenode -format -force")
+    shell_utils.run(f"{SPARK_HOME}/sbin/stop-history-server.sh")
+    shell_utils.run(f"{HADOOP_HOME}/sbin/stop-yarn.sh", env=env)
+    shell_utils.run(f"{HADOOP_HOME}/sbin/stop-dfs.sh", env=env)
+    shell_utils.run(f"{HADOOP_HOME}/bin/hdfs namenode -format -force")
     run_ansible_playbook(inventory_path, "yarn", ev={"mnt_paths": mnt_paths})
-    run(f"{HADOOP_HOME}/sbin/start-dfs.sh", env=env)
-    run(f"{HADOOP_HOME}/sbin/start-yarn.sh", env=env)
-    run(f"{HADOOP_HOME}/bin/hdfs dfs -mkdir {SPARK_EVENTS_DIR}")
-    run(
+    shell_utils.run(f"{HADOOP_HOME}/sbin/start-dfs.sh", env=env)
+    shell_utils.run(f"{HADOOP_HOME}/sbin/start-yarn.sh", env=env)
+    shell_utils.run(f"{HADOOP_HOME}/bin/hdfs dfs -mkdir {SPARK_EVENTS_DIR}")
+    shell_utils.run(
         f"{SPARK_HOME}/sbin/start-history-server.sh",
         env=dict(
             env,
@@ -484,7 +484,7 @@ def pip_install_upgrade() -> None:
         f"-r {requirement_dir}/{requirement_file}"
         for requirement_file in ["dev.txt", "worker.txt"]
     )
-    run(f"pip install --no-cache-dir --upgrade {requirements}")
+    shell_utils.run(f"pip install --no-cache-dir --upgrade {requirements}")
 
 
 # ------------------------------------------------------------
@@ -536,7 +536,9 @@ def up(
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
-        error(f"{cluster_name} exists on the cloud but nothing is found locally")
+        shell_utils.error(
+            f"{cluster_name} exists on the cloud but nothing is found locally"
+        )
     terraform_provision(cluster_name)
     inventory_path = common_setup(cluster_name, cluster_exists)
     if ray:
@@ -584,7 +586,7 @@ def down():
     cmd = "terraform destroy -auto-approve" + get_terraform_vars(
         cluster_name=cluster_name
     )
-    run(cmd, cwd=tf_dir)
+    shell_utils.run(cmd, cwd=tf_dir)
     check_cluster_existence(cluster_name, raise_if_exists=True)
 
 
@@ -613,7 +615,7 @@ def ssh(worker_id_or_ip: str):
         ip = ips[idx]
     except ValueError:
         ip = worker_id_or_ip
-    run(
+    shell_utils.run(
         f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
 
