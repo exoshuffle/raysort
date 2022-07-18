@@ -436,7 +436,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         # Wait for the previous round of map tasks to finish.
         num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
         if num_extra_rounds > 0:
-            ray_utils.wait(map_tasks, wait_all=True)
+            ray_utils.wait(map_tasks)
 
         # Submit a new round of map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
