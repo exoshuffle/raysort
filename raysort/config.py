@@ -163,13 +163,23 @@ class AppConfig:
 
         self.num_workers = cluster.instance_count
         self.num_mappers = int(math.ceil(self.total_data_size / self.input_part_size))
-        assert self.num_mappers % self.num_workers == 0, self
+        assert self.num_mappers % self.num_workers == 0, (
+            self.num_mappers,
+            self.num_workers,
+        )
         self.num_mappers_per_worker = self.num_mappers // self.num_workers
         if self.riffle:
-            assert self.merge_factor % self.map_parallelism == 0, self
+            assert self.merge_factor % self.map_parallelism == 0, (
+                self.merge_factor,
+                self.map_parallelism,
+            )
             self.merge_parallelism = 1
         else:
-            assert self.map_parallelism % self.merge_factor == 0, self
+            assert self.map_parallelism % self.merge_factor == 0, (
+                self.map_parallelism,
+                self.merge_factor,
+            )
+            self.merge_parallelism = self.map_parallelism // self.merge_factor
             self.merge_parallelism = self.map_parallelism // self.merge_factor
         if self.skip_first_stage:
             self.skip_input = True
@@ -178,7 +188,10 @@ class AppConfig:
         )
         self.num_mergers_per_worker = self.num_rounds * self.merge_parallelism
         self.num_reducers = self.num_mappers
-        assert self.num_reducers % self.num_workers == 0, self
+        assert self.num_reducers % self.num_workers == 0, (
+            self.num_reducers,
+            self.num_workers,
+        )
         self.num_reducers_per_worker = self.num_reducers // self.num_workers
 
         self.merge_io_parallelism = self.io_parallelism // self.merge_parallelism
