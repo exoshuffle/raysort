@@ -492,7 +492,8 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             map_results = None
 
         if cfg.fail_node and start_time and time.time() - start_time > cfg.fail_time:
-            ray_utils.fail_and_restart_node(cfg)
+            print("Failing a node")
+            ray_utils.fail_node(cfg)
             start_time = None
 
     return reduce_stage(

@@ -24,7 +24,7 @@ GB = MB * 1000
 
 def get_s3_buckets(count: int = 1) -> List[str]:
     assert S3_BUCKET
-    return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
+    return [S3_BUCKET] if count == 1 else [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
 
 @dataclass
@@ -131,7 +131,8 @@ class AppConfig:
 
     s3_buckets: List[str] = field(default_factory=list)
 
-    fail_node: Optional[str] = None
+    fail_node: bool = False
+    fail_and_restart_node: Optional[str] = None
     fail_time: int = 45
 
     generate_input: bool = False
@@ -968,6 +969,27 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #    Test failures on i4i 10 nodes 1 TB
+    # ------------------------------------------------------------
+    JobConfig(
+        # 465s, https://wandb.ai/raysort/raysort/runs/3t5sxwjw
+        name="1tb-2gb-i4i-failure",:
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            io_parallelism=16,
+            reduce_parallelism_multiplier=1,
+            fail_node=True,
         ),
     ),
 ]

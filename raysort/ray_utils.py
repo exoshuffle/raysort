@@ -158,6 +158,67 @@ def fail_and_restart_node(cfg: AppConfig):
         _fail_and_restart_remote_node(cfg.fail_node)
 
 
+def _fail_local_node(cfg: AppConfig):
+    idx = int(cfg.fail_node)
+    worker_node = list(local_cluster.worker_nodes)[idx]
+    resource_spec = worker_node.get_resource_spec()
+    print("Killing worker node", worker_node, resource_spec)
+    local_cluster.remove_node(worker_node)
+
+
+def _fail_remote_node(worker_ip: str):
+    # TODO(lsf): Can get a worker IP address directly from ray.node()
+    # without having to specify. Also might be able to make this more
+    # elegant using resource_spec.
+    # Expect a specific worker IP in this case
+    assert worker_ip != ""
+    # Use subprocess to ssh and stop/start a worker.
+    hostname = socket.gethostname()
+    local_ip = socket.gethostbyname(hostname)
+    object_store = 28 * 1024 * 1024 * 1024
+    python_dir = "~/miniconda3/envs/raysort/bin"
+    
+    stop_cmd = "{python_dir}/ray stop -f".format(python_dir=python_dir)
+    ssh = "ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+    print("Killing worker node", worker_ip)
+    with subprocess.Popen(
+        "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets before kill:", out)
+    with subprocess.Popen(
+        "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),
+        check=True,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as p:
+        _ = p.communicate()
+    with subprocess.Popen(
+        "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
+        check=True,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as p:
+        out, _ = p.communicate()
+        print("Raylets after kill:", out)
+   
+
+def fail_node(cfg: AppConfig):
+    if not cfg.fail_node:
+        return
+    if local_cluster is not None:
+        _fail_local_node(cfg.worker_ips[0])
+    else:
+        _fail_remote_node(cfg.worker_ips[0])
+
+
+
 def wait(
     futures,
     wait_all: bool = False,
