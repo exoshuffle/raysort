@@ -52,6 +52,7 @@ class ClusterConfig:
         if self.ebs:
             self.instance_type.disk_count += 1
 
+
 @dataclass
 class SystemConfig:
     _cluster: InitVar[ClusterConfig]
