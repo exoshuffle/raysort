@@ -481,7 +481,7 @@ __configs__ = [
     # ------------------------------------------------------------
     JobConfig(
         # 571s, https://wandb.ai/raysort/raysort/runs/2ib2wl1l
-        name="1tb-2gb-i3i-simple",
+        name="1tb-2gb-i3-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -498,7 +498,7 @@ __configs__ = [
     ),
     JobConfig(
         # 675s, https://wandb.ai/raysort/raysort/runs/15gi7d6y
-        name="1tb-1gb-i3i-simple",
+        name="1tb-1gb-i3-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -515,7 +515,7 @@ __configs__ = [
     ),
     JobConfig(
         # 1038s, https://wandb.ai/raysort/raysort/runs/217qjb59
-        name="1tb-.5gb-i3i-simple",
+        name="1tb-.5gb-i3-simple",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -532,7 +532,7 @@ __configs__ = [
     ),
     JobConfig(
         # 804s, https://wandb.ai/raysort/raysort/runs/2kuh08o8
-        name="1tb-2gb-i3i-riffle",
+        name="1tb-2gb-i3-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -550,7 +550,7 @@ __configs__ = [
     ),
     JobConfig(
         # 705s, https://wandb.ai/raysort/raysort/runs/16gj5var
-        name="1tb-1gb-i3i-riffle",
+        name="1tb-1gb-i3-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -568,7 +568,7 @@ __configs__ = [
     ),
     JobConfig(
         # 770s, https://wandb.ai/raysort/raysort/runs/wp9zs9qb
-        name="1tb-.5gb-i3i-riffle",
+        name="1tb-.5gb-i3-riffle",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -586,7 +586,7 @@ __configs__ = [
     ),
     JobConfig(
         # 623s, https://wandb.ai/raysort/raysort/runs/1x8b6ggk
-        name="1tb-2gb-i3i-magnet",
+        name="1tb-2gb-i3-magnet",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -603,7 +603,7 @@ __configs__ = [
     ),
     JobConfig(
         # 608s, https://wandb.ai/raysort/raysort/runs/2qn6b7e7
-        name="1tb-1gb-i3i-magnet",
+        name="1tb-1gb-i3-magnet",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -620,7 +620,7 @@ __configs__ = [
     ),
     JobConfig(
         # 630s, https://wandb.ai/raysort/raysort/runs/3c71pxms
-        name="1tb-.5gb-i3i-magnet",
+        name="1tb-.5gb-i3-magnet",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -637,7 +637,7 @@ __configs__ = [
     ),
     JobConfig(
         # 597s, https://wandb.ai/raysort/raysort/runs/2ot7wyr4
-        name="1tb-2gb-i3i-cosco",
+        name="1tb-2gb-i3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -653,7 +653,7 @@ __configs__ = [
     ),
     JobConfig(
         # 612s, https://wandb.ai/raysort/raysort/runs/1fkhss8g
-        name="1tb-1gb-i3i-cosco",
+        name="1tb-1gb-i3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
@@ -669,7 +669,7 @@ __configs__ = [
     ),
     JobConfig(
         # 651s, https://wandb.ai/raysort/raysort/runs/1iatcdc6
-        name="1tb-.5gb-i3i-cosco",
+        name="1tb-.5gb-i3-cosco",
         cluster=dict(
             instance_count=10,
             instance_type=i3_2xl,
