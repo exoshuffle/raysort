@@ -129,7 +129,7 @@ def _merge_blocks_prep(
     cfg: AppConfig, bounds: List[int], blocks: Tuple[np.ndarray]
 ) -> Iterable[np.ndarray]:
     with tracing_utils.timeit("shuffle", report_completed=False):
-        blocks = list(blocks)
+        blocks = ray.get(list(blocks))
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
 
