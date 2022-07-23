@@ -125,6 +125,23 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
     return ret
 
 
+def _merge_blocks_prep(
+    cfg: AppConfig, bounds: List[int], blocks: Tuple[np.ndarray]
+) -> Iterable[np.ndarray]:
+    with tracing_utils.timeit("shuffle", report_completed=False):
+        blocks = ray.get(list(blocks))
+        if isinstance(blocks[0], ray.ObjectRef):
+            blocks = ray.get(blocks)
+
+    M = len(blocks)
+    total_bytes = sum(b.size for b in blocks)
+    num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+    get_block = functools.partial(_get_block, blocks)
+
+    merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
+    return merge_fn(M, get_block, num_records, False, bounds)
+
+
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
 @ray.remote(num_cpus=0)
@@ -132,21 +149,10 @@ def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: List[int],
-    *blocks: Tuple[np.ndarray],
+    blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
+    merger = _merge_blocks_prep(cfg, bounds, blocks)
     with tracing_utils.timeit("merge"):
-        blocks = list(blocks)
-        if isinstance(blocks[0], ray.ObjectRef):
-            blocks = ray.get(blocks)
-
-        M = len(blocks)
-        total_bytes = sum(b.size for b in blocks)
-        num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
-        get_block = functools.partial(_get_block, blocks)
-
-        merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-        merger = merge_fn(M, get_block, num_records, False, bounds)
-
         ret = []
         spill_tasks = []
         spill_remote = ray_utils.remote(spill_block)
@@ -185,21 +191,10 @@ def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
     bounds: List[int],
-    *blocks: Tuple[np.ndarray],
+    blocks: Tuple[np.ndarray],
 ) -> Union[List[PartInfo], List[np.ndarray]]:
+    merger = _merge_blocks_prep(cfg, bounds, blocks)
     with tracing_utils.timeit("merge"):
-        blocks = list(blocks)
-        if isinstance(blocks[0], ray.ObjectRef):
-            blocks = ray.get(blocks)
-
-        M = len(blocks)
-        total_bytes = sum(b.size for b in blocks)
-        num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
-        get_block = functools.partial(_get_block, blocks)
-
-        merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-        merger = merge_fn(M, get_block, num_records, False, bounds)
-
         for datachunk in merger:
             yield datachunk
 
@@ -394,7 +389,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds, *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds, map_blocks)
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
@@ -477,7 +472,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 refs = merge_fn.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds[w], *map_blocks)
+                ).remote(cfg, merge_id, merge_bounds[w], map_blocks)
                 merge_results[w, m, :] = refs
                 ref_recorder.record(
                     refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
