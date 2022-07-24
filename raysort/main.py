@@ -39,10 +39,10 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 
 def mapper_sort_blocks(
-    cfg: AppConfig, bounds: List[int], pinfo: PartInfo
+    cfg: AppConfig, bounds: List[int], pinfo: List[PartInfo]
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
     with tracing_utils.timeit("map_load", report_completed=False):
-        part = sort_utils.load_partition(cfg, pinfo)
+        part = sort_utils.load_partitions(cfg, pinfo)
     sort_fn = (
         _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
     )
@@ -54,7 +54,7 @@ def mapper_sort_blocks(
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
 def mapper(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: List[PartInfo]
 ) -> List[np.ndarray]:
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
@@ -68,7 +68,7 @@ def mapper(
 
 @ray.remote(num_cpus=0)
 def mapper_yield(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: PartInfo
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: List[PartInfo]
 ) -> List[np.ndarray]:
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
@@ -437,6 +437,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     all_map_results = []  # For Magnet.
     map_tasks = []
     part_id = 0
+    num_shards = cfg.num_shards_per_mapper
     for rnd in range(cfg.num_rounds):
         # Wait for the previous round of map tasks to finish.
         num_extra_rounds = rnd - cfg.num_concurrent_rounds + 1
@@ -447,8 +448,8 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
-            pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+            pinfo = parts[part_id * num_shards : (part_id + 1) * num_shards]
+            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo[0], part_id))
             m = part_id % num_map_tasks_per_round
             refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
             map_results[m, :] = refs

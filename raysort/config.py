@@ -91,6 +91,9 @@ class AppConfig:
 
     num_workers: int = field(init=False)
     num_mappers: int = field(init=False)
+    num_shards_per_mapper: int = 1
+    num_shards: int = field(init=False)
+    input_shard_size: int = field(init=False)
     num_mappers_per_worker: int = field(init=False)
     num_mergers_per_worker: int = field(init=False)
     num_reducers: int = field(init=False)
@@ -164,6 +167,8 @@ class AppConfig:
         self.num_workers = cluster.instance_count
         self.num_mappers = int(math.ceil(self.total_data_size / self.input_part_size))
         assert self.num_mappers % self.num_workers == 0, self
+        self.num_shards = self.num_mappers * self.num_shards_per_mapper
+        self.input_shard_size = self.input_part_size // self.num_shards_per_mapper
         self.num_mappers_per_worker = self.num_mappers // self.num_workers
         if self.riffle:
             assert self.merge_factor % self.map_parallelism == 0, self
