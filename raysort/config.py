@@ -362,6 +362,15 @@ __configs__ = [
         ),
     ),
     JobConfig(
+        name="LocalNativeMultiShard",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            num_shards_per_mapper=2,
+        ),
+    ),
+    JobConfig(
         name="LocalMagnet",
         cluster=local_cluster,
         system=dict(),
