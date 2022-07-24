@@ -39,10 +39,10 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 
 def mapper_sort_blocks(
-    cfg: AppConfig, bounds: List[int], pinfo: List[PartInfo]
+    cfg: AppConfig, bounds: List[int], pinfolist: List[PartInfo]
 ) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
     with tracing_utils.timeit("map_load", report_completed=False):
-        part = sort_utils.load_partitions(cfg, pinfo)
+        part = sort_utils.load_partitions(cfg, pinfolist)
     sort_fn = (
         _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
     )
@@ -54,10 +54,10 @@ def mapper_sort_blocks(
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
 def mapper(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: List[PartInfo]
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
 ) -> List[np.ndarray]:
     with tracing_utils.timeit("map"):
-        part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
+        part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         if cfg.use_put:
             ret = [ray.put(part[offset : offset + size]) for offset, size in blocks]
         else:
@@ -68,10 +68,10 @@ def mapper(
 
 @ray.remote(num_cpus=0)
 def mapper_yield(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfo: List[PartInfo]
+    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
 ) -> List[np.ndarray]:
     with tracing_utils.timeit("map"):
-        part, blocks = mapper_sort_blocks(cfg, bounds, pinfo)
+        part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         for offset, size in blocks:
             yield part[offset : offset + size]
         # Return an extra object for tracking task progress.
@@ -310,7 +310,7 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         pinfo = parts[part_id]
         opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
         map_results[part_id, :] = mapper.options(**opt).remote(
-            cfg, part_id, bounds, pinfo
+            cfg, part_id, bounds, [pinfo]
         )[: cfg.num_reducers]
         # TODO(@lsf): try memory-aware scheduling
         if part_id > 0 and part_id % num_map_tasks_per_round == 0:
@@ -359,7 +359,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             m = part_id % num_map_tasks_per_round
             map_results[i % cfg.num_workers, i // cfg.num_workers] = mapper.options(
                 **opt
-            ).remote(cfg, part_id, map_bounds, pinfo)[0]
+            ).remote(cfg, part_id, map_bounds, [pinfo])[0]
             part_id += 1
         all_map_results.append(map_results)
 
@@ -443,10 +443,10 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
-            pinfo = parts[part_id * num_shards : (part_id + 1) * num_shards]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo[0], part_id))
+            pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
+            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
             m = part_id % num_map_tasks_per_round
-            refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfo)
+            refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
             map_results[m, :] = refs
             ref_recorder.record(
                 refs, lambda i, part_id=part_id: f"map_{part_id:010x}_{i}"

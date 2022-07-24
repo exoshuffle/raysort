@@ -36,9 +36,9 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
         return ret
 
 
-def load_partitions(cfg: AppConfig, pinfo: List[PartInfo]) -> np.ndarray:
+def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
     # TODO(@lsf): make this concurrent
-    parts = [load_partition(cfg, p) for p in pinfo]
+    parts = [load_partition(cfg, pinfo) for pinfo in pinfolist]
     return np.concatenate(parts)
 
 
