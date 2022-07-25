@@ -1,5 +1,6 @@
 import io
 import os
+import threading
 from typing import Iterable, List, Optional
 
 import boto3
@@ -17,7 +18,7 @@ MiB = KiB * 1024
 
 
 def s3() -> botocore.client.BaseClient:
-    return boto3.client(
+    return boto3.session.Session().client(
         "s3",
         config=botocore.config.Config(
             retries={
@@ -37,16 +38,38 @@ def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) 
             os.remove(src)
 
 
+def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
+    io_buffers = [io.BytesIO() for _ in pinfolist]
+    threads = [
+        threading.Thread(
+            target=download_s3,
+            args=(pinfo,),
+            kwargs={"buf": buf, "max_concurrency": 4},
+        )
+        for pinfo, buf in zip(pinfolist, io_buffers)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return np.frombuffer(
+        bytearray(b"".join([buf.getbuffer() for buf in io_buffers])),
+        dtype=np.uint8,
+    )
+
+
 def download_s3(
-    pinfo: PartInfo, dst: Optional[Path] = None, **kwargs
+    pinfo: PartInfo,
+    filename: Optional[Path] = None,
+    buf: io.BytesIO = io.BytesIO(),
+    **kwargs
 ) -> Optional[np.ndarray]:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
-    if dst:
-        s3().download_file(pinfo.bucket, pinfo.path, dst, Config=config)
+    if filename:
+        s3().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
         return None
-    ret = io.BytesIO()
-    s3().download_fileobj(pinfo.bucket, pinfo.path, ret, Config=config)
-    return np.frombuffer(ret.getbuffer(), dtype=np.uint8)
+    s3().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
+    return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
 
 def upload_s3_buffer(

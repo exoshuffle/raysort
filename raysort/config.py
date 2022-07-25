@@ -362,15 +362,6 @@ __configs__ = [
         ),
     ),
     JobConfig(
-        name="LocalNativeMultiShard",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            num_shards_per_mapper=2,
-        ),
-    ),
-    JobConfig(
         name="LocalMagnet",
         cluster=local_cluster,
         system=dict(),
@@ -476,6 +467,16 @@ __configs__ = [
         app=dict(
             **local_mini_app_config,
             s3_buckets=get_s3_buckets(),
+        ),
+    ),
+    JobConfig(
+        name="LocalS3IOMultiShard",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_mini_app_config,
+            s3_buckets=get_s3_buckets(),
+            num_shards_per_mapper=2,
         ),
     ),
     JobConfig(
@@ -852,6 +853,7 @@ __configs__ = [
             total_gb=1000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
+            num_shards_per_mapper=4,
             io_parallelism=16,
             reduce_parallelism_multiplier=1,
             use_yield=True,

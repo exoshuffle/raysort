@@ -37,11 +37,9 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
 
 
 def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
-    if len(pinfolist) == 1:
-        return load_partition(cfg, pinfolist[0])
-    load_remote = ray_utils.remote(load_partition)
-    parts = ray.get([load_remote.remote(cfg, pinfo) for pinfo in pinfolist])
-    return np.concatenate(parts)
+    if cfg.s3_buckets:
+        return s3_utils.download_s3_parallel(pinfolist)
+    return np.concatenate([load_partition(cfg, pinfo) for pinfo in pinfolist])
 
 
 def load_partition(cfg: AppConfig, pinfo: List[PartInfo]) -> np.ndarray:
@@ -256,7 +254,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
     if cfg.s3_buckets:
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3_utils.download_s3(pinfo, tmp_path)
+        s3_utils.download_s3(pinfo, filename=tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
