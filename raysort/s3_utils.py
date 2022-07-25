@@ -52,10 +52,10 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
         thread.start()
     for thread in threads:
         thread.join()
-    return np.frombuffer(
-        bytearray(b"".join([buf.getbuffer() for buf in io_buffers])),
-        dtype=np.uint8,
-    )
+    ret = bytearray()
+    for buf in io_buffers:
+        ret += buf.getbuffer()
+    return np.frombuffer(ret, dtype=np.uint8)
 
 
 def download_s3(
