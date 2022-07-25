@@ -51,6 +51,11 @@ jobs:
           CONFIG: LocalS3IO
         run: python raysort/main.py
 
+      - name: 0.1GB Ray native shuffle, input/output on S3, 2 shards per mapper
+        env:
+          CONFIG: LocalS3IOMultiShard
+        run: python raysort/main.py
+
       - name: 0.1GB Ray native shuffle, input/output and spilling on S3
         env:
           CONFIG: LocalS3IOAndSpilling
