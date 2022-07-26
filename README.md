@@ -13,7 +13,7 @@ pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 scripts/installers/install_binaries.sh
 ```
 
-Edit `.envrc` and change `CLUSTER_NAME` and `S3_BUCKET` to your own. Set up [direnv](https://direnv.net/) so that the `.envrc` files are sourced automatically when you `cd` into a directory. Otherwise, manually `source .envrc`.
+Edit `.envrc` and change `USERNAME` and `S3_BUCKET` to your own. Set up [direnv](https://direnv.net/) so that the `.envrc` files are sourced automatically when you `cd` into a directory. Otherwise, manually `source .envrc`.
 
 ## Running Locally
 

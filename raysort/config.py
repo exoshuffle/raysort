@@ -8,7 +8,6 @@ import ray
 
 from raysort.typing import AppStep, InstanceLifetime, SpillingMode
 
-CLUSTER_NAME = os.getenv("CLUSTER_NAME", "raysort-cluster")
 S3_BUCKET = os.getenv("S3_BUCKET")
 
 CONFIG_NAME_ENV_VAR = "CONFIG"
@@ -46,15 +45,12 @@ class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
     instance_lifetime: InstanceLifetime = InstanceLifetime.SPOT
-    name: str = CLUSTER_NAME
     ebs: bool = False
     local: bool = False
 
     def __post_init__(self):
         if self.ebs:
             self.instance_type.disk_count += 1
-        if self.instance_lifetime == InstanceLifetime.SPOT:
-            self.name += "-spot"
 
 
 @dataclass
