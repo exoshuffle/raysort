@@ -37,7 +37,7 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
 
 
 def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
-    if cfg.s3_buckets:
+    if cfg.s3_buckets and len(pinfolist) > 1:
         return s3_utils.download_s3_parallel(pinfolist)
     return np.concatenate([load_partition(cfg, pinfo) for pinfo in pinfolist])
 

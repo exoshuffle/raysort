@@ -44,7 +44,7 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
         threading.Thread(
             target=download_s3,
             args=(pinfo,),
-            kwargs={"buf": buf, "max_concurrency": 4},
+            kwargs={"buf": buf, "max_concurrency": 2},
         )
         for pinfo, buf in zip(pinfolist, io_buffers)
     ]
@@ -61,13 +61,15 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
 def download_s3(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
-    buf: io.BytesIO = io.BytesIO(),
+    buf: Optional[io.BytesIO] = None,
     **kwargs
 ) -> Optional[np.ndarray]:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if filename:
         s3().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
         return None
+    if buf is None:
+        buf = io.BytesIO()
     s3().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
@@ -95,7 +97,7 @@ def multi_upload(
 ) -> List[PartInfo]:
     parallelism = cfg.reduce_io_parallelism
     upload_threads = []
-    mpu_queue = queue.Queue()
+    mpu_queue = queue.PriorityQueue()
     chunk_id = 0
 
     def upload(data, chunk_id):
