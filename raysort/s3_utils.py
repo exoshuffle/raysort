@@ -1,15 +1,15 @@
 import io
 import os
+import queue
 import threading
 from typing import Iterable, List, Optional
 
 import boto3
 import botocore
 import numpy as np
-import ray
 from boto3.s3 import transfer
 
-from raysort import constants, ray_utils, sort_utils
+from raysort import constants, sort_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
@@ -48,10 +48,10 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
         )
         for pinfo, buf in zip(pinfolist, io_buffers)
     ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    for thd in threads:
+        thd.start()
+    for thd in threads:
+        thd.join()
     ret = bytearray()
     for buf in io_buffers:
         ret += buf.getbuffer()
@@ -94,26 +94,26 @@ def multi_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
 ) -> List[PartInfo]:
     parallelism = cfg.reduce_io_parallelism
-    tasks = []
+    upload_threads = []
+    mpu_queue = queue.Queue()
     chunk_id = 0
 
     def upload(data, chunk_id):
         sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
         sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", s3=True)
         upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
-        return sub_pinfo
-
-    upload_remote = ray_utils.remote(upload)
+        mpu_queue.put(sub_pinfo)
 
     def upload_part(data):
         nonlocal chunk_id
-        if parallelism > 0 and len(tasks) > parallelism:
-            ray_utils.wait(tasks, num_returns=len(tasks) - parallelism)
+        if len(upload_threads) >= parallelism > 0:
+            upload_threads.pop(0).join()
         if parallelism > 0:
-            task = upload_remote.remote(data, chunk_id)
+            thd = threading.Thread(target=upload, args=(data, chunk_id))
+            thd.start()
+            upload_threads.append(thd)
         else:
-            task = upload(data, chunk_id)
-        tasks.append(task)
+            upload(data, chunk_id)
         chunk_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
@@ -133,7 +133,10 @@ def multi_upload(
         upload_part(tail.getbuffer())
 
     # Wait for all upload tasks to complete.
-    return ray.get(tasks) if parallelism > 0 else tasks
+    for thd in upload_threads:
+        thd.join()
+
+    return list(mpu_queue.queue)
 
 
 def multipart_upload(
@@ -143,21 +146,20 @@ def multipart_upload(
     # return single_upload(cfg, pinfo, merger)
     # return multi_upload(cfg, pinfo, merger)
     parallelism = cfg.reduce_io_parallelism
-    s3_client = boto3.client("s3")
+    s3_client = s3()
     mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
-    tasks = []
+    upload_threads = []
+    mpu_queue = queue.PriorityQueue()
     mpu_part_id = 1
 
     def upload(**kwargs):
-        # Cannot use s3_client because Ray cannot pickle SSLContext.
-        return s3().upload_part(**kwargs)
-
-    upload_remote = ray_utils.remote(upload)
+        resp = s3_client.upload_part(**kwargs)
+        mpu_queue.put((kwargs["PartNumber"], resp))
 
     def upload_part(data):
         nonlocal mpu_part_id
-        if parallelism > 0 and len(tasks) > parallelism:
-            ray_utils.wait([t for t, _ in tasks], num_returns=len(tasks) - parallelism)
+        if len(upload_threads) >= parallelism > 0:
+            upload_threads.pop(0).join()
         kwargs = dict(
             Body=data,
             Bucket=pinfo.bucket,
@@ -166,10 +168,11 @@ def multipart_upload(
             UploadId=mpu["UploadId"],
         )
         if parallelism > 0:
-            task = upload_remote.remote(**kwargs)
+            thd = threading.Thread(target=upload, kwargs=kwargs)
+            thd.start()
+            upload_threads.append(thd)
         else:
-            task = upload(**kwargs)
-        tasks.append((task, mpu_part_id))
+            upload(**kwargs)
         mpu_part_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
@@ -189,13 +192,13 @@ def multipart_upload(
         upload_part(tail)
 
     # Wait for all upload tasks to complete.
-    mpu_parts = [
-        {
-            "ETag": ray.get(t)["ETag"] if isinstance(t, ray.ObjectRef) else t["ETag"],
-            "PartNumber": mpid,
-        }
-        for t, mpid in tasks
-    ]
+    for thd in upload_threads:
+        thd.join()
+
+    mpu_parts = []
+    while not mpu_queue.empty():
+        mpu_id, resp = mpu_queue.get()
+        mpu_parts.append({"ETag": resp["ETag"], "PartNumber": mpu_id})
 
     s3_client.complete_multipart_upload(
         Bucket=pinfo.bucket,
