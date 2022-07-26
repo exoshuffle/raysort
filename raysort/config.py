@@ -87,6 +87,9 @@ class AppConfig:
 
     num_workers: int = field(init=False)
     num_mappers: int = field(init=False)
+    num_shards_per_mapper: int = 1
+    num_shards: int = field(init=False)
+    input_shard_size: int = field(init=False)
     num_mappers_per_worker: int = field(init=False)
     num_mergers_per_worker: int = field(init=False)
     num_reducers: int = field(init=False)
@@ -163,6 +166,8 @@ class AppConfig:
             self.num_mappers,
             self.num_workers,
         )
+        self.num_shards = self.num_mappers * self.num_shards_per_mapper
+        self.input_shard_size = self.input_part_size // self.num_shards_per_mapper
         self.num_mappers_per_worker = self.num_mappers // self.num_workers
         if self.riffle:
             assert self.merge_factor % self.map_parallelism == 0, (
@@ -458,6 +463,16 @@ __configs__ = [
         app=dict(
             **local_mini_app_config,
             s3_buckets=get_s3_buckets(),
+        ),
+    ),
+    JobConfig(
+        name="LocalS3IOMultiShard",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_mini_app_config,
+            s3_buckets=get_s3_buckets(),
+            num_shards_per_mapper=2,
         ),
     ),
     JobConfig(
@@ -822,7 +837,7 @@ __configs__ = [
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 451s, https://wandb.ai/raysort/raysort/runs/umnyuwgs
+        # 423s, https://wandb.ai/raysort/raysort/runs/p1ygq4c6
         name="1tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=10,
@@ -833,35 +848,18 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
             io_parallelism=16,
+            num_shards_per_mapper=4,
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
             use_yield=True,
-        ),
-    ),
-    JobConfig(
-        # TODO(@lsf)
-        name="1tb-2gb-i4i-native-s3-reduce",
-        cluster=dict(
-            instance_count=10,
-            instance_type=i4i_2xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=1000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
-            reduce_parallelism_multiplier=1,
-            skip_first_stage=True,
         ),
     ),
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 20 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        # 466s, https://wandb.ai/raysort/raysort/runs/jtrapg8i
         name="2tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=20,
@@ -872,8 +870,9 @@ __configs__ = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(2),
             io_parallelism=16,
+            num_shards_per_mapper=4,
+            s3_buckets=get_s3_buckets(2),
             reduce_parallelism_multiplier=1,
             use_yield=True,
         ),
@@ -893,9 +892,11 @@ __configs__ = [
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
+            io_parallelism=16,
+            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=24,
             reduce_parallelism_multiplier=1,
+            use_yield=True,
         ),
     ),
     JobConfig(

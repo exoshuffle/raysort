@@ -36,7 +36,13 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
         return ret
 
 
-def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
+def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
+    if cfg.s3_buckets and len(pinfolist) > 1:
+        return s3_utils.download_s3_parallel(pinfolist)
+    return np.concatenate([load_partition(cfg, pinfo) for pinfo in pinfolist])
+
+
+def load_partition(cfg: AppConfig, pinfo: List[PartInfo]) -> np.ndarray:
     if cfg.skip_input:
         size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
         return create_partition(size)
@@ -183,18 +189,19 @@ def generate_input(cfg: AppConfig):
     if cfg.skip_input:
         return
     total_size = constants.bytes_to_records(cfg.total_data_size)
-    size = constants.bytes_to_records(cfg.input_part_size)
+    size = constants.bytes_to_records(cfg.input_shard_size)
     offset = 0
     tasks = []
     for m in range(cfg.num_mappers_per_worker):
         for w in range(cfg.num_workers):
-            part_id = constants.merge_part_ids(w, m)
-            tasks.append(
-                generate_part.options(**ray_utils.node_i(cfg, w)).remote(
-                    cfg, part_id, min(size, total_size - offset), offset
+            for i in range(cfg.num_shards_per_mapper):
+                part_id = constants.merge_part_ids(w, m, i)
+                tasks.append(
+                    generate_part.options(**ray_utils.node_i(cfg, w)).remote(
+                        cfg, part_id, min(size, total_size - offset), offset
+                    )
                 )
-            )
-            offset += size
+                offset += size
     logging.info("Generating %d partitions", len(tasks))
     parts = ray.get(tasks)
     with open(get_manifest_file(cfg), "w") as fout:
@@ -247,7 +254,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
     if cfg.s3_buckets:
         tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        s3_utils.download_s3(pinfo, tmp_path)
+        s3_utils.download_s3(pinfo, filename=tmp_path)
         ret = _validate_part_impl(tmp_path, buf=True)
         os.remove(tmp_path)
     else:
