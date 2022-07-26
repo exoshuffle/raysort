@@ -841,7 +841,7 @@ __configs__ = [
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 451s, https://wandb.ai/raysort/raysort/runs/umnyuwgs
+        # 423s, https://wandb.ai/raysort/raysort/runs/p1ygq4c6
         name="1tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=10,
@@ -881,7 +881,7 @@ __configs__ = [
     #     S3 + i4i.2xl 20 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 509s, https://wandb.ai/raysort/raysort/runs/2oj3b2ti
+        # 466s, https://wandb.ai/raysort/raysort/runs/jtrapg8i
         name="2tb-2gb-i4i-native-s3",
         cluster=dict(
             instance_count=20,
