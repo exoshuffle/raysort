@@ -324,7 +324,7 @@ def setup_grafana() -> None:
 
 def get_cluster_name() -> str:
     username = os.getenv("USERNAME")
-    assert username, "USERNAME is not set"
+    assert username, "Environment variable $USERNAME is not set"
     return f"{cfg.name}-{username}"
 
 
