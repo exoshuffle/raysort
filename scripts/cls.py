@@ -16,6 +16,7 @@ import shell_utils
 import yaml
 
 from raysort import config
+from raysort.typing import InstanceLifetime
 
 cfg = config.get()
 
@@ -29,7 +30,7 @@ HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
 TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
 TERRAFORM_TEMPLATE_DIR = (
     "aws-template"
-    if cfg.cluster.instance_lifetime == "DEDICATED"
+    if cfg.cluster.instance_lifetime == InstanceLifetime.DEDICATED
     else "aws-spot-template"
 )
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
