@@ -16,6 +16,7 @@ import shell_utils
 import yaml
 
 from raysort import config
+from raysort.typing import InstanceLifetime
 
 cfg = config.get()
 
@@ -29,7 +30,7 @@ HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
 TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
 TERRAFORM_TEMPLATE_DIR = (
     "aws-template"
-    if cfg.cluster.instance_lifetime == "DEDICATED"
+    if cfg.cluster.instance_lifetime == InstanceLifetime.DEDICATED
     else "aws-spot-template"
 )
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
@@ -322,6 +323,12 @@ def setup_grafana() -> None:
 # ------------------------------------------------------------
 
 
+def get_cluster_name() -> str:
+    username = os.getenv("USERNAME")
+    assert username, "Environment variable $USERNAME is not set"
+    return f"{cfg.name}-{username}"
+
+
 def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
     head_ip = shell_utils.run_output("ec2metadata --local-ipv4")
     ips = get_tf_output(cluster_name, "instance_ips")
@@ -533,7 +540,7 @@ def up(
     clear_data_dir: bool,
 ):
     pip_install_upgrade()
-    cluster_name = cfg.cluster.name
+    cluster_name = get_cluster_name()
     cluster_exists = check_cluster_existence(cluster_name)
     config_exists = os.path.exists(get_tf_dir(cluster_name))
     if cluster_exists and not config_exists:
@@ -565,7 +572,7 @@ def setup(
     clear_data_dir: bool,
     no_common: bool,
 ):
-    cluster_name = cfg.cluster.name
+    cluster_name = get_cluster_name()
     if no_common:
         inventory_path = get_or_create_ansible_inventory(cluster_name)
     else:
@@ -582,7 +589,7 @@ def setup(
 
 @cli.command()
 def down():
-    cluster_name = cfg.cluster.name
+    cluster_name = get_cluster_name()
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     cmd = "terraform destroy -auto-approve" + get_terraform_vars(
         cluster_name=cluster_name
@@ -593,17 +600,17 @@ def down():
 
 @cli.command()
 def start():
-    aws_action(cfg.cluster.name, "start_instances", "Started")
+    aws_action(get_cluster_name(), "start_instances", "Started")
 
 
 @cli.command()
 def stop():
-    aws_action(cfg.cluster.name, "stop_instances", "Stopped")
+    aws_action(get_cluster_name(), "stop_instances", "Stopped")
 
 
 @cli.command()
 def reboot():
-    aws_action(cfg.cluster.name, "reboot_instances", "Rebooted")
+    aws_action(get_cluster_name(), "reboot_instances", "Rebooted")
 
 
 @cli.command()
@@ -611,7 +618,7 @@ def reboot():
 def ssh(worker_id_or_ip: str):
     try:
         idx = int(worker_id_or_ip)
-        ips = get_tf_output(cfg.cluster.name, "instance_ips")
+        ips = get_tf_output(get_cluster_name(), "instance_ips")
         click.echo(f"worker_ips = {ips}")
         ip = ips[idx]
     except ValueError:

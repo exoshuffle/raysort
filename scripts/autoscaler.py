@@ -10,7 +10,7 @@ SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 AUTOSCALER_DIR = SCRIPT_DIR / "config" / "autoscaler"
 AUTOSCALER_CONFIG_TEMPLATE_PATH = AUTOSCALER_DIR / "raysort-cluster-template.yaml"
 VARIABLES_TO_REPLACE = [
-    "CLUSTER_NAME",
+    "USERNAME",
     "S3_BUCKET",
     "CONFIG",
     "WANDB_API_KEY",
