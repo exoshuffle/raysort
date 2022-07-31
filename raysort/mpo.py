@@ -1,11 +1,14 @@
 import collections
 import dataclasses
 import heapq
+import io
 
 import numpy as np
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import ray
+
+from raysort import s3_utils
 
 
 @dataclasses.dataclass
@@ -16,6 +19,8 @@ class AppConfig:
     num_reducers: int = 8
     top_k: int = 15
 
+    s3_bucket: str = "lsf-berkeley-edu"
+
     def __post_init__(self):
         self.num_rounds = int(np.ceil(self.num_mappers / self.num_mappers_per_round))
 
@@ -24,8 +29,16 @@ def flatten(xss: list[list]) -> list:
     return [x for xs in xss for x in xs]
 
 
-def load_partition(part_id: int) -> list[str]:
-    table = pq.read_table(f"/mnt/data0/wiki/wiki-{part_id:04d}.parquet")
+def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
+    buf = io.BytesIO()
+    s3_utils.s3().download_fileobj(cfg.s3_bucket, url, buf)
+    buf.seek(0)
+    return buf
+
+
+def load_partition(cfg: AppConfig, part_id: int) -> list[str]:
+    buf = download_s3(cfg, f"wiki/wiki-{part_id:04d}.parquet")
+    table = pq.read_table(buf)
     text = table[3]
     wordlists = pc.split_pattern_regex(pc.utf8_lower(text), r"\W+")
     return [w.as_py() for words in wordlists for w in words]
@@ -39,7 +52,7 @@ def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
 def mapper(cfg: AppConfig, mapper_id: int, reducers: list[ray.actor.ActorHandle]):
     if mapper_id >= cfg.num_mappers:
         return
-    words = load_partition(mapper_id)
+    words = load_partition(cfg, mapper_id)
     counters = [collections.Counter() for _ in reducers]
     for word in words:
         idx = get_reducer_id_for_word(cfg, word)
