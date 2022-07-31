@@ -3,32 +3,42 @@ import dataclasses
 import heapq
 
 import numpy as np
+import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import ray
 
 
 @dataclasses.dataclass
 class AppConfig:
-    num_mappers: int = 100
+    num_mappers: int = 646
     num_mappers_per_round: int = 8
     num_rounds: int = dataclasses.field(init=False)
     num_reducers: int = 8
-    top_k: int = 10
+    top_k: int = 15
 
     def __post_init__(self):
         self.num_rounds = int(np.ceil(self.num_mappers / self.num_mappers_per_round))
 
 
+def flatten(xss: list[list]) -> list:
+    return [x for xs in xss for x in xs]
+
+
 def load_partition(part_id: int) -> list[str]:
-    with open(f"/mnt/data0/words/words-{part_id:03d}.txt") as fin:
-        return [line.strip() for line in fin]
+    table = pq.read_table(f"/mnt/data0/wiki/wiki-{part_id:04d}.parquet")
+    text = table[3]
+    wordlists = pc.split_pattern_regex(pc.utf8_lower(text), r"\W+")
+    return [w.as_py() for words in wordlists for w in words]
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
-    return ord(word[0]) % cfg.num_reducers
+    return ord(word[0]) % cfg.num_reducers if len(word) > 0 else 0
 
 
 @ray.remote
 def mapper(cfg: AppConfig, mapper_id: int, reducers: list[ray.actor.ActorHandle]):
+    if mapper_id >= cfg.num_mappers:
+        return
     words = load_partition(mapper_id)
     counters = [collections.Counter() for _ in reducers]
     for word in words:
@@ -81,7 +91,8 @@ def mpo_main():
     for rnd in range(cfg.num_rounds):
         print(f"===== round {rnd} =====")
         tasks = [
-            mapper.remote(cfg, i, reducers) for i in range(cfg.num_mappers_per_round)
+            mapper.remote(cfg, cfg.num_mappers_per_round * rnd + i, reducers)
+            for i in range(cfg.num_mappers_per_round)
         ]
         ray.get(tasks)
         print_top_words(cfg, reducers)
