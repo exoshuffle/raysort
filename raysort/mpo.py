@@ -2,6 +2,7 @@ import collections
 import dataclasses
 import heapq
 import io
+from typing import TypeVar
 
 import numpy as np
 import pyarrow.compute as pc
@@ -48,34 +49,33 @@ def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     return ord(word[0]) % cfg.num_reducers if len(word) > 0 else 0
 
 
+V = TypeVar("V")
+
+
 @ray.remote
-def mapper(cfg: AppConfig, mapper_id: int, reducers: list[ray.actor.ActorHandle]):
+def mapper(cfg: AppConfig, mapper_id: int) -> list[V]:
     if mapper_id >= cfg.num_mappers:
-        return
+        return [None for _ in range(cfg.num_reducers)]
     words = load_partition(cfg, mapper_id)
-    counters = [collections.Counter() for _ in reducers]
+    counters = [collections.Counter() for _ in range(cfg.num_reducers)]
     for word in words:
         idx = get_reducer_id_for_word(cfg, word)
         counters[idx][word] += 1
-    tasks = []
-    for reducer, counter in zip(reducers, counters):
-        tasks.append(reducer.add_map_results.remote([counter]))
-    ray.get(tasks)
+    return counters
 
 
 @ray.remote
-class Reducer:
-    def __init__(self, cfg: AppConfig, reducer_id: int):
-        self.cfg = cfg
-        self.reducer_id = reducer_id
-        self.counter = collections.Counter()
+def reduce(_cfg: AppConfig, state: V, *map_results: list[V]) -> V:
+    if state is None:
+        state = collections.Counter()
+    for map_result in map_results:
+        state += map_result
+    return state
 
-    def add_map_results(self, map_results: list[dict]):
-        for counter in map_results:
-            self.counter += counter
 
-    def get_top_words(self) -> list[tuple[str, int]]:
-        return self.counter.most_common(self.cfg.top_k)
+@ray.remote
+def get_top_words(cfg: AppConfig, state: V) -> list[tuple[str, int]]:
+    return state.most_common(cfg.top_k)
 
 
 def final_reduce(
@@ -88,8 +88,10 @@ def final_reduce(
     return [(word, -neg_count) for neg_count, word in heap[: cfg.top_k]]
 
 
-def print_top_words(cfg: AppConfig, reducers: list[ray.actor.ActorHandle]):
-    top_words_list = ray.get([reducer.get_top_words.remote() for reducer in reducers])
+def print_top_words(cfg: AppConfig, reduce_states: list[ray.ObjectRef]):
+    top_words_list = ray.get(
+        [get_top_words.remote(cfg, state) for state in reduce_states]
+    )
     top_words = final_reduce(cfg, top_words_list)
     for word, count in top_words:
         print(word, count, end=" " * 4)
@@ -98,20 +100,23 @@ def print_top_words(cfg: AppConfig, reducers: list[ray.actor.ActorHandle]):
 
 def mpo_main():
     cfg = AppConfig()
-    reducers = [
-        Reducer.remote(cfg, reducer_id) for reducer_id in range(cfg.num_reducers)
-    ]
+    reduce_states = [None for _ in range(cfg.num_reducers)]
     for rnd in range(cfg.num_rounds):
         print(f"===== round {rnd} =====")
-        tasks = [
-            mapper.remote(cfg, cfg.num_mappers_per_round * rnd + i, reducers)
-            for i in range(cfg.num_mappers_per_round)
-        ]
-        ray.get(tasks)
-        print_top_words(cfg, reducers)
+        map_results = np.array(
+            [
+                mapper.options(num_returns=cfg.num_reducers).remote(
+                    cfg, cfg.num_mappers_per_round * rnd + i
+                )
+                for i in range(cfg.num_mappers_per_round)
+            ]
+        )
+        for r, reduce_state in enumerate(reduce_states):
+            reduce_states[r] = reduce.remote(cfg, reduce_state, *map_results[:, r].tolist())
+        print_top_words(cfg, reduce_states)
 
     print("===== final result =====")
-    print_top_words(cfg, reducers)
+    print_top_words(cfg, reduce_states)
 
 
 def main():
