@@ -1,8 +1,8 @@
+# pylint: disable=too-many-instance-attributes
 import collections
 import dataclasses
 import heapq
 import io
-from typing import TypeVar
 
 import numpy as np
 import pyarrow.compute as pc
@@ -10,6 +10,7 @@ import pyarrow.parquet as pq
 import ray
 
 from raysort import s3_utils
+from raysort.shuffle_lib import streaming_shuffle
 
 
 @dataclasses.dataclass
@@ -19,6 +20,9 @@ class AppConfig:
     num_rounds: int = dataclasses.field(init=False)
     num_reducers: int = 8
     top_k: int = 15
+
+    start_time: float = 0
+    round_start_time: float = 0
 
     s3_bucket: str = "lsf-berkeley-edu"
 
@@ -49,11 +53,12 @@ def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     return ord(word[0]) % cfg.num_reducers if len(word) > 0 else 0
 
 
-V = TypeVar("V")
+M = collections.Counter[str]
+R = collections.Counter[str]
+S = tuple[str, int]
 
 
-@ray.remote
-def mapper(cfg: AppConfig, mapper_id: int) -> list[V]:
+def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.num_mappers:
         return [None for _ in range(cfg.num_reducers)]
     words = load_partition(cfg, mapper_id)
@@ -64,23 +69,20 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[V]:
     return counters
 
 
-@ray.remote
-def reduce(_cfg: AppConfig, state: V, *map_results: list[V]) -> V:
+def reducer(_cfg: AppConfig, state: R, *map_results: list[M]) -> R:
     if state is None:
         state = collections.Counter()
     for map_result in map_results:
-        state += map_result
+        if map_result:
+            state += map_result
     return state
 
 
-@ray.remote
-def get_top_words(cfg: AppConfig, state: V) -> list[tuple[str, int]]:
+def top_words_map(cfg: AppConfig, state: R) -> list[S]:
     return state.most_common(cfg.top_k)
 
 
-def final_reduce(
-    cfg: AppConfig, most_commons: list[tuple[str, int]]
-) -> list[tuple[str, int]]:
+def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> list[S]:
     heap = []
     for most_common in most_commons:
         for word, count in most_common:
@@ -88,35 +90,22 @@ def final_reduce(
     return [(word, -neg_count) for neg_count, word in heap[: cfg.top_k]]
 
 
-def print_top_words(cfg: AppConfig, reduce_states: list[ray.ObjectRef]):
-    top_words_list = ray.get(
-        [get_top_words.remote(cfg, state) for state in reduce_states]
-    )
-    top_words = final_reduce(cfg, top_words_list)
-    for word, count in top_words:
+def top_words_print(_cfg: AppConfig, summary: list[S]):
+    for word, count in summary:
         print(word, count, end=" " * 4)
     print()
 
 
 def mpo_main():
     cfg = AppConfig()
-    reduce_states = [None for _ in range(cfg.num_reducers)]
-    for rnd in range(cfg.num_rounds):
-        print(f"===== round {rnd} =====")
-        map_results = np.array(
-            [
-                mapper.options(num_returns=cfg.num_reducers).remote(
-                    cfg, cfg.num_mappers_per_round * rnd + i
-                )
-                for i in range(cfg.num_mappers_per_round)
-            ]
-        )
-        for r, reduce_state in enumerate(reduce_states):
-            reduce_states[r] = reduce.remote(cfg, reduce_state, *map_results[:, r].tolist())
-        print_top_words(cfg, reduce_states)
-
-    print("===== final result =====")
-    print_top_words(cfg, reduce_states)
+    streaming_shuffle(
+        cfg,
+        mapper,
+        reducer,
+        top_words_map,
+        top_words_reduce,
+        top_words_print,
+    )
 
 
 def main():
