@@ -3,7 +3,9 @@ import collections
 import dataclasses
 import heapq
 import io
+import time
 
+import boto3
 import numpy as np
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
@@ -16,10 +18,11 @@ from raysort.shuffle_lib import streaming_shuffle
 @dataclasses.dataclass
 class AppConfig:
     num_mappers: int = 646
-    num_mappers_per_round: int = 8
+    num_mappers_per_round: int = 32
     num_rounds: int = dataclasses.field(init=False)
     num_reducers: int = 8
     top_k: int = 15
+    local_mode: bool = False
 
     start_time: float = 0
     round_start_time: float = 0
@@ -61,7 +64,10 @@ S = tuple[str, int]
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.num_mappers:
         return [None for _ in range(cfg.num_reducers)]
+    # print(ray.util.get_node_ip_address())
+    start_time = time.time()
     words = load_partition(cfg, mapper_id)
+    print("download time", time.time() - start_time)
     counters = [collections.Counter() for _ in range(cfg.num_reducers)]
     for word in words:
         idx = get_reducer_id_for_word(cfg, word)
@@ -98,6 +104,10 @@ def top_words_print(_cfg: AppConfig, summary: list[S]):
 
 def mpo_main():
     cfg = AppConfig()
+    if cfg.local_mode:
+        ray.init()
+    else:
+        ray.init("auto")
     streaming_shuffle(
         cfg,
         mapper,
@@ -109,7 +119,6 @@ def mpo_main():
 
 
 def main():
-    ray.init()
     mpo_main()
 
 

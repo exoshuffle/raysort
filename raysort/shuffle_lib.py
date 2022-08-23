@@ -17,7 +17,7 @@ def _print_partial_state(
     summary_reduce_fn: Callable[[AppConfig, list[S]], S],
     summary_print_fn: Callable[[AppConfig, S], None],
 ):
-    map_remote = ray.remote(summary_map_fn)
+    map_remote = _ray_remote(cfg, summary_map_fn)
     summaries = ray.get([map_remote.remote(cfg, state) for state in reduce_states])
     summary = summary_reduce_fn(cfg, summaries)
     now = time.time()
@@ -29,6 +29,15 @@ def _print_partial_state(
     cfg.round_start_time = now
 
 
+def _ray_remote(cfg: AppConfig, fn: Callable, **kwargs: dict) -> Callable:
+    if not cfg.local_mode:
+        kwargs["resources"] = {"worker": 1e-3}
+        kwargs["scheduling_strategy"] = "SPREAD"
+    if len(kwargs) == 0:
+        return ray.remote(fn)
+    return ray.remote(**kwargs)(fn)
+
+
 def streaming_shuffle(
     cfg: AppConfig,
     map_fn: Callable[[AppConfig, int], list[M]],
@@ -37,8 +46,8 @@ def streaming_shuffle(
     summary_reduce_fn: Callable[[AppConfig, list[S]], S],
     summary_print_fn: Callable[[S], None],
 ):
-    map_remote = ray.remote(num_returns=cfg.num_reducers)(map_fn)
-    reduce_remote = ray.remote(reduce_fn)
+    map_remote = _ray_remote(cfg, map_fn, num_returns=cfg.num_reducers)
+    reduce_remote = _ray_remote(cfg, reduce_fn)
     print_partial_state = lambda: _print_partial_state(
         cfg,
         reduce_states,
