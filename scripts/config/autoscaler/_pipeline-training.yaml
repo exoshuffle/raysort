@@ -1,0 +1,100 @@
+cluster_name: raysort-samyu-autoscaler
+
+max_workers: 15
+
+provider:
+    type: aws
+    region: us-west-2
+    cache_stopped_nodes: False
+
+auth:
+    ssh_user: ubuntu
+    ssh_private_key: ~/.aws/login-us-west-2.pem
+
+available_node_types:
+    ray.head.default:
+        node_config:
+            InstanceType: r6i.4xlarge
+            # IAM profile providing full access to EC2 and S3, required for head node to launch workers
+            IamInstanceProfile:
+              Arn: arn:aws:iam::948306809678:instance-profile/ray-autoscaler-v1
+            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
+            KeyName: login-us-west-2
+
+    ray.worker.default:
+        min_workers: 10
+        node_config:
+            InstanceType: r6i.4xlarge
+            # IAM profile providing full access to EC2 and S3, required for S3 I/O
+            IamInstanceProfile:
+              Arn: arn:aws:iam::948306809678:instance-profile/ray-autoscaler-v1
+            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
+            KeyName: login-us-west-2
+            #            InstanceMarketOptions:
+            #                MarketType: spot
+
+file_mounts:
+  # We cannot mount the whole directory into ~/raysort because that will cause issues with ray's bazel output
+  "~/workdir": "."
+  "~/ray-patch": "./ray-patch"
+  "~/ray": "~/ray"
+  "~/.aws": "~/.aws"
+
+setup_commands:
+  # Set environment variables
+  - >-
+    echo 'export
+    RAY_STORAGE=s3://raysort-spot
+    S3_BUCKET=raysort-spot
+    CONFIG=raysort-samyu-template
+    WANDB_API_KEY=f3f8f6bf9f1505884d1bdde30a02d3e2ed3333a7
+    RAY_lineage_pinning_enabled=1
+    RAY_record_ref_creation_sites=1
+    ' >> ~/.bashrc
+  # Sync workdir
+  - rsync -a ~/workdir/ ~/raysort
+  # Activate conda environment
+  - echo 'conda activate raysort' >> ~/.bashrc
+  # Install dependencies
+  - conda activate raysort && pip install -Ur ~/raysort/requirements/pipeline_training_worker.txt
+  # Install project packages
+  - conda activate raysort && cd ~/raysort && pip install -e .
+  - conda activate raysort && cd ~/raysort/raysort/sortlib && python setup.py build_ext --inplace
+  # Install required binaries
+  - cd raysort && ~/workdir/scripts/installers/install_binaries.sh
+  # Sync patches
+  - rsync -a ~/ray-patch/ ~/miniconda3/envs/raysort/lib/python3.9/site-packages/ray/
+  # Mount tmpfs
+  - sudo mkdir -p /mnt/tmpfs && sudo mount -t tmpfs tmpfs /mnt/tmpfs && sudo chmod 777 /mnt/tmpfs
+  # Setup for pipeline training example: install correct version of Ray + Horovod
+  - pip3 uninstall ray -y || true && pip3 install -U ray
+  - pip install -U git+https://github.com/ray-project/ray_shuffling_data_loader.git@add-embedding-model
+  - pip install ray[tune]
+  - HOROVOD_WITH_GLOO=1 HOROVOD_WITHOUT_MPI=1 HOROVOD_WITHOUT_TENSORFLOW=1 HOROVOD_WITHOUT_MXNET=1 HOROVOD_WITH_PYTORCH=1 pip install -U git+https://github.com/horovod/horovod.git
+
+head_start_ray_commands:
+  - nohup ~/raysort/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:8091 &> node_exporter.out < /dev/null &
+  - ray stop
+  # As compared to the default start command, we add
+  # --resources for main.py to keep track of resources
+  # --system-config to enable s3 spilling (buffer size is set to 16 MiB)
+  - >-
+    ray start --head --port=6379 --object-manager-port=8076 
+    --autoscaling-config=~/ray_bootstrap_config.yaml
+    --resources='{"head": 1}'
+    --metrics-export-port=8090
+    --system-config='{"max_io_workers": 16, "object_spilling_config": "{\"type\": \"ray_storage\", \"params\": {\"buffer_size\": 16777216}}"}'
+  - nohup python ~/raysort/scripts/config/autoscaler/setup_monitoring.py &> monitoring.out < /dev/null &
+
+worker_start_ray_commands:
+  - nohup ~/raysort/raysort/bin/node_exporter/node_exporter --web.listen-address 0.0.0.0:8091 &> node_exporter.out < /dev/null &
+  - ray stop
+  # As compared to the default start command, we add
+  # --resources for main.py to keep track of resources
+  # --metrics-export-port for exporting metrics
+  - >-
+    ulimit -n 65536;
+    ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076 --num-gpus=1 --num-cpus=8
+    --resources='{"worker": 1}'
+    --metrics-export-port=8090
+    
