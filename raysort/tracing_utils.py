@@ -261,6 +261,8 @@ class ProgressTracker:
 class ObjectRefRecorder:
     def __init__(self, enabled: bool = True):
         self._enabled = enabled
+        if not self._enabled:
+            return
         self._filename = f"/tmp/raysort-{int(time.time())}-objects.txt"
         self._records = []
         with open(self._filename, "w"):

@@ -3,15 +3,13 @@ import collections
 import dataclasses
 import heapq
 import io
-import time
 
-import boto3
 import numpy as np
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
+import pandas as pd
 import ray
 
 from raysort import s3_utils
+from raysort import tracing_utils
 from raysort.shuffle_lib import streaming_shuffle
 
 
@@ -21,7 +19,7 @@ class AppConfig:
     num_mappers_per_round: int = 32
     num_rounds: int = dataclasses.field(init=False)
     num_reducers: int = 8
-    top_k: int = 15
+    top_k: int = 20
     local_mode: bool = False
 
     start_time: float = 0
@@ -45,15 +43,17 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
 
 
 def load_partition(cfg: AppConfig, part_id: int) -> list[str]:
-    buf = download_s3(cfg, f"wiki/wiki-{part_id:04d}.parquet")
-    table = pq.read_table(buf)
-    text = table[3]
-    wordlists = pc.split_pattern_regex(pc.utf8_lower(text), r"\W+")
-    return [w.as_py() for words in wordlists for w in words]
+    with tracing_utils.timeit("load_partition", report_completed=False):
+        with tracing_utils.timeit("s3_download", report_completed=False):
+            buf = download_s3(cfg, f"wiki/wiki-{part_id:04d}.parquet")
+        df = pd.read_parquet(buf)
+        words = df["text"].str.lower().str.split().tolist()
+        return flatten(words)
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
-    return ord(word[0]) % cfg.num_reducers if len(word) > 0 else 0
+    ch = ord(word[0]) if len(word) > 0 else 0
+    return ch % cfg.num_reducers
 
 
 M = collections.Counter[str]
@@ -65,23 +65,23 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.num_mappers:
         return [None for _ in range(cfg.num_reducers)]
     # print(ray.util.get_node_ip_address())
-    start_time = time.time()
-    words = load_partition(cfg, mapper_id)
-    print("download time", time.time() - start_time)
-    counters = [collections.Counter() for _ in range(cfg.num_reducers)]
-    for word in words:
-        idx = get_reducer_id_for_word(cfg, word)
-        counters[idx][word] += 1
-    return counters
+    with tracing_utils.timeit("map"):
+        words = load_partition(cfg, mapper_id)
+        counters = [collections.Counter() for _ in range(cfg.num_reducers)]
+        for word in words:
+            idx = get_reducer_id_for_word(cfg, word)
+            counters[idx][word] += 1
+        return counters
 
 
 def reducer(_cfg: AppConfig, state: R, *map_results: list[M]) -> R:
-    if state is None:
-        state = collections.Counter()
-    for map_result in map_results:
-        if map_result:
-            state += map_result
-    return state
+    with tracing_utils.timeit("reduce"):
+        if state is None:
+            state = collections.Counter()
+        for map_result in map_results:
+            if map_result:
+                state += map_result
+        return state
 
 
 def top_words_map(cfg: AppConfig, state: R) -> list[S]:
@@ -102,12 +102,13 @@ def top_words_print(_cfg: AppConfig, summary: list[S]):
     print()
 
 
-def mpo_main():
+def word_count_main():
     cfg = AppConfig()
     if cfg.local_mode:
         ray.init()
     else:
         ray.init("auto")
+    tracker = tracing_utils.create_progress_tracker(cfg)
     streaming_shuffle(
         cfg,
         mapper,
@@ -116,10 +117,11 @@ def mpo_main():
         top_words_reduce,
         top_words_print,
     )
+    ray.get(tracker.performance_report.remote())
 
 
 def main():
-    mpo_main()
+    word_count_main()
 
 
 if __name__ == "__main__":
