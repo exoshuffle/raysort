@@ -4,33 +4,21 @@ import dataclasses
 import heapq
 import io
 
-import numpy as np
 import pandas as pd
 import ray
 
 from raysort import s3_utils
 from raysort import tracing_utils
-from raysort.shuffle_lib import streaming_shuffle
+from raysort.shuffle_lib import ShuffleStrategy, shuffle, ShuffleConfig
 
 TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
 
 
 @dataclasses.dataclass
 class AppConfig:
-    num_mappers: int = 646
-    num_mappers_per_round: int = 32
-    num_rounds: int = dataclasses.field(init=False)
-    num_reducers: int = 8
     top_k: int = 20
     local_mode: bool = False
-
-    start_time: float = 0
-    round_start_time: float = 0
-
     s3_bucket: str = "lsf-berkeley-edu"
-
-    def __post_init__(self):
-        self.num_rounds = int(np.ceil(self.num_mappers / self.num_mappers_per_round))
 
 
 def flatten(xss: list[list]) -> list:
@@ -117,13 +105,19 @@ def word_count_main():
     else:
         ray.init("auto")
     tracker = tracing_utils.create_progress_tracker(cfg)
-    streaming_shuffle(
+    shuffle(
         cfg,
-        mapper,
-        reducer,
-        top_words_map,
-        top_words_reduce,
-        top_words_print,
+        ShuffleConfig(
+            num_mappers=646,
+            num_mappers_per_round=8,
+            num_reducers=8,
+            map_fn=mapper,
+            reduce_fn=reducer,
+            summary_map_fn=top_words_map,
+            summary_reduce_fn=top_words_reduce,
+            summary_print_fn=top_words_print,
+            strategy=ShuffleStrategy.STREAMING,
+        ),
     )
     ray.get(tracker.performance_report.remote())
 
