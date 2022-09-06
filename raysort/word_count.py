@@ -12,6 +12,8 @@ from raysort import s3_utils
 from raysort import tracing_utils
 from raysort.shuffle_lib import streaming_shuffle
 
+TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
+
 
 @dataclasses.dataclass
 class AppConfig:
@@ -97,9 +99,15 @@ def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> list[S]:
 
 
 def top_words_print(_cfg: AppConfig, summary: list[S]):
-    for word, count in summary:
+    num_correct = 0
+    correct_so_far = True
+    for (word, count), truth_word in zip(summary, TOP_WORDS):
         print(word, count, end=" " * 4)
-    print()
+        if correct_so_far and word == truth_word:
+            num_correct += 1
+        else:
+            correct_so_far = False
+    print(f"\nTop {num_correct} words are correct")
 
 
 def word_count_main():
