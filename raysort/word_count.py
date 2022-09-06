@@ -10,6 +10,10 @@ import ray
 from raysort import s3_utils, tracing_utils
 from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
+NUM_PARTITIONS = 646
+PARTITION_PATHS = [
+    f"wiki/wiki-{part_id:04d}.parquet" for part_id in range(NUM_PARTITIONS)
+]
 TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
 
 
@@ -33,13 +37,12 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
     return buf
 
 
-def load_partition(cfg: AppConfig, part_id: int) -> list[str]:
+def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
     with tracing_utils.timeit("load_partition", report_completed=False):
         with tracing_utils.timeit("s3_download", report_completed=False):
-            buf = download_s3(cfg, f"wiki/wiki-{part_id:04d}.parquet")
+            buf = download_s3(cfg, PARTITION_PATHS[part_id])
         df = pd.read_parquet(buf)
-        words = df["text"].str.lower().str.split().tolist()
-        return flatten(words)
+        return df["text"].str.lower().str.split().explode()
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
@@ -55,13 +58,13 @@ S = tuple[str, int]
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.shuffle.num_mappers:
         return [None for _ in range(cfg.shuffle.num_reducers)]
-    # print(ray.util.get_node_ip_address())
     with tracing_utils.timeit("map"):
         words = load_partition(cfg, mapper_id)
+        word_counts = words.value_counts()
         counters = [collections.Counter() for _ in range(cfg.shuffle.num_reducers)]
-        for word in words:
+        for word, cnt in word_counts.iteritems():
             idx = get_reducer_id_for_word(cfg, word)
-            counters[idx][word] += 1
+            counters[idx][word] += cnt
         return counters
 
 
@@ -101,8 +104,8 @@ def top_words_print(_cfg: AppConfig, summary: list[S]):
 
 def word_count_main():
     shuffle_cfg = ShuffleConfig(
-        num_mappers=646,
-        num_mappers_per_round=8,
+        num_mappers=NUM_PARTITIONS,
+        num_mappers_per_round=32,
         num_reducers=8,
         map_fn=mapper,
         reduce_fn=reducer,
@@ -118,7 +121,8 @@ def word_count_main():
     else:
         ray.init("auto")
     tracker = tracing_utils.create_progress_tracker(app_cfg)
-    shuffle(app_cfg, shuffle_cfg)
+    with tracing_utils.timeit("word_count"):
+        shuffle(app_cfg, shuffle_cfg)
     ray.get(tracker.performance_report.remote())
 
 
