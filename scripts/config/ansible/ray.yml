@@ -53,8 +53,8 @@
         nohup
         {{ pythondir }}/ray start
         --address={{ head_ip }}:6379
-        --object-manager-port={{ ray_object_manager_port }}
         --metrics-export-port={{ ray_merics_export_port }}
-        --resources='{"worker":1}'
+        --object-manager-port={{ ray_object_manager_port }}
         --object-store-memory={{ ray_object_store_memory }}
+        --resources='{"worker":1}'
       changed_when: true

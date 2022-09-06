@@ -267,6 +267,12 @@ r6i_2xl = InstanceType(
     memory_gib=61.8,
 )
 
+m6i_xlarge = InstanceType(
+    name="m6i.xlarge",
+    cpu=4,
+    memory_gib=16,
+)
+
 
 # ------------------------------------------------------------
 #     Configurations
@@ -1172,6 +1178,23 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     MapReduce Online Test Cluster
+    # ------------------------------------------------------------
+    JobConfig(
+        name="mpo",
+        cluster=dict(
+            instance_count=8,
+            instance_type=m6i_xlarge,
+            instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=64,
+            input_part_gb=1,
         ),
     ),
 ]
