@@ -7,15 +7,16 @@ import io
 import pandas as pd
 import ray
 
-from raysort import s3_utils
-from raysort import tracing_utils
-from raysort.shuffle_lib import ShuffleStrategy, shuffle, ShuffleConfig
+from raysort import s3_utils, tracing_utils
+from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
 TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
 
 
 @dataclasses.dataclass
 class AppConfig:
+    shuffle: ShuffleConfig
+
     top_k: int = 20
     local_mode: bool = False
     s3_bucket: str = "lsf-berkeley-edu"
@@ -43,7 +44,7 @@ def load_partition(cfg: AppConfig, part_id: int) -> list[str]:
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     ch = ord(word[0]) if len(word) > 0 else 0
-    return ch % cfg.num_reducers
+    return ch % cfg.shuffle.num_reducers
 
 
 M = collections.Counter[str]
@@ -52,12 +53,12 @@ S = tuple[str, int]
 
 
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
-    if mapper_id >= cfg.num_mappers:
-        return [None for _ in range(cfg.num_reducers)]
+    if mapper_id >= cfg.shuffle.num_mappers:
+        return [None for _ in range(cfg.shuffle.num_reducers)]
     # print(ray.util.get_node_ip_address())
     with tracing_utils.timeit("map"):
         words = load_partition(cfg, mapper_id)
-        counters = [collections.Counter() for _ in range(cfg.num_reducers)]
+        counters = [collections.Counter() for _ in range(cfg.shuffle.num_reducers)]
         for word in words:
             idx = get_reducer_id_for_word(cfg, word)
             counters[idx][word] += 1
@@ -99,26 +100,25 @@ def top_words_print(_cfg: AppConfig, summary: list[S]):
 
 
 def word_count_main():
-    cfg = AppConfig()
-    if cfg.local_mode:
+    shuffle_cfg = ShuffleConfig(
+        num_mappers=646,
+        num_mappers_per_round=8,
+        num_reducers=8,
+        map_fn=mapper,
+        reduce_fn=reducer,
+        summary_map_fn=top_words_map,
+        summary_reduce_fn=top_words_reduce,
+        summary_print_fn=top_words_print,
+        strategy=ShuffleStrategy.STREAMING,
+    )
+    app_cfg = AppConfig(shuffle=shuffle_cfg)
+    print(app_cfg)
+    if app_cfg.local_mode:
         ray.init()
     else:
         ray.init("auto")
-    tracker = tracing_utils.create_progress_tracker(cfg)
-    shuffle(
-        cfg,
-        ShuffleConfig(
-            num_mappers=646,
-            num_mappers_per_round=8,
-            num_reducers=8,
-            map_fn=mapper,
-            reduce_fn=reducer,
-            summary_map_fn=top_words_map,
-            summary_reduce_fn=top_words_reduce,
-            summary_print_fn=top_words_print,
-            strategy=ShuffleStrategy.STREAMING,
-        ),
-    )
+    tracker = tracing_utils.create_progress_tracker(app_cfg)
+    shuffle(app_cfg, shuffle_cfg)
     ray.get(tracker.performance_report.remote())
 
 
