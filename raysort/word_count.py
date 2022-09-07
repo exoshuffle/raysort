@@ -1,7 +1,6 @@
 # pylint: disable=too-many-instance-attributes
 import collections
 import dataclasses
-import heapq
 import io
 
 import pandas as pd
@@ -25,10 +24,6 @@ class AppConfig:
     s3_bucket: str = "lsf-berkeley-edu"
 
 
-def flatten(xss: list[list]) -> list:
-    return [x for xs in xss for x in xs]
-
-
 def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
     buf = io.BytesIO()
     s3_utils.s3().download_fileobj(cfg.s3_bucket, url, buf)
@@ -37,11 +32,9 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
 
 
 def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
-    with tracing_utils.timeit("load_partition", report_completed=False):
-        with tracing_utils.timeit("s3_download", report_completed=False):
-            buf = download_s3(cfg, PARTITION_PATHS[part_id])
-        df = pd.read_parquet(buf)
-        return df["text"].str.lower().str.split().explode()
+    buf = download_s3(cfg, PARTITION_PATHS[part_id])
+    df = pd.read_parquet(buf)
+    return df["text"].str.lower().str.split().explode().rename()
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
@@ -49,50 +42,43 @@ def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     return ch % cfg.shuffle.num_reducers
 
 
-M = collections.Counter[str]
-R = collections.Counter[str]
-S = tuple[str, int]
+M = collections.Counter[str, int]
+R = pd.Series
+S = pd.Series
 
 
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.shuffle.num_mappers:
-        return [None for _ in range(cfg.shuffle.num_reducers)]
+        return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
     with tracing_utils.timeit("map"):
         words = load_partition(cfg, mapper_id)
         word_counts = words.value_counts()
-        counters = [collections.Counter() for _ in range(cfg.shuffle.num_reducers)]
-        for word, cnt in word_counts.iteritems():
-            idx = get_reducer_id_for_word(cfg, word)
-            counters[idx][word] += cnt
-        return counters
+        grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
+        assert len(grouped) == cfg.shuffle.num_reducers, grouped
+        return [group for _, group in grouped]
 
 
 def reducer(_cfg: AppConfig, state: R, *map_results: list[M]) -> R:
     with tracing_utils.timeit("reduce"):
         if state is None:
-            state = collections.Counter()
-        for map_result in map_results:
-            if map_result:
-                state += map_result
-        return state
+            state = pd.Series(dtype=str)
+        return state.to_frame("cnt").join(map_results, how="outer").sum(axis=1)
 
 
 def top_words_map(cfg: AppConfig, state: R) -> list[S]:
-    return state.most_common(cfg.top_k)
+    if state is None:
+        return pd.Series(dtype=str)
+    return state.sort_values(ascending=False)[: cfg.top_k]
 
 
 def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> list[S]:
-    heap = []
-    for most_common in most_commons:
-        for word, count in most_common:
-            heapq.heappush(heap, (-count, word))
-    return [(word, -neg_count) for neg_count, word in heap[: cfg.top_k]]
+    return pd.concat(most_commons).sort_values(ascending=False)[: cfg.top_k]
 
 
 def top_words_print(_cfg: AppConfig, summary: list[S]):
     num_correct = 0
     correct_so_far = True
-    for (word, count), truth_word in zip(summary, TOP_WORDS):
+    for (word, count), truth_word in zip(summary.items(), TOP_WORDS):
         print(word, count, end=" " * 4)
         if correct_so_far and word == truth_word:
             num_correct += 1
@@ -111,7 +97,8 @@ def word_count_main():
         summary_map_fn=top_words_map,
         summary_reduce_fn=top_words_reduce,
         summary_print_fn=top_words_print,
-        strategy=ShuffleStrategy.SIMPLE,
+        # strategy=ShuffleStrategy.SIMPLE,
+        strategy=ShuffleStrategy.STREAMING,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
     print(app_cfg)

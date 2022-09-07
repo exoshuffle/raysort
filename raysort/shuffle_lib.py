@@ -103,11 +103,11 @@ class ShuffleManager:
                     for i in range(self.cfg.num_mappers_per_round)
                 ]
             )
+            self._print_partial_state()
             for r, reduce_state in enumerate(self.reduce_states):
                 self.reduce_states[r] = self.reduce_remote.remote(
                     self.app_cfg, reduce_state, *map_results[:, r].tolist()
                 )
-            self._print_partial_state()
 
         print("===== final result =====")
         self._print_partial_state()
