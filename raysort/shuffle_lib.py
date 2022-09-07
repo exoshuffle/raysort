@@ -14,9 +14,9 @@ S = TypeVar("S")  # Reduce summary type
 
 
 class ShuffleStrategy(enum.Enum):
-    SIMPLE = enum.auto()
-    STREAMING = enum.auto()
-    PUSH_BASED = enum.auto()
+    SIMPLE = "SIMPLE"
+    STREAMING = "STREAMING"
+    PUSH_BASED = "PUSH_BASED"
 
 
 @dataclasses.dataclass
@@ -29,46 +29,23 @@ class ShuffleConfig:
     map_fn: Callable[[AppConfig, int], list[M]]
     reduce_fn: Callable[[AppConfig, R, list[M]], R]
 
-    # Summary functions are only used for the streaming shuffle.
     summary_map_fn: Optional[Callable[[AppConfig, R], S]] = None
     summary_reduce_fn: Optional[Callable[[AppConfig, list[S]], S]] = None
     summary_print_fn: Optional[Callable[[AppConfig, S], None]] = None
 
     strategy: ShuffleStrategy = ShuffleStrategy.SIMPLE
-
-    # Runtime states.
-    start_time: float = 0
-    round_start_time: float = 0
-    reduce_states: list[R] = dataclasses.field(default_factory=list)
+    is_cluster: bool = True
 
     def __post_init__(self):
         self.num_rounds = int(np.ceil(self.num_mappers / self.num_mappers_per_round))
-        self.reduce_states = [None] * self.num_reducers
 
 
-def _print_partial_state(app_cfg: AppConfig, shuffle_cfg: ShuffleConfig):
-    if (
-        shuffle_cfg.summary_map_fn is None
-        or shuffle_cfg.summary_reduce_fn is None
-        or shuffle_cfg.summary_print_fn is None
-    ):
-        return
-    map_remote = _ray_remote(app_cfg, shuffle_cfg.summary_map_fn)
-    summaries = ray.get(
-        [map_remote.remote(app_cfg, state) for state in shuffle_cfg.reduce_states]
-    )
-    summary = shuffle_cfg.summary_reduce_fn(app_cfg, summaries)
-    now = time.time()
-    print(
-        f"this round: {now - shuffle_cfg.round_start_time:.1f}s, total: {now - shuffle_cfg.start_time:.1f}s"
-    )
-    shuffle_cfg.summary_print_fn(app_cfg, summary)
-    print()
-    shuffle_cfg.round_start_time = now
-
-
-def _ray_remote(cfg: AppConfig, fn: Callable, **kwargs: dict) -> Callable:
-    if not cfg.local_mode:
+def _ray_remote(
+    fn: Optional[Callable], is_cluster: bool = True, **kwargs: dict
+) -> Callable:
+    if fn is None:
+        return None
+    if is_cluster:
         kwargs["resources"] = {"worker": 1e-3}
         kwargs["scheduling_strategy"] = "SPREAD"
     if len(kwargs) == 0:
@@ -76,37 +53,84 @@ def _ray_remote(cfg: AppConfig, fn: Callable, **kwargs: dict) -> Callable:
     return ray.remote(**kwargs)(fn)
 
 
-def _streaming_shuffle(app_cfg: AppConfig, shuffle_cfg: ShuffleConfig):
-    map_remote = _ray_remote(
-        app_cfg, shuffle_cfg.map_fn, num_returns=shuffle_cfg.num_reducers
-    )
-    reduce_remote = _ray_remote(app_cfg, shuffle_cfg.reduce_fn)
-    print_partial_state = lambda: _print_partial_state(
-        app_cfg,
-        shuffle_cfg,
-    )
+class ShuffleManager:
+    def __init__(self, cfg: ShuffleConfig, app_cfg: AppConfig):
+        self.cfg = cfg
+        self.app_cfg = app_cfg
 
-    shuffle_cfg.start_time = time.time()
-    shuffle_cfg.round_start_time = shuffle_cfg.start_time
-    for rnd in range(shuffle_cfg.num_rounds):
-        print(f"===== round {rnd} =====")
-        map_results = np.array(
+        self.map_remote = _ray_remote(
+            cfg.map_fn, cfg.is_cluster, num_returns=cfg.num_reducers
+        )
+        self.reduce_remote = _ray_remote(cfg.reduce_fn, cfg.is_cluster)
+        self.summary_map_remote = _ray_remote(cfg.summary_map_fn, cfg.is_cluster)
+        self.reduce_states = [None] * self.cfg.num_reducers
+
+        self.start_time = time.time()
+        self.round_start_time = self.start_time
+
+    def run(self):
+        if self.cfg.strategy == ShuffleStrategy.SIMPLE:
+            return self._simple_shuffle()
+        if self.cfg.strategy == ShuffleStrategy.STREAMING:
+            return self._streaming_shuffle()
+        raise NotImplementedError
+
+    def _simple_shuffle(self):
+        map_results = np.empty(
+            (self.cfg.num_mappers, self.cfg.num_reducers), dtype=object
+        )
+        print("===== map =====")
+        for i in range(self.cfg.num_mappers):
+            map_results[i, :] = self.map_remote.remote(self.app_cfg, i)
+
+        print("===== reduce =====")
+        for r, reduce_state in enumerate(self.reduce_states):
+            self.reduce_states[r] = self.reduce_remote.remote(
+                self.app_cfg, reduce_state, *map_results[:, r].tolist()
+            )
+
+        print("===== final result =====")
+        self._print_partial_state()
+
+    def _streaming_shuffle(self):
+        for rnd in range(self.cfg.num_rounds):
+            print(f"===== round {rnd} =====")
+            map_results = np.array(
+                [
+                    self.map_remote.remote(
+                        self.app_cfg, self.cfg.num_mappers_per_round * rnd + i
+                    )
+                    for i in range(self.cfg.num_mappers_per_round)
+                ]
+            )
+            for r, reduce_state in enumerate(self.reduce_states):
+                self.reduce_states[r] = self.reduce_remote.remote(
+                    self.app_cfg, reduce_state, *map_results[:, r].tolist()
+                )
+            self._print_partial_state()
+
+        print("===== final result =====")
+        self._print_partial_state()
+
+    def _print_partial_state(self):
+        if self.summary_map_remote is None:
+            return
+        summaries = ray.get(
             [
-                map_remote.remote(app_cfg, shuffle_cfg.num_mappers_per_round * rnd + i)
-                for i in range(shuffle_cfg.num_mappers_per_round)
+                self.summary_map_remote.remote(self.app_cfg, state)
+                for state in self.reduce_states
             ]
         )
-        for r, reduce_state in enumerate(shuffle_cfg.reduce_states):
-            shuffle_cfg.reduce_states[r] = reduce_remote.remote(
-                app_cfg, reduce_state, *map_results[:, r].tolist()
-            )
-        print_partial_state()
+        summary = self.cfg.summary_reduce_fn(self.app_cfg, summaries)
+        now = time.time()
+        print(
+            f"this round: {now - self.round_start_time:.1f}s, total: {now - self.start_time:.1f}s"
+        )
+        self.cfg.summary_print_fn(self.app_cfg, summary)
+        self.round_start_time = now
+        print()
 
-    print("===== final result =====")
-    print_partial_state()
 
-
-def shuffle(app_cfg: AppConfig, shuffle_cfg: ShuffleConfig):
-    if shuffle_cfg.strategy == ShuffleStrategy.STREAMING:
-        return _streaming_shuffle(app_cfg, shuffle_cfg)
-    raise NotImplementedError
+def shuffle(cfg: ShuffleConfig, app_cfg: AppConfig):
+    mgr = ShuffleManager(cfg, app_cfg)
+    return mgr.run()

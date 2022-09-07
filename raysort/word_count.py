@@ -22,7 +22,6 @@ class AppConfig:
     shuffle: ShuffleConfig
 
     top_k: int = 20
-    local_mode: bool = False
     s3_bucket: str = "lsf-berkeley-edu"
 
 
@@ -112,17 +111,17 @@ def word_count_main():
         summary_map_fn=top_words_map,
         summary_reduce_fn=top_words_reduce,
         summary_print_fn=top_words_print,
-        strategy=ShuffleStrategy.STREAMING,
+        strategy=ShuffleStrategy.SIMPLE,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
     print(app_cfg)
-    if app_cfg.local_mode:
-        ray.init()
-    else:
+    if shuffle_cfg.is_cluster:
         ray.init("auto")
+    else:
+        ray.init()
     tracker = tracing_utils.create_progress_tracker(app_cfg)
     with tracing_utils.timeit("word_count"):
-        shuffle(app_cfg, shuffle_cfg)
+        shuffle(shuffle_cfg, app_cfg)
     ray.get(tracker.performance_report.remote())
 
 
