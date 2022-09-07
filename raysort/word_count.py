@@ -1,40 +1,29 @@
 # pylint: disable=too-many-instance-attributes
 import collections
 import dataclasses
-import heapq
 import io
 
-import numpy as np
 import pandas as pd
 import ray
 
-from raysort import s3_utils
-from raysort import tracing_utils
-from raysort.shuffle_lib import streaming_shuffle
+from raysort import s3_utils, tracing_utils
+from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
-TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
+NUM_PARTITIONS = 646
+PARTITION_PATHS = [
+    f"wiki/wiki-{part_id:04d}.parquet" for part_id in range(NUM_PARTITIONS)
+]
+TOP_WORDS = (
+    "the of in and a to was is for as on by with from he at that his it an".split()
+)
 
 
 @dataclasses.dataclass
 class AppConfig:
-    num_mappers: int = 646
-    num_mappers_per_round: int = 32
-    num_rounds: int = dataclasses.field(init=False)
-    num_reducers: int = 8
+    shuffle: ShuffleConfig
+
     top_k: int = 20
-    local_mode: bool = False
-
-    start_time: float = 0
-    round_start_time: float = 0
-
     s3_bucket: str = "lsf-berkeley-edu"
-
-    def __post_init__(self):
-        self.num_rounds = int(np.ceil(self.num_mappers / self.num_mappers_per_round))
-
-
-def flatten(xss: list[list]) -> list:
-    return [x for xs in xss for x in xs]
 
 
 def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
@@ -44,64 +33,55 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
     return buf
 
 
-def load_partition(cfg: AppConfig, part_id: int) -> list[str]:
-    with tracing_utils.timeit("load_partition", report_completed=False):
-        with tracing_utils.timeit("s3_download", report_completed=False):
-            buf = download_s3(cfg, f"wiki/wiki-{part_id:04d}.parquet")
-        df = pd.read_parquet(buf)
-        words = df["text"].str.lower().str.split().tolist()
-        return flatten(words)
+def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
+    buf = download_s3(cfg, PARTITION_PATHS[part_id])
+    df = pd.read_parquet(buf)
+    return df["text"].str.lower().str.split().explode().rename()
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     ch = ord(word[0]) if len(word) > 0 else 0
-    return ch % cfg.num_reducers
+    return ch % cfg.shuffle.num_reducers
 
 
-M = collections.Counter[str]
-R = collections.Counter[str]
-S = tuple[str, int]
+M = pd.Series
+R = collections.Counter[str, int]
+S = pd.Series
 
 
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
-    if mapper_id >= cfg.num_mappers:
-        return [None for _ in range(cfg.num_reducers)]
-    # print(ray.util.get_node_ip_address())
-    with tracing_utils.timeit("map"):
-        words = load_partition(cfg, mapper_id)
-        counters = [collections.Counter() for _ in range(cfg.num_reducers)]
-        for word in words:
-            idx = get_reducer_id_for_word(cfg, word)
-            counters[idx][word] += 1
-        return counters
+    if mapper_id >= cfg.shuffle.num_mappers:
+        return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
+    words = load_partition(cfg, mapper_id)
+    word_counts = words.value_counts(sort=False)
+    grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
+    assert len(grouped) == cfg.shuffle.num_reducers, grouped
+    return [group for _, group in grouped]
 
 
 def reducer(_cfg: AppConfig, state: R, *map_results: list[M]) -> R:
-    with tracing_utils.timeit("reduce"):
-        if state is None:
-            state = collections.Counter()
-        for map_result in map_results:
-            if map_result:
-                state += map_result
-        return state
+    if state is None:
+        state = collections.Counter()
+    for map_result in map_results:
+        state += map_result.to_dict()
+    return state
 
 
-def top_words_map(cfg: AppConfig, state: R) -> list[S]:
-    return state.most_common(cfg.top_k)
+def top_words_map(cfg: AppConfig, state: R) -> S:
+    if state is None:
+        return pd.Series(dtype=str)
+    word_counts = state.most_common(cfg.top_k)
+    return pd.Series(dict(word_counts))
 
 
-def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> list[S]:
-    heap = []
-    for most_common in most_commons:
-        for word, count in most_common:
-            heapq.heappush(heap, (-count, word))
-    return [(word, -neg_count) for neg_count, word in heap[: cfg.top_k]]
+def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
+    return pd.concat(most_commons).sort_values(ascending=False)[: cfg.top_k]
 
 
-def top_words_print(_cfg: AppConfig, summary: list[S]):
+def top_words_print(_cfg: AppConfig, summary: S):
     num_correct = 0
     correct_so_far = True
-    for (word, count), truth_word in zip(summary, TOP_WORDS):
+    for (word, count), truth_word in zip(summary.items(), TOP_WORDS):
         print(word, count, end=" " * 4)
         if correct_so_far and word == truth_word:
             num_correct += 1
@@ -111,20 +91,27 @@ def top_words_print(_cfg: AppConfig, summary: list[S]):
 
 
 def word_count_main():
-    cfg = AppConfig()
-    if cfg.local_mode:
-        ray.init()
-    else:
-        ray.init("auto")
-    tracker = tracing_utils.create_progress_tracker(cfg)
-    streaming_shuffle(
-        cfg,
-        mapper,
-        reducer,
-        top_words_map,
-        top_words_reduce,
-        top_words_print,
+    shuffle_cfg = ShuffleConfig(
+        num_mappers=NUM_PARTITIONS,
+        num_mappers_per_round=32,
+        num_reducers=8,
+        map_fn=mapper,
+        reduce_fn=reducer,
+        summary_map_fn=top_words_map,
+        summary_reduce_fn=top_words_reduce,
+        summary_print_fn=top_words_print,
+        strategy=ShuffleStrategy.SIMPLE,
+        # strategy=ShuffleStrategy.STREAMING,
     )
+    app_cfg = AppConfig(shuffle=shuffle_cfg)
+    print(app_cfg)
+    if shuffle_cfg.is_cluster:
+        ray.init("auto")
+    else:
+        ray.init()
+    tracker = tracing_utils.create_progress_tracker(app_cfg)
+    with tracing_utils.timeit("word_count"):
+        shuffle(shuffle_cfg, app_cfg)
     ray.get(tracker.performance_report.remote())
 
 
