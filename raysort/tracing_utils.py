@@ -1,5 +1,6 @@
 import collections
 import dataclasses
+import functools
 import json
 import logging
 import os
@@ -66,6 +67,15 @@ class timeit:
             echo=self.report_completed,
         )
         return False
+
+
+def timeit_wrapper(fn: Callable):
+    @functools.wraps(fn)
+    def wrapped_fn(*args, **kwargs):
+        with timeit(fn.__name__):
+            return fn(*args, **kwargs)
+
+    return wrapped_fn
 
 
 def record_value(*args, **kwargs):

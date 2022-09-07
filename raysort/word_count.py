@@ -13,7 +13,9 @@ NUM_PARTITIONS = 646
 PARTITION_PATHS = [
     f"wiki/wiki-{part_id:04d}.parquet" for part_id in range(NUM_PARTITIONS)
 ]
-TOP_WORDS = "the of is in and as for was with a he had at also from american on were would to".split()
+TOP_WORDS = (
+    "the of in and a to was is for as on by with from he at that his it an".split()
+)
 
 
 @dataclasses.dataclass
@@ -42,40 +44,41 @@ def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
     return ch % cfg.shuffle.num_reducers
 
 
-M = collections.Counter[str, int]
-R = pd.Series
+M = pd.Series
+R = collections.Counter[str, int]
 S = pd.Series
 
 
 def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.shuffle.num_mappers:
         return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
-    with tracing_utils.timeit("map"):
-        words = load_partition(cfg, mapper_id)
-        word_counts = words.value_counts()
-        grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
-        assert len(grouped) == cfg.shuffle.num_reducers, grouped
-        return [group for _, group in grouped]
+    words = load_partition(cfg, mapper_id)
+    word_counts = words.value_counts(sort=False)
+    grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
+    assert len(grouped) == cfg.shuffle.num_reducers, grouped
+    return [group for _, group in grouped]
 
 
 def reducer(_cfg: AppConfig, state: R, *map_results: list[M]) -> R:
-    with tracing_utils.timeit("reduce"):
-        if state is None:
-            state = pd.Series(dtype=str)
-        return state.to_frame("cnt").join(map_results, how="outer").sum(axis=1)
+    if state is None:
+        state = collections.Counter()
+    for map_result in map_results:
+        state += map_result.to_dict()
+    return state
 
 
-def top_words_map(cfg: AppConfig, state: R) -> list[S]:
+def top_words_map(cfg: AppConfig, state: R) -> S:
     if state is None:
         return pd.Series(dtype=str)
-    return state.sort_values(ascending=False)[: cfg.top_k]
+    word_counts = state.most_common(cfg.top_k)
+    return pd.Series(dict(word_counts))
 
 
-def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> list[S]:
+def top_words_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
     return pd.concat(most_commons).sort_values(ascending=False)[: cfg.top_k]
 
 
-def top_words_print(_cfg: AppConfig, summary: list[S]):
+def top_words_print(_cfg: AppConfig, summary: S):
     num_correct = 0
     correct_so_far = True
     for (word, count), truth_word in zip(summary.items(), TOP_WORDS):
@@ -97,8 +100,8 @@ def word_count_main():
         summary_map_fn=top_words_map,
         summary_reduce_fn=top_words_reduce,
         summary_print_fn=top_words_print,
-        # strategy=ShuffleStrategy.SIMPLE,
-        strategy=ShuffleStrategy.STREAMING,
+        strategy=ShuffleStrategy.SIMPLE,
+        # strategy=ShuffleStrategy.STREAMING,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
     print(app_cfg)

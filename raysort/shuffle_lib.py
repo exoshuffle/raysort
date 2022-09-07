@@ -7,6 +7,8 @@ from typing import Callable, Optional, TypeVar
 import numpy as np
 import ray
 
+from raysort import tracing_utils
+
 AppConfig = TypeVar("AppConfig")
 M = TypeVar("M")  # Map output type
 R = TypeVar("R")  # Reduce output type
@@ -41,13 +43,19 @@ class ShuffleConfig:
 
 
 def _ray_remote(
-    fn: Optional[Callable], is_cluster: bool = True, **kwargs: dict
+    fn: Optional[Callable],
+    is_cluster: bool = True,
+    *,
+    timeit: bool = True,
+    **kwargs: dict,
 ) -> Callable:
     if fn is None:
         return None
     if is_cluster:
         kwargs["resources"] = {"worker": 1e-3}
         kwargs["scheduling_strategy"] = "SPREAD"
+    if timeit:
+        fn = tracing_utils.timeit_wrapper(fn)
     if len(kwargs) == 0:
         return ray.remote(fn)
     return ray.remote(**kwargs)(fn)
@@ -59,14 +67,21 @@ class ShuffleManager:
         self.app_cfg = app_cfg
 
         self.map_remote = _ray_remote(
-            cfg.map_fn, cfg.is_cluster, num_returns=cfg.num_reducers
+            cfg.map_fn,
+            cfg.is_cluster,
+            num_returns=cfg.num_reducers,
         )
-        self.reduce_remote = _ray_remote(cfg.reduce_fn, cfg.is_cluster)
-        self.summary_map_remote = _ray_remote(cfg.summary_map_fn, cfg.is_cluster)
-        self.reduce_states = [None] * self.cfg.num_reducers
+        self.reduce_remote = _ray_remote(
+            cfg.reduce_fn,
+            cfg.is_cluster,
+        )
+        self.summary_map_remote = _ray_remote(
+            cfg.summary_map_fn, cfg.is_cluster, timeit=False
+        )
+        self.summarize_remote = _ray_remote(self._summarize, False)
 
         self.start_time = time.time()
-        self.round_start_time = self.start_time
+        self.rounds_completed = 0
 
     def run(self):
         if self.cfg.strategy == ShuffleStrategy.SIMPLE:
@@ -79,22 +94,18 @@ class ShuffleManager:
         map_results = np.empty(
             (self.cfg.num_mappers, self.cfg.num_reducers), dtype=object
         )
-        print("===== map =====")
+        reduce_states = [None] * self.cfg.num_reducers
         for i in range(self.cfg.num_mappers):
             map_results[i, :] = self.map_remote.remote(self.app_cfg, i)
-
-        print("===== reduce =====")
-        for r, reduce_state in enumerate(self.reduce_states):
-            self.reduce_states[r] = self.reduce_remote.remote(
+        for r, reduce_state in enumerate(reduce_states):
+            reduce_states[r] = self.reduce_remote.remote(
                 self.app_cfg, reduce_state, *map_results[:, r].tolist()
             )
-
-        print("===== final result =====")
-        self._print_partial_state()
+        ray.get(self.summarize_remote.remote(reduce_states))
 
     def _streaming_shuffle(self):
+        reduce_states = [None] * self.cfg.num_reducers
         for rnd in range(self.cfg.num_rounds):
-            print(f"===== round {rnd} =====")
             map_results = np.array(
                 [
                     self.map_remote.remote(
@@ -103,31 +114,29 @@ class ShuffleManager:
                     for i in range(self.cfg.num_mappers_per_round)
                 ]
             )
-            self._print_partial_state()
-            for r, reduce_state in enumerate(self.reduce_states):
-                self.reduce_states[r] = self.reduce_remote.remote(
+            to_wait = [r for r in reduce_states if r is not None]
+            ray.wait(to_wait, num_returns=len(to_wait), fetch_local=False)
+            for r, reduce_state in enumerate(reduce_states):
+                reduce_states[r] = self.reduce_remote.remote(
                     self.app_cfg, reduce_state, *map_results[:, r].tolist()
                 )
+            self.summarize_remote.remote(reduce_states)
+        ray.get(self.summarize_remote.remote(reduce_states))
 
-        print("===== final result =====")
-        self._print_partial_state()
-
-    def _print_partial_state(self):
+    def _summarize(self, reduce_states: list[R]):
         if self.summary_map_remote is None:
             return
         summaries = ray.get(
             [
                 self.summary_map_remote.remote(self.app_cfg, state)
-                for state in self.reduce_states
+                for state in reduce_states
             ]
         )
         summary = self.cfg.summary_reduce_fn(self.app_cfg, summaries)
         now = time.time()
-        print(
-            f"this round: {now - self.round_start_time:.1f}s, total: {now - self.start_time:.1f}s"
-        )
+        print("===== partial summary =====")
+        print(f"time elapsed: {now - self.start_time:.1f}s")
         self.cfg.summary_print_fn(self.app_cfg, summary)
-        self.round_start_time = now
         print()
 
 
