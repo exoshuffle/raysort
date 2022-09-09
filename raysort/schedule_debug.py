@@ -1,38 +1,38 @@
-import csv
-import functools
 import logging
-import os
 import random
 import time
-from typing import Callable, Dict, Iterable, List, Tuple, Union
 
 import numpy as np
 import ray
 
 from raysort import (
     config,
-    constants,
     logging_utils,
     ray_utils,
-    s3_utils,
     sort_utils,
-    sortlib,
     tracing_utils,
 )
 from raysort.config import AppConfig, JobConfig
 from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
 
-@ray.remote
-def debug_task(count):
-    print("Task " + str(count) + " is running")
-    with tracing_utils.timeit("task"):
 
+@ray.remote(resources={"worker": 0.001})
+def debug_task(count):
+    with tracing_utils.timeit("task"):
+        print("Task " + str(count) + " is running")
         time.sleep(20 + random.randint(-1, 1))
 
         return 0
 
+
 def sort_main(cfg: AppConfig):
-    results = [debug_task.options(scheduling_strategy="DEFAULT").remote(i) for i in range(0, 200)]
+    for round in range (10):
+        results = [
+            debug_task.options(scheduling_strategy="SPREAD").remote(i)
+            for i in range(0, 40)
+        ]
+        ray.get(results)
+
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
     logging_utils.init()
@@ -40,6 +40,7 @@ def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
     ray_utils.init(job_cfg)
     sort_utils.init(job_cfg.app)
     return tracing_utils.create_progress_tracker(job_cfg)
+
 
 def main():
     job_cfg = config.get()
@@ -50,6 +51,7 @@ def main():
 
     ray.get(tracker.performance_report.remote())
     ray.shutdown()
+
 
 if __name__ == "__main__":
     main()
