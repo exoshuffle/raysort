@@ -52,7 +52,7 @@ def mapper_sort_blocks(
 
 # Memory usage: input_part_size = 2GB
 # Plasma usage: input_part_size = 2GB
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def mapper(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
 ) -> List[np.ndarray]:
@@ -66,7 +66,7 @@ def mapper(
         return ret + [None]
 
 
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def mapper_yield(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
 ) -> List[np.ndarray]:
@@ -144,7 +144,7 @@ def _merge_blocks_prep(
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
 # Plasma usage: input_part_size * merge_factor * 2 = 8GB
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
@@ -186,7 +186,7 @@ def merge_blocks(
         return ret
 
 
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
@@ -201,7 +201,7 @@ def merge_blocks_yield(
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
@@ -265,7 +265,7 @@ def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
     return ray_utils.node_i(cfg, part_id)
 
 
-@ray.remote(num_cpus=0)
+@ray.remote(num_cpus=0, resources={"worker": 0.001})
 def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[PartInfo]:
     with tracing_utils.timeit("reduce_master"):
         tasks = []
@@ -444,7 +444,12 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
             pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
+
+            if cfg.native_scheduling == True:
+                opt = dict(**mapper_opt, scheduling_strategy="SPREAD")
+            else:
+                opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
+
             m = part_id % num_map_tasks_per_round
             refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
             map_results[m, :] = refs
@@ -552,6 +557,7 @@ def main():
     job_cfg = config.get()
     tracker = init(job_cfg)
     cfg = job_cfg.app
+
     try:
         if cfg.generate_input:
             sort_utils.generate_input(cfg)

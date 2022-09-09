@@ -121,6 +121,7 @@ class AppConfig:
     record_object_refs: bool = False
 
     free_scheduling: bool = False
+    native_scheduling: bool = False
     use_put: bool = False
     use_yield: bool = False
 
@@ -267,6 +268,12 @@ r6i_2xl = InstanceType(
     memory_gib=61.8,
 )
 
+t3_2xl = InstanceType(
+    name="t3.2xlarge",
+    cpu=2,
+    memory_gib=8,
+    disk_device_offset=0,
+)
 
 # ------------------------------------------------------------
 #     Configurations
@@ -383,6 +390,15 @@ __configs__ = [
         app=dict(
             **local_app_config,
             skip_first_stage=True,
+        ),
+    ),
+    JobConfig(
+        name="LocalSchedulingDebug",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            simple_shuffle=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -505,6 +521,26 @@ __configs__ = [
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
             io_parallelism=4,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     t3.2xl 10 nodes scheduling policy debugging
+    # ------------------------------------------------------------
+    JobConfig(
+        name="1tb-2gb-t3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=t3_2xl,
+            local=False,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            native_scheduling=True,
         ),
     ),
     # ------------------------------------------------------------
