@@ -26,7 +26,7 @@ def debug_task(count):
 
 
 def sort_main(cfg: AppConfig):
-    for round in range (10):
+    for round in range(10):
         results = [
             debug_task.options(scheduling_strategy="SPREAD").remote(i)
             for i in range(0, 40)
