@@ -8,13 +8,7 @@ import time
 import numpy as np
 import ray
 
-from raysort import (
-    config,
-    logging_utils,
-    ray_utils,
-    sort_utils,
-    tracing_utils,
-)
+from raysort import config, logging_utils, ray_utils, sort_utils, tracing_utils
 from raysort.config import AppConfig, JobConfig
 from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
 
