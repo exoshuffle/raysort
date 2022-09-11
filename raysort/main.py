@@ -444,6 +444,16 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
             pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
+
+            if cfg.native_scheduling:
+                opt = dict(
+                    **mapper_opt,
+                    scheduling_strategy="SPREAD",
+                    resources={"worker": 1e-3},
+                )
+            else:
+                opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
+
             opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
             m = part_id % num_map_tasks_per_round
             refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
