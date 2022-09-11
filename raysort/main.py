@@ -259,9 +259,9 @@ def get_boundaries(
     return map_bounds, merge_bounds
 
 
-def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
+def _get_node_res(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
     if pinfo.node:
-        return ray_utils.node_ip_aff(cfg, pinfo.node)
+        return ray_utils.node_res(pinfo.node)
     return ray_utils.node_i(cfg, part_id)
 
 
@@ -308,7 +308,7 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
     for part_id in range(cfg.num_mappers):
         pinfo = parts[part_id]
-        opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+        opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
         map_results[part_id, :] = mapper.options(**opt).remote(
             cfg, part_id, bounds, [pinfo]
         )[: cfg.num_reducers]
@@ -355,7 +355,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         map_results = np.empty((cfg.num_workers, cfg.map_parallelism), dtype=object)
         for i in range(num_map_tasks):
             pinfo = parts[part_id]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfo, part_id))
+            opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
             map_results[i % cfg.num_workers, i // cfg.num_workers] = mapper.options(
                 **opt
@@ -443,8 +443,8 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
-            pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
+            pinfo = parts[part_id]
+            opt = dict(**mapper_opt, **_get_node_res(cfg, pinfo, part_id))
             m = part_id % num_map_tasks_per_round
             refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
             map_results[m, :] = refs

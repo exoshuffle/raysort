@@ -21,13 +21,11 @@ GiB = MiB * 1024
 
 
 def run_on_all_workers(
-    cfg: AppConfig,
-    fn: ray.remote_function.RemoteFunction,
-    include_current: bool = False,
+    cfg: AppConfig, fn: ray.remote_function.RemoteFunction, include_head: bool = False
 ) -> List[ray.ObjectRef]:
-    opts = [node_aff(node) for node in cfg.worker_ids]
-    if include_current:
-        opts.append(current_node_aff())
+    opts = [node_res(node) for node in cfg.worker_ips]
+    if include_head:
+        opts.append({"resources": {"head": 1e-3}})
     return [fn.options(**opt).remote(cfg) for opt in opts]
 
 
@@ -50,31 +48,22 @@ def remote(fn: Callable) -> RemoteFunction:
     """
     Return a remote function that runs on the current node with num_cpus=0.
     """
-    opt = dict(num_cpus=0, **current_node_aff())
+    opt = dict(num_cpus=0, **current_node_res())
     return ray.remote(**opt)(fn)
 
 
-def current_node_aff() -> Dict:
-    return node_aff(ray.get_runtime_context().node_id)
+def current_node_res(parallelism: int = 1000) -> Dict:
+    return node_res(ray.util.get_node_ip_address(), parallelism)
 
 
-def node_ip_aff(cfg: AppConfig, node_ip: str) -> Dict:
+def node_res(node_ip: str, parallelism: int = 1000) -> Dict:
     assert node_ip is not None, node_ip
-    return node_aff(cfg.worker_ip_to_id[node_ip])
+    return {"resources": {f"node:{node_ip}": 1 / parallelism}}
 
 
-def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> Dict:
-    return {
-        "scheduling_strategy": ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
-            node_id=node_id,
-            soft=soft,
-        )
-    }
-
-
-def node_i(cfg: AppConfig, node_idx: int) -> Dict:
-    return node_aff(cfg.worker_ids[node_idx % cfg.num_workers])
-
+def node_i(cfg: AppConfig, node_idx: int, parallelism: int = 1000) -> Dict:
+    return node_res(cfg.worker_ips[node_idx % cfg.num_workers], parallelism)
+    
 
 def _fail_and_restart_local_node(cfg: AppConfig):
     idx = int(cfg.fail_node)
