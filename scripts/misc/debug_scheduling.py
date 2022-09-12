@@ -26,7 +26,7 @@ def sort_main(cfg: AppConfig):
     for round in range(10):
         results = [
             debug_task.options(scheduling_strategy="SPREAD").remote(i)
-            for i in range(0, 40)
+            for i in range(40)
         ]
         ray.get(results)
 
