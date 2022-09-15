@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Launch cluster
-ray up -y scripts/config/autoscaler/_pipeline-training.yaml
+ray up -y scripts/config/autoscaler/pipelined-training.yaml
 
 # Get head node IP
 HEAD_IP=$(ray exec /home/ubuntu/raysort/scripts/config/autoscaler/_pipeline-training.yaml "ray status" | grep -n "Fetched IP"| awk '{print $3}')
