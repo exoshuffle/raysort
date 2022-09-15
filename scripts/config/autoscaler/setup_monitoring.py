@@ -15,7 +15,7 @@ import ray
 RAY_METRICS_EXPORT_PORT=8090
 PROMETHEUS_NODE_EXPORTER_PORT=8091
 PROMETHEUS_SERVER_PORT=9090
-SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
+SCRIPT_DIR = pathlib.Path("/home/ubuntu/raysort/scripts")
 GRAFANA_SERVER_PORT = 3000
 
 
@@ -79,6 +79,8 @@ def get_ips():
 
 def main():
     ray.init(address="auto")
+
+    print("SCRIPT_DIR", SCRIPT_DIR)
 
     head_ip = socket.gethostbyname(socket.gethostname())
     ips = get_ips()
