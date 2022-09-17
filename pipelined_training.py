@@ -48,6 +48,8 @@ parser.add_argument("--num-files", type=int, default=30)
 parser.add_argument("--num-windows", type=int, default=1)
 parser.add_argument("--manual-windows", type=bool, default=False)
 parser.add_argument("--parallelism", type=int, default=400)
+parser.add_argument("--no-shuffle", action="store_true", default=False, help="disables per-epoch shuffle")
+parser.add_argument("--local", action="store_true", default=False, help="run locally")
 
 SIZE_50_G = 30  # 49.17GB
 SIZE_100_G = 62  # 101.62GB
@@ -95,6 +97,7 @@ def train_main(args, splits):
     rank = hvd.rank()
 
     model = MyModel(annotation, use_bn=False)
+    print("Layers", model.layers)
     # By default, Adasum doesn"t need scaling up learning rate.
     if torch.cuda.is_available():
         # Move model to GPU.
@@ -206,6 +209,9 @@ def create_torch_iterator(split, batch_size, rank=None):
     label_column = feature_columns.pop()
     label_type = feature_types.pop()
 
+    # TODO: print first 10 elements of batch (should be different each epoch
+    # if shuffle, else same)
+
     torch_iterator = split.to_torch(
         label_column=label_column,
         feature_columns=feature_columns,
@@ -225,6 +231,7 @@ def create_dataset(
     num_windows=1,
     manual_windowing=False,
     parallelism=400,
+    shuffle=True
 ):
     if num_windows > 1 and manual_windowing:
         num_rows = ray.data.read_parquet(
@@ -251,7 +258,8 @@ def create_dataset(
         split_indices = [
             i * num_rows // num_windows // num_workers for i in range(1, num_workers)
         ]
-        pipe = pipe.random_shuffle_each_window()
+        if shuffle:
+            pipe = pipe.random_shuffle_each_window()
         pipe_shards = pipe.split_at_indices(split_indices)
     else:
         ds = ray.data.read_parquet(files, parallelism=parallelism)
@@ -259,7 +267,8 @@ def create_dataset(
             window_size = max(ds.num_blocks() // num_windows, 1)
             ds = ds.window(blocks_per_window=window_size)
         pipe = ds.repeat(epochs)
-        pipe = pipe.random_shuffle_each_window()
+        if shuffle:
+            pipe = pipe.random_shuffle_each_window()
         pipe_shards = pipe.split(num_workers, equal=True)
     return pipe_shards
 
@@ -296,8 +305,11 @@ if __name__ == "__main__":
     import ray
 
     print("Connecting to Ray cluster...")
-    ray.init(address="auto")
-
+    if args.local:
+        ray.init()
+    else:
+        ray.init(address="auto")
+    
     num = args.num_files
 
     files = [
@@ -308,6 +320,8 @@ if __name__ == "__main__":
 
     start = time.time()
 
+    print("Shuffle set to", (not args.no_shuffle))
+
     splits = create_dataset(
         files,
         num_workers=args.num_workers,
@@ -315,6 +329,7 @@ if __name__ == "__main__":
         num_windows=args.num_windows,
         manual_windowing=args.manual_windows,
         parallelism=args.parallelism,
+        shuffle=(not args.no_shuffle),
     )
 
     if args.debug:
