@@ -97,14 +97,15 @@ class AppConfig:
 
     num_concurrent_rounds: int = 1
     merge_factor: int = 2
+    io_parallelism_multiplier: InitVar[float] = 2.0
     map_parallelism_multiplier: InitVar[float] = 0.5
     reduce_parallelism_multiplier: InitVar[float] = 0.5
+    io_parallelism: int = field(init=False)
     map_parallelism: int = field(init=False)
     merge_parallelism: int = field(init=False)
     reduce_parallelism: int = field(init=False)
 
     io_size: int = 256 * KiB
-    io_parallelism: int = 0
     merge_io_parallelism: int = field(init=False)
     reduce_io_parallelism: int = field(init=False)
 
@@ -116,7 +117,7 @@ class AppConfig:
 
     spilling: SpillingMode = SpillingMode.RAY
 
-    dataloader_mode: str = None
+    dataloader_mode: str = ""
 
     record_object_refs: bool = False
 
@@ -147,12 +148,14 @@ class AppConfig:
     def __post_init__(
         self,
         cluster: ClusterConfig,
+        io_parallelism_multiplier: float,
         map_parallelism_multiplier: float,
         reduce_parallelism_multiplier: float,
     ):
         self.is_local_cluster = cluster.local
         self.total_data_size = int(self.total_gb * GB)
         self.input_part_size = int(self.input_part_gb * GB)
+        self.io_parallelism = int(io_parallelism_multiplier * cluster.instance_type.cpu)
         self.map_parallelism = int(
             map_parallelism_multiplier * cluster.instance_type.cpu
         )
@@ -343,7 +346,6 @@ __configs__ = [
         app=dict(
             **local_app_config,
             spilling=SpillingMode.DISK,
-            io_parallelism=2,
         ),
     ),
     JobConfig(
@@ -526,7 +528,6 @@ __configs__ = [
             **local_mini_app_config,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -890,7 +891,6 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            io_parallelism=16,
             num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
@@ -912,7 +912,6 @@ __configs__ = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            io_parallelism=16,
             num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(2),
             reduce_parallelism_multiplier=1,
@@ -934,7 +933,6 @@ __configs__ = [
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            io_parallelism=16,
             num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(10),
             reduce_parallelism_multiplier=1,
@@ -954,7 +952,6 @@ __configs__ = [
             total_gb=20000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -975,7 +972,6 @@ __configs__ = [
             total_gb=10000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -994,7 +990,6 @@ __configs__ = [
             total_gb=50000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -1011,7 +1006,6 @@ __configs__ = [
             total_gb=100000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -1033,7 +1027,6 @@ __configs__ = [
             total_gb=1000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
         ),
     ),
     JobConfig(
@@ -1051,7 +1044,6 @@ __configs__ = [
             total_gb=1000,
             input_part_gb=1,
             s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
         ),
     ),
     JobConfig(
@@ -1070,7 +1062,7 @@ __configs__ = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism=32,
+            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -1093,8 +1085,7 @@ __configs__ = [
             total_gb=2000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
-            io_parallelism=16,
-            reduce_parallelism_multiplier=1,
+            io_parallelism_multiplier=4,
         ),
     ),
     JobConfig(
@@ -1113,7 +1104,6 @@ __configs__ = [
             total_gb=10000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
         ),
     ),
     JobConfig(
@@ -1132,7 +1122,7 @@ __configs__ = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism=32,
+            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -1154,7 +1144,7 @@ __configs__ = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism=32,
+            io_parallelism_multiplier=4,
         ),
     ),
     JobConfig(
@@ -1173,7 +1163,7 @@ __configs__ = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism=32,
+            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -1195,7 +1185,6 @@ __configs__ = [
             total_gb=600,
             input_part_gb=1,
             s3_buckets=get_s3_buckets(),
-            io_parallelism=16,
         ),
     ),
     # ------------------------------------------------------------
