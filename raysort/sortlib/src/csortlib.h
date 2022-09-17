@@ -1,6 +1,9 @@
 #ifndef __CSORTLIB_H__
 #define __CSORTLIB_H__
 
+// #define CSORTLIB_TIMEIT 1
+// #define CSORTLIB_USE_ALT_MEMORY_LAYOUT 1
+
 #include <cstring>
 #include <memory>
 #include <queue>

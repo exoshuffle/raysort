@@ -27,12 +27,13 @@ template <typename T> size_t _TotalSize(const std::vector<T> &parts) {
 
 #ifdef CSORTLIB_USE_ALT_MEMORY_LAYOUT
 
-// 16-byte word-aligned data structure for sorting.
-// Significantly more cache-friendly.
 struct SortItem {
+  // 10 bytes.
   uint8_t header[HEADER_SIZE];
-  Record *ptr;
-  uint8_t unused[2];
+  // 2 bytes for alignment.
+  // uint8_t _unused[2];
+  // 4 bytes.
+  uint32_t offset;
 };
 
 struct SortItemComparator {
@@ -43,17 +44,49 @@ struct SortItemComparator {
 
 std::unique_ptr<std::vector<SortItem>>
 _MakeSortItems(const Array<Record> &record_array) {
-  Record *const records = record_array.ptr;
+  const Record *const records = record_array.ptr;
   const size_t num_records = record_array.size;
   auto ret = std::make_unique<std::vector<SortItem>>();
   ret->reserve(num_records);
-  SortItem item;
-  for (Record *ptr = records; ptr != records + num_records; ++ptr) {
-    memcpy(item.header, ptr->header, HEADER_SIZE);
-    item.ptr = ptr;
+  SortItem item = {};
+  for (uint32_t &offset = item.offset; offset < num_records; ++offset) {
+    memcpy(item.header, (records + offset)->header, HEADER_SIZE);
     ret->emplace_back(item);
   }
   return ret;
+}
+
+void _ApplyOrder(const Array<Record> &record_array,
+                 const std::vector<SortItem> &sort_items) {
+  Record *const records = record_array.ptr;
+  const size_t num_records = record_array.size;
+  std::vector<uint32_t> positions(num_records);
+  for (size_t i = 0; i < num_records; ++i) {
+    positions[sort_items[i].offset] = i;
+  }
+  size_t i = 0;
+  while (i < num_records) {
+    const uint32_t pos = positions[i];
+    if (pos != i) {
+      std::swap(records[i], records[pos]);
+      std::swap(positions[i], positions[pos]);
+    } else {
+      ++i;
+    }
+  }
+}
+
+void _ApplyOrderByCopying(const Array<Record> &record_array,
+                          const std::vector<SortItem> &sort_items) {
+  Record *const records = record_array.ptr;
+  const size_t num_records = record_array.size;
+  Record *buffer = new Record[num_records];
+  Record *cur = buffer;
+  for (const auto &item : sort_items) {
+    memcpy(cur++, records + item.offset, sizeof(Record));
+  }
+  memcpy(records, buffer, sizeof(Record) * num_records);
+  delete[] buffer;
 }
 
 #endif
@@ -62,29 +95,43 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
                                         const std::vector<Key> &boundaries) {
   Record *const records = record_array.ptr;
   const size_t num_records = record_array.size;
-
+#ifdef CSORTLIB_TIMEIT
+  const auto start_time = std::chrono::high_resolution_clock::now();
+#endif
 #ifdef CSORTLIB_USE_ALT_MEMORY_LAYOUT
   auto sort_items = _MakeSortItems(record_array);
-
-  const auto start1 = std::chrono::high_resolution_clock::now();
+#ifdef CSORTLIB_TIMEIT
+  const auto make_sort_items_stop = std::chrono::high_resolution_clock::now();
+  printf("MakeSortItems,%ld\n",
+         std::chrono::duration_cast<std::chrono::milliseconds>(
+             make_sort_items_stop - start_time)
+             .count());
+#endif
 
   std::sort(sort_items->begin(), sort_items->end(),
             HeaderComparator<SortItem>());
-
-  const auto stop1 = std::chrono::high_resolution_clock::now();
-  printf("Sort,%ld\n",
-         std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
+#ifdef CSORTLIB_TIMEIT
+  const auto partial_sort_stop = std::chrono::high_resolution_clock::now();
+  printf("Sort,%ld\n", std::chrono::duration_cast<std::chrono::milliseconds>(
+                           partial_sort_stop - make_sort_items_stop)
+                           .count());
+#endif
+  _ApplyOrder(record_array, *sort_items);
+#ifdef CSORTLIB_TIMEIT
+  const auto sort_stop = std::chrono::high_resolution_clock::now();
+  printf("ApplyOrder,%ld\n",
+         std::chrono::duration_cast<std::chrono::milliseconds>(
+             sort_stop - partial_sort_stop)
              .count());
-
-  Record *buffer = new Record[num_records];
-  Record *cur = buffer;
-  for (const auto &item : *sort_items) {
-    memcpy(cur++, item.ptr, sizeof(Record));
-  }
-  memcpy(records, buffer, sizeof(Record) * num_records);
-  delete[] buffer;
+#endif
 #else
   std::sort(records, records + num_records, HeaderComparator<Record>());
+#ifdef CSORTLIB_TIMEIT
+  const auto sort_stop = std::chrono::high_resolution_clock::now();
+  printf("Sort,%ld\n", std::chrono::duration_cast<std::chrono::milliseconds>(
+                           sort_stop - start_time)
+                           .count());
+#endif
 #endif
 
   std::vector<Partition> ret;
@@ -110,6 +157,13 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
   }
   assert(ret.size() == boundaries.size());
   assert(_TotalSize(ret) == num_records);
+#ifdef CSORTLIB_TIMEIT
+  const auto partition_stop = std::chrono::high_resolution_clock::now();
+  printf("Partition,%ld\n",
+         std::chrono::duration_cast<std::chrono::milliseconds>(partition_stop -
+                                                               sort_stop)
+             .count());
+#endif
   return ret;
 }
 
@@ -134,7 +188,7 @@ struct SortData {
 };
 
 struct SortDataComparator {
-  bool operator()(const SortData &a, const SortData &b) {
+  inline bool operator()(const SortData &a, const SortData &b) {
     return !HeaderComparator<Record>()(*a.record, *b.record);
   }
 };
@@ -172,7 +226,7 @@ public:
   }
 
   void Refill(const ConstArray<Record> &part, int part_id) {
-    assert(part_id < parts_.size());
+    assert(part_id < (int)parts_.size());
     parts_[part_id] = part;
     _PushFirstItem(part, part_id);
   }

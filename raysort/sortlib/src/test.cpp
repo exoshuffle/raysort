@@ -45,19 +45,22 @@ void test_file_merger() {
 
 int main() {
   printf("Hello, world!\n");
+#ifdef CSORTLIB_USE_ALT_MEMORY_LAYOUT
+  printf("Using alt memory layout.\n");
+#endif
 
-  test_file_merger();
-  exit(0);
+  // test_file_merger();
+  // exit(0);
 
-  const size_t num_reducers = 1;
+  const size_t num_reducers = 1000;
   const auto &boundaries = GetBoundaries(num_reducers);
 
-  const size_t num_records = 1000 * 1000 * 10;
-  Record *records = new Record[num_records + 1];
+  const size_t num_records = 1000 * 1000 * 20;
+  Record *records = new Record[num_records];
 
   FILE *fin;
   size_t file_size = 0;
-  fin = fopen("data1g", "r");
+  fin = fopen("/tmp/part-0000", "r");
   if (fin == NULL) {
     perror("Failed to open file");
   } else {
@@ -66,11 +69,15 @@ int main() {
     fclose(fin);
   }
 
-  for (int i = 0; i < 5; i++) {
+  const int num_trials = 3;
+  for (int i = 0; i < num_trials; i++) {
+    Record *records_copy = new Record[num_records];
+    std::memcpy(records_copy, records, num_records * RECORD_SIZE);
+
     const auto start1 = std::chrono::high_resolution_clock::now();
-    const auto &parts = SortAndPartition({records, num_records}, boundaries);
+    SortAndPartition({records_copy, num_records}, boundaries);
     const auto stop1 = std::chrono::high_resolution_clock::now();
-    printf("SortAndPartition,%ld\n",
+    printf("SortAndPartition,%ld\n\n",
            std::chrono::duration_cast<std::chrono::milliseconds>(stop1 - start1)
                .count());
   }

@@ -1,15 +1,16 @@
-CXX = g++
-CXXOPT = -pthread -ggdb
-# -O3
+# CXX = g++
+# CXXFLAGS = -pthread -Wall -Wextra -O3 -march=native
+CXX = /opt/intel/oneapi/compiler/latest/linux/bin/icpx
+CXXFLAGS = -pthread -Wall -Wextra -fast -xHost
 
-SRC = *.h *.cpp
+SRC = *.cpp
 TARGET = test
 
 run: $(TARGET)
 	./$(TARGET)
 
 $(TARGET): $(SRC)
-	$(CXX) $(CXXOPT) $(SRC) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
 
 .PHONY: clean
 clean:
