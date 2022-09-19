@@ -43,13 +43,15 @@ parser.add_argument(
     metavar="N",
     help=("how many batches to wait before logging training " "status"),
 )
-parser.add_argument("--num-workers", type=int, default=16)
+parser.add_argument("--num-workers", type=int, default=10)
 parser.add_argument("--num-files", type=int, default=30)
 parser.add_argument("--num-windows", type=int, default=1)
 parser.add_argument("--manual-windows", type=bool, default=False)
 parser.add_argument("--parallelism", type=int, default=400)
 parser.add_argument("--no-shuffle", action="store_true", default=False, help="disables per-epoch shuffle")
 parser.add_argument("--local", action="store_true", default=False, help="run locally")
+parser.add_argument("--num-batches", type=int, default=-1)
+parser.add_argument("--mock-sleep-time", type=int, default=-1)
 
 SIZE_50_G = 30  # 49.17GB
 SIZE_100_G = 62  # 101.62GB
@@ -96,34 +98,40 @@ def train_main(args, splits):
     torch.set_num_threads(1)
     rank = hvd.rank()
 
-    model = MyModel(annotation, use_bn=False)
-    print("Layers", model.layers)
-    # By default, Adasum doesn"t need scaling up learning rate.
-    if torch.cuda.is_available():
-        # Move model to GPU.
-        model.cuda()
+    if args.mock_sleep_time < 0:
+        model = MyModel(annotation, use_bn=False)
+        # By default, Adasum doesn"t need scaling up learning rate.
+        if torch.cuda.is_available():
+            # Move model to GPU.
+            model.cuda()
 
-    optimizers = construct_optimizers(model)
-    loss_function = huber_loss
-    # Horovod: broadcast parameters & optimizer state.
-    hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-    for opt in optimizers:
-        hvd.broadcast_optimizer_state(opt, root_rank=0)
+        optimizers = construct_optimizers(model)
+        loss_function = huber_loss
+        # Horovod: broadcast parameters & optimizer state.
+        hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+        for opt in optimizers:
+            hvd.broadcast_optimizer_state(opt, root_rank=0)
 
     def _train(epoch, train_dataset):
-        model.train()
+        if args.mock_sleep_time < 0:
+            model.train()
         # Horovod: set epoch to sampler for shuffling.
         # train_dataset.set_epoch(epoch)
         start_epoch = timeit.default_timer()
         last_batch_time = start_epoch
         batch_wait_times = []
         for batch_idx, (data, target) in enumerate(train_dataset):
+            print("Processing batch", batch_idx)
+            if args.num_batches > 0 and batch_idx > args.num_batches:
+                break
+            
             batch_wait_times.append(timeit.default_timer() - last_batch_time)
             if torch.cuda.is_available():
                 data = data.cuda()
                 target = target.cuda()
-            for opt in optimizers:
-                opt.zero_grad()
+            if args.mock_sleep_time < 0:
+                for opt in optimizers:
+                    opt.zero_grad()
             batch = OrderedDict()
             batch["embeddings"] = OrderedDict()
             batch["one_hot"] = OrderedDict()
@@ -132,6 +140,11 @@ def train_main(args, splits):
             batch["one_hot"]["hot0"] = data[:, -2:-1]
             batch["one_hot"]["hot1"] = data[:, -1:]
 
+            if args.mock_sleep_time > 0:
+                time.sleep(args.mock_sleep_time)
+                last_batch_time = timeit.default_timer()
+                continue
+            
             batch_pred = model(batch)
 
             if batch_idx % args.log_interval == 0:
@@ -145,6 +158,7 @@ def train_main(args, splits):
                 opt.step()
 
             last_batch_time = timeit.default_timer()
+            
         epoch_duration = timeit.default_timer() - start_epoch
         avg_batch_wait_time = np.mean(batch_wait_times)
         std_batch_wait_time = np.std(batch_wait_times)
@@ -305,17 +319,17 @@ if __name__ == "__main__":
     import ray
 
     print("Connecting to Ray cluster...")
+    num_files = (args.num_files // 10) * args.num_workers # scale data for number of workers
     if args.local:
-        ray.init()
+        ray.init(num_gpus=1)
     else:
         ray.init(address="auto")
-    
-    num = args.num_files
+        num_files = args.num_files
 
     files = [
         f"s3://ray-shuffling-data-loader/data/r10_000_000_000-f1000"
         f"/input_data_{i}.parquet.snappy"
-        for i in range(args.num_files)
+        for i in range(num_files)
     ]
 
     start = time.time()
@@ -332,6 +346,8 @@ if __name__ == "__main__":
         shuffle=(not args.no_shuffle),
     )
 
+    print("Created splits")
+
     if args.debug:
         tasks = [
             consume.options(num_gpus=1, num_cpus=0).remote(
@@ -344,6 +360,7 @@ if __name__ == "__main__":
         print("Create Ray executor")
         settings = RayExecutor.create_settings(timeout_s=30)
         executor = RayExecutor(settings, num_workers=args.num_workers, use_gpu=True)
+        print("Starting executor")
         executor.start()
         executor.run(train_main, args=[args, splits])
         executor.shutdown()
