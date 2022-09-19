@@ -367,5 +367,5 @@ if __name__ == "__main__":
 
     delta = time.time() - start
     print(f"success! total time {delta}")
-    with open(os.environ["TEST_OUTPUT_JSON"], "w") as f:
+    with open(os.environ.get("TEST_OUTPUT_JSON", "output.json"), "w") as f:
         f.write(json.dumps({"ingest_time": delta, "success": 1}))
