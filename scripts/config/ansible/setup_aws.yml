@@ -88,7 +88,6 @@
     - name: Install project packages
       ansible.builtin.shell: |
         cd {{ workdir }} && {{ pythondir }}/pip install -e .
-        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
       changed_when: true
 
     - name: Set soft and hard ulimit

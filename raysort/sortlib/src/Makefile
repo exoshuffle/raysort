@@ -1,7 +1,7 @@
-# CXX = g++
-# CXXFLAGS = -pthread -Wall -Wextra -O3 -march=native
-CXX = /opt/intel/oneapi/compiler/latest/linux/bin/icpx
-CXXFLAGS = -pthread -Wall -Wextra -fast -xHost
+CXX = g++
+CXXFLAGS = -pthread -Wall -Wextra -O3 -march=native
+# CXX = /opt/intel/oneapi/compiler/latest/linux/bin/icpx
+# CXXFLAGS = -pthread -Wall -Wextra -Ofast -xHost
 
 SRC = *.cpp
 TARGET = test
