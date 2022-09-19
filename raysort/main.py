@@ -47,6 +47,8 @@ def mapper_sort_blocks(
         _dummy_sort_and_partition if cfg.skip_sorting else sortlib.sort_and_partition
     )
     blocks = sort_fn(part, bounds)
+    # TODO(@lsf): block until object store has enough memory for these blocks to
+    # prevent spilling.
     return part, blocks
 
 
@@ -121,6 +123,9 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
     if i >= len(blocks) or d > 0:
         return None
     ret = blocks[i]
+    # TODO(@lsf): This doesn't free the primary copies because Ray's distributed
+    # ref counting is at task granularity. i.e. Objects don't get freed even if
+    # their Python references are gone until the task completes.
     blocks[i] = None
     return ret
 
