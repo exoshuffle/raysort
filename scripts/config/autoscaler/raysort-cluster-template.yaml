@@ -3,35 +3,35 @@ cluster_name: $CONFIG-$USERNAME
 max_workers: 10
 
 provider:
-    type: aws
-    region: us-west-2
-    cache_stopped_nodes: False
+  type: aws
+  region: us-west-2
+  cache_stopped_nodes: False
 
 auth:
-    ssh_user: ubuntu
-    ssh_private_key: ~/.aws/login-us-west-2.pem
+  ssh_user: ubuntu
+  ssh_private_key: ~/.aws/login-us-west-2.pem
 
 available_node_types:
-    ray.head.default:
-        node_config:
-            InstanceType: r6i.2xlarge
-            # IAM profile providing full access to EC2 and S3, required for head node to launch workers
-            IamInstanceProfile:
-              Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
-            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
-            KeyName: login-us-west-2
+  ray.head.default:
+    node_config:
+      InstanceType: r6i.2xlarge
+      # IAM profile providing full access to EC2 and S3, required for head node to launch workers
+      IamInstanceProfile:
+        Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
+      ImageId: ami-03c25329dd95be4f9 # raysort-worker-20220918
+      KeyName: login-us-west-2
 
-    ray.worker.default:
-        min_workers: 10
-        node_config:
-            InstanceType: r6i.2xlarge
-            # IAM profile providing full access to EC2 and S3, required for S3 I/O
-            IamInstanceProfile:
-              Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
-            ImageId: ami-0da5da6db44aaf267 # raysort-hadoop-spark-conda
-            KeyName: login-us-west-2
-            InstanceMarketOptions:
-                MarketType: spot
+  ray.worker.default:
+    min_workers: 10
+    node_config:
+      InstanceType: r6i.2xlarge
+      # IAM profile providing full access to EC2 and S3, required for S3 I/O
+      IamInstanceProfile:
+        Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
+      ImageId: ami-03c25329dd95be4f9 # raysort-worker-20220918
+      KeyName: login-us-west-2
+      InstanceMarketOptions:
+        MarketType: spot
 
 file_mounts:
   # We cannot mount the whole directory into ~/raysort because that will cause issues with ray's bazel output

@@ -15,8 +15,7 @@ provider "aws" {
 resource "aws_spot_instance_request" "cluster" {
   count = var.instance_count
 
-  ami = "ami-01cc0c9e866d3322b" # raysort-spark-worker-20220328
-  #  ami           = "ami-077156789b614cd3c" # samyu's copy of the image
+  ami                  = "ami-03c25329dd95be4f9" # raysort-worker-20220918
   instance_type        = var.instance_type
   key_name             = "login-us-west-2"
   spot_type            = "one-time"
