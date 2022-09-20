@@ -264,6 +264,20 @@ i4i_2xl = InstanceType(
     disk_count=1,
 )
 
+i4i_4xl = InstanceType(
+    name="i4i.4xlarge",
+    cpu=16,
+    memory_gib=123.6,
+    disk_count=1,
+)
+
+i4i_8xl = InstanceType(
+    name="i4i.8xlarge",
+    cpu=32,
+    memory_gib=247.2,
+    disk_count=2,
+)
+
 r6i_2xl = InstanceType(
     name="r6i.2xlarge",
     cpu=8,
@@ -289,7 +303,7 @@ m6i_xlarge = InstanceType(
 # ------------------------------------------------------------
 
 local_cluster = dict(
-    instance_count=os.cpu_count(),
+    instance_count=min(os.cpu_count() or 16, 16),
     instance_type=InstanceType(
         name="local",
         cpu=2,
@@ -874,6 +888,43 @@ __configs__ = [
             total_gb=50000,
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + larger i4i nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        name="2tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            num_shards_per_mapper=4,
+            s3_buckets=get_s3_buckets(),
+            reduce_parallelism_multiplier=1,
+            use_yield=True,
+        ),
+    ),
+    JobConfig(
+        name="4tb-2gb-i4i8x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_8xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            num_shards_per_mapper=4,
+            s3_buckets=get_s3_buckets(),
+            reduce_parallelism_multiplier=1,
+            use_yield=True,
         ),
     ),
     # ------------------------------------------------------------
