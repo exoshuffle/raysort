@@ -48,7 +48,12 @@ parser.add_argument("--num-files", type=int, default=30)
 parser.add_argument("--num-windows", type=int, default=1)
 parser.add_argument("--manual-windows", type=bool, default=False)
 parser.add_argument("--parallelism", type=int, default=400)
-parser.add_argument("--no-shuffle", action="store_true", default=False, help="disables per-epoch shuffle")
+parser.add_argument(
+    "--no-shuffle",
+    action="store_true",
+    default=False,
+    help="disables per-epoch shuffle",
+)
 parser.add_argument("--local", action="store_true", default=False, help="run locally")
 parser.add_argument("--num-batches", type=int, default=-1)
 parser.add_argument("--mock-sleep-time", type=int, default=-1)
@@ -120,12 +125,18 @@ def train_main(args, splits):
         start_epoch = timeit.default_timer()
         last_batch_time = start_epoch
         batch_wait_times = []
+        print("torch.cuda.is_available?", torch.cuda.is_available())
         for batch_idx, (data, target) in enumerate(train_dataset):
-            print("Processing batch", batch_idx)
+            print(f"Processing batch {batch_idx} in epoch {epoch} on worker {rank}.")
             if args.num_batches > 0 and batch_idx > args.num_batches:
                 break
-            
+
             batch_wait_times.append(timeit.default_timer() - last_batch_time)
+            batch_wait_time = timeit.default_timer() - last_batch_time
+            print(f"Batch wait time: {batch_wait_time}")
+            batch_wait_times.append(batch_wait_time)
+
+            batch_start_time = timeit.default_timer()
             if torch.cuda.is_available():
                 data = data.cuda()
                 target = target.cuda()
@@ -144,22 +155,23 @@ def train_main(args, splits):
                 time.sleep(args.mock_sleep_time)
                 last_batch_time = timeit.default_timer()
                 continue
-            
-            batch_pred = model(batch)
 
-            if batch_idx % args.log_interval == 0:
-                print(
-                    f"Processing batch {batch_idx} in epoch {epoch} on worker "
-                    f"{rank}."
-                )
+            batch_pred = model(batch)
+            forward_end_time = timeit.default_timer()
+            print("Forward pass time:", forward_end_time - batch_start_time)
+
             loss = loss_function(batch_pred, target, delta=60)
             loss.mean().backward()
             for opt in optimizers:
                 opt.step()
+            print("Optimize time: ", timeit.default_timer() - forward_end_time)
 
             last_batch_time = timeit.default_timer()
-            
+
+            if batch_idx % args.log_interval == 0:
+                print("Total batch time:", timeit.default_timer() - batch_start_time)
         epoch_duration = timeit.default_timer() - start_epoch
+        print("epoch duration", epoch_duration)
         avg_batch_wait_time = np.mean(batch_wait_times)
         std_batch_wait_time = np.std(batch_wait_times)
         max_batch_wait_time = np.max(batch_wait_times)
@@ -245,7 +257,7 @@ def create_dataset(
     num_windows=1,
     manual_windowing=False,
     parallelism=400,
-    shuffle=True
+    shuffle=True,
 ):
     if num_windows > 1 and manual_windowing:
         num_rows = ray.data.read_parquet(
@@ -319,7 +331,9 @@ if __name__ == "__main__":
     import ray
 
     print("Connecting to Ray cluster...")
-    num_files = (args.num_files // 10) * args.num_workers # scale data for number of workers
+    num_files = (
+        args.num_files // 10
+    ) * args.num_workers  # scale data for number of workers
     if args.local:
         ray.init(num_gpus=1)
     else:
