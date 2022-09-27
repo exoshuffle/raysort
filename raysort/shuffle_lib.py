@@ -7,7 +7,7 @@ from typing import Callable, Optional, TypeVar
 import numpy as np
 import ray
 
-from raysort import tracing_utils
+from raysort import ray_utils, tracing_utils
 
 AppConfig = TypeVar("AppConfig")
 M = TypeVar("M")  # Map output type
@@ -97,6 +97,10 @@ class ShuffleManager:
         reduce_states = [None] * self.cfg.num_reducers
         for i in range(self.cfg.num_mappers):
             map_results[i, :] = self.map_remote.remote(self.app_cfg, i)
+
+        if self.app_cfg.fail_node:
+            ray_utils.fail_one_node()
+
         for r, reduce_state in enumerate(reduce_states):
             reduce_states[r] = self.reduce_remote.remote(
                 self.app_cfg, reduce_state, *map_results[:, r].tolist()

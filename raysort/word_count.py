@@ -22,6 +22,7 @@ TOP_WORDS = (
 class AppConfig:
     shuffle: ShuffleConfig
 
+    fail_node: bool = False
     top_k: int = 20
     s3_bucket: str = "lsf-berkeley-edu"
 
@@ -104,6 +105,7 @@ def word_count_main():
         # strategy=ShuffleStrategy.STREAMING,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
+    # app_cfg.fail_node = True
     print(app_cfg)
     if shuffle_cfg.is_cluster:
         ray.init("auto")

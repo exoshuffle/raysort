@@ -158,6 +158,17 @@ def fail_and_restart_node(cfg: AppConfig):
         _fail_and_restart_remote_node(cfg.fail_node)
 
 
+def fail_one_node():
+    resources = ray.cluster_resources()
+    head_node_str = "node:" + ray.util.get_node_ip_address()
+    worker_ips = [
+        r.split(":")[1]
+        for r in resources
+        if r.startswith("node:") and r != head_node_str
+    ]
+    _fail_and_restart_remote_node(worker_ips[0])
+
+
 def wait(
     futures,
     wait_all: bool = False,
