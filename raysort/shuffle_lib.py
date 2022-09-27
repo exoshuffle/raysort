@@ -7,7 +7,7 @@ from typing import Callable, Optional, TypeVar
 import numpy as np
 import ray
 
-from raysort import tracing_utils, ray_utils
+from raysort import ray_utils, tracing_utils
 
 AppConfig = TypeVar("AppConfig")
 M = TypeVar("M")  # Map output type
