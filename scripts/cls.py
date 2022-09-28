@@ -54,7 +54,7 @@ def get_tf_dir(cluster_name: str) -> pathlib.Path:
     return TERRAFORM_DIR / f"_{cluster_name}"
 
 
-def get_instances(filters: Dict[str, str]) -> List[Dict]:
+def get_instances(filters: Dict) -> List[Dict]:
     ec2 = boto3.client("ec2")
     paginator = ec2.get_paginator("describe_instances")
     ret = []
@@ -83,7 +83,7 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     return ret
 
 
-def get_terraform_vars(**kwargs: Dict) -> str:
+def get_terraform_vars(**kwargs) -> str:
     return "".join([f' -var="{k}={v}"' for k, v in kwargs.items()])
 
 
@@ -112,6 +112,7 @@ def terraform_provision(cluster_name: str) -> None:
         cluster_name=cluster_name,
         instance_count=cfg.cluster.instance_count,
         instance_type=cfg.cluster.instance_type.name,
+        instance_disk_gb=cfg.cluster.instance_disk_gb,
     )
     shell_utils.run(cmd, cwd=tf_dir)
 
@@ -172,7 +173,7 @@ def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
     *,
-    ev: Optional[Dict[str, str]] = None,
+    ev: Optional[Dict] = None,
     retries: int = 1,
     time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
@@ -419,7 +420,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
     return cmd, system_config
 
 
-def write_ray_system_config(conf: Dict, path: str) -> None:
+def write_ray_system_config(conf: Dict, path: pathlib.Path) -> None:
     with open(path, "w") as fout:
         yaml.dump(conf, fout)
 

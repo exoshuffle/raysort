@@ -25,6 +25,10 @@ resource "aws_spot_instance_request" "cluster" {
     Name        = "${var.cluster_name}-${format("%03d", count.index)}"
   }
 
+  root_block_device {
+    volume_size = var.instance_disk_gb
+  }
+
   timeouts {
     delete = "48h"
   }

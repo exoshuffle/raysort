@@ -14,3 +14,9 @@ variable "instance_type" {
   description = "the type of instances to launch"
   default     = "r6i.2xlarge"
 }
+
+variable "instance_disk_gb" {
+  type        = number
+  description = "size in GB for the root disk"
+  default     = 40
+}

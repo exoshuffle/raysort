@@ -45,6 +45,7 @@ class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
     instance_lifetime: InstanceLifetime = InstanceLifetime.SPOT
+    instance_disk_gb: int = 40
     ebs: bool = False
     local: bool = False
 
@@ -291,7 +292,7 @@ t3_2xl = InstanceType(
     disk_device_offset=0,
 )
 
-m6i_xlarge = InstanceType(
+m6i_xl = InstanceType(
     name="m6i.xlarge",
     cpu=4,
     memory_gib=16,
@@ -1263,8 +1264,26 @@ __configs__ = [
         name="mpo",
         cluster=dict(
             instance_count=8,
-            instance_type=m6i_xlarge,
+            instance_type=r6i_2xl,
             instance_lifetime=InstanceLifetime.SPOT,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=64,
+            input_part_gb=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     Pipelined ML Test Cluster
+    # ------------------------------------------------------------
+    JobConfig(
+        name="pml",
+        cluster=dict(
+            instance_count=4,
+            instance_type=r6i_2xl,
+            instance_lifetime=InstanceLifetime.SPOT,
+            instance_disk_gb=200,
         ),
         system=dict(),
         app=dict(

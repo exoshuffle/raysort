@@ -19,13 +19,9 @@ resource "aws_instance" "cluster" {
   instance_type = var.instance_type
   key_name      = "login-us-west-2"
 
-  #  ebs_block_device {
-  #    device_name = "sdb"
-  #    iops        = 3000
-  #    throughput  = 300
-  #    volume_size = 1000
-  #    volume_type = "gp3"
-  #  }
+  root_block_device {
+    volume_size = var.instance_disk_gb
+  }
 
   tags = {
     ClusterName = var.cluster_name
