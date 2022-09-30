@@ -102,11 +102,11 @@ def word_count_main():
         summary_map_fn=top_words_map,
         summary_reduce_fn=top_words_reduce,
         summary_print_fn=top_words_print,
-        # strategy=ShuffleStrategy.SIMPLE,
-        strategy=ShuffleStrategy.STREAMING,
+        strategy=ShuffleStrategy.SIMPLE,
+        # strategy=ShuffleStrategy.STREAMING,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
-    app_cfg.fail_node = True
+    # app_cfg.fail_node = True
     print(app_cfg)
     if shuffle_cfg.is_cluster:
         ray.init("auto")

@@ -116,7 +116,7 @@ def _fail_and_restart_remote_node(worker_ip: str):
     print("Killing worker node", worker_ip)
     with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
-        #check=True,
+        # check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -125,7 +125,7 @@ def _fail_and_restart_remote_node(worker_ip: str):
         print("Raylets before kill:", out)
     with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=stop_cmd),
-        #check=True,
+        # check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -133,7 +133,7 @@ def _fail_and_restart_remote_node(worker_ip: str):
         _ = p.communicate()
     with subprocess.Popen(
         "{ssh} {worker_ip} pgrep raylet".format(ssh=ssh, worker_ip=worker_ip),
-        #check=True,
+        # check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -142,7 +142,7 @@ def _fail_and_restart_remote_node(worker_ip: str):
         print("Raylets after kill:", out)
     with subprocess.Popen(
         "{ssh} {worker_ip} {cmd}".format(ssh=ssh, worker_ip=worker_ip, cmd=start_cmd),
-        #check=True,
+        # check=True,
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -169,7 +169,8 @@ def fail_one_node():
     ]
     _fail_and_restart_remote_node(worker_ips[0])
 
-@ray.remote(num_cpus=0)
+
+@ray.remote
 def sleep_before_failure():
     time.sleep(30)
     fail_one_node()
