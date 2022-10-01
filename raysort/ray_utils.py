@@ -174,7 +174,6 @@ def fail_one_node():
 def sleep_before_failure():
     time.sleep(30)
     fail_one_node()
-    return 0
 
 
 def wait(
