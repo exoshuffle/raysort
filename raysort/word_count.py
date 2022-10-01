@@ -22,7 +22,6 @@ TOP_WORDS = (
 class AppConfig:
     shuffle: ShuffleConfig
 
-    fail_time: int = 30
     fail_node: bool = False
     top_k: int = 20
     s3_bucket: str = "lsf-berkeley-edu"
