@@ -4,6 +4,7 @@ import os
 import socket
 import subprocess
 import tempfile
+import time
 from typing import Callable, Dict, List, Tuple
 
 import ray
@@ -167,6 +168,12 @@ def fail_one_node():
         if r.startswith("node:") and r != head_node_str
     ]
     _fail_and_restart_remote_node(worker_ips[0])
+
+
+@ray.remote
+def sleep_before_failure():
+    time.sleep(30)
+    fail_one_node()
 
 
 def wait(

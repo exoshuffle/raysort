@@ -98,17 +98,23 @@ class ShuffleManager:
         for i in range(self.cfg.num_mappers):
             map_results[i, :] = self.map_remote.remote(self.app_cfg, i)
 
-        if self.app_cfg.fail_node:
-            ray_utils.fail_one_node()
-
         for r, reduce_state in enumerate(reduce_states):
             reduce_states[r] = self.reduce_remote.remote(
                 self.app_cfg, reduce_state, *map_results[:, r].tolist()
             )
+
+        if self.app_cfg.fail_node:
+            ray_utils.sleep_before_failure.options(
+                num_cpus=0, **ray_utils.current_node_aff()
+            ).remote()
         ray.get(self.summarize_remote.remote(reduce_states))
 
     def _streaming_shuffle(self):
         reduce_states = [None] * self.cfg.num_reducers
+        if self.app_cfg.fail_node:
+            ray_utils.sleep_before_failure.options(
+                num_cpus=0, **ray_utils.current_node_aff()
+            ).remote()
         for rnd in range(self.cfg.num_rounds):
             map_results = np.array(
                 [
@@ -125,6 +131,7 @@ class ShuffleManager:
                     self.app_cfg, reduce_state, *map_results[:, r].tolist()
                 )
             self.summarize_remote.remote(reduce_states)
+
         ray.get(self.summarize_remote.remote(reduce_states))
 
     def _summarize(self, reduce_states: list[R]):
