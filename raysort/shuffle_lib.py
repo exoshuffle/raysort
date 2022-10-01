@@ -104,13 +104,17 @@ class ShuffleManager:
             )
 
         if self.app_cfg.fail_node:
-            ray_utils.sleep_before_failure.options(num_cpus=0, **ray_utils.current_node_aff()).remote()
+            ray_utils.sleep_before_failure.options(
+                num_cpus=0, **ray_utils.current_node_aff()
+            ).remote()
         ray.get(self.summarize_remote.remote(reduce_states))
 
     def _streaming_shuffle(self):
         reduce_states = [None] * self.cfg.num_reducers
         if self.app_cfg.fail_node:
-            ray_utils.sleep_before_failure.options(num_cpus=0, **ray_utils.current_node_aff()).remote()
+            ray_utils.sleep_before_failure.options(
+                num_cpus=0, **ray_utils.current_node_aff()
+            ).remote()
         for rnd in range(self.cfg.num_rounds):
             map_results = np.array(
                 [
