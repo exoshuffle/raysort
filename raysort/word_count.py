@@ -4,14 +4,47 @@ import dataclasses
 import io
 
 import pandas as pd
+import zipfile
 import ray
 
 from raysort import s3_utils, tracing_utils
 from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
-NUM_PARTITIONS = 646
+NUM_PARTITIONS = 32
 PARTITION_PATHS = [
-    f"wiki/wiki-{part_id:04d}.parquet" for part_id in range(NUM_PARTITIONS)
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-000000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-010000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-020000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-030000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-040000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-050000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-060000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-070000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-080000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-090000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-100000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-110000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-120000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-130000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-140000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-150000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-160000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-170000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-180000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-190000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-200000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-210000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-220000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-230000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-010000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-020000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-030000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-040000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-050000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-060000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-070000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-080000.gz/",
+    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-090000.gz/",
 ]
 TOP_WORDS = (
     "the of in and a to was is for as on by with from he at that his it an".split()
@@ -36,7 +69,8 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
 
 def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
     buf = download_s3(cfg, PARTITION_PATHS[part_id])
-    df = pd.read_parquet(buf)
+    file = zipfile.ZipFile(buf)
+    df = pd.read_parquet(file)
     return df["text"].str.lower().str.split().explode().rename()
 
 
