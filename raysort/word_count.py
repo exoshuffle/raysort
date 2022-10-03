@@ -67,11 +67,11 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
     return buf
 
 
-def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
+def load_partition(cfg: AppConfig, part_id: int) -> pd.DataFrame:
     buf = download_s3(cfg, PARTITION_PATHS[part_id])
     file = zipfile.ZipFile(buf)
-    df = pd.read_parquet(file)
-    return df["text"].str.lower().str.split().explode().rename()
+    df = pd.read_csv(file, sep=" ", names=["language", "title", "requests", "size"])
+    return df
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
@@ -88,8 +88,7 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.shuffle.num_mappers:
         return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
     words = load_partition(cfg, mapper_id)
-    word_counts = words.value_counts(sort=False)
-    grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
+    grouped = words.groupby(words["language"]).sum().apply(lambda word: get_reducer_id_for_word(cfg, word))
     assert len(grouped) == cfg.shuffle.num_reducers, grouped
     return [group for _, group in grouped]
 
