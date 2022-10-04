@@ -42,11 +42,9 @@ PARTITION_PATHS = [
     "wikimedia/pagecounts-20160102-040000",
     "wikimedia/pagecounts-20160102-050000",
     "wikimedia/pagecounts-20160102-060000",
-    "wikimedia/pagecounts-20160102-070000"
+    "wikimedia/pagecounts-20160102-070000",
 ]
-TOP_LANGUAGES = (
-    "en en.mw ja.mw de.mw ru de es.mw ja fr zh fr.mw ru.mw es it.mw commons.m it pl pt.mw www.wd pt".split()
-)
+TOP_LANGUAGES = "en en.mw ja.mw de.mw ru de es.mw ja fr zh fr.mw ru.mw es it.mw commons.m it pl pt.mw www.wd pt".split()
 
 
 @dataclasses.dataclass
@@ -86,7 +84,9 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
         return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
     languages = load_partition(cfg, mapper_id)
     grouped = languages.groupby(languages["language"])["requests"].sum()
-    grouped = grouped.groupby(lambda language: get_reducer_id_for_language(cfg, language))
+    grouped = grouped.groupby(
+        lambda language: get_reducer_id_for_language(cfg, language)
+    )
     assert len(grouped) == cfg.shuffle.num_reducers, grouped
     return [group for _, group in grouped]
 
