@@ -4,47 +4,14 @@ import dataclasses
 import io
 
 import pandas as pd
-import zipfile
 import ray
 
 from raysort import s3_utils, tracing_utils
 from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
-NUM_PARTITIONS = 32
+NUM_PARTITIONS = 646
 PARTITION_PATHS = [
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-000000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-010000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-020000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-030000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-040000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-050000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-060000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-070000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-080000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-090000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-100000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-110000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-120000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-130000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-140000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-150000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-160000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-170000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-180000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-190000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-200000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-210000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-220000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160101-230000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-010000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-020000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-030000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-040000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-050000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-060000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-070000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-080000.gz/",
-    "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-01/pagecounts-20160102-090000.gz/",
+    f"wiki/wiki-{part_id:04d}.parquet" for part_id in range(NUM_PARTITIONS)
 ]
 TOP_WORDS = (
     "the of in and a to was is for as on by with from he at that his it an".split()
@@ -67,11 +34,10 @@ def download_s3(cfg: AppConfig, url: str) -> io.BytesIO:
     return buf
 
 
-def load_partition(cfg: AppConfig, part_id: int) -> pd.DataFrame:
+def load_partition(cfg: AppConfig, part_id: int) -> pd.Series:
     buf = download_s3(cfg, PARTITION_PATHS[part_id])
-    file = zipfile.ZipFile(buf)
-    df = pd.read_csv(file, sep=" ", names=["language", "title", "requests", "size"])
-    return df
+    df = pd.read_parquet(buf)
+    return df["text"].str.lower().str.split().explode().rename()
 
 
 def get_reducer_id_for_word(cfg: AppConfig, word: str) -> int:
@@ -88,7 +54,8 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
     if mapper_id >= cfg.shuffle.num_mappers:
         return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
     words = load_partition(cfg, mapper_id)
-    grouped = words.groupby(words["language"]).sum().apply(lambda word: get_reducer_id_for_word(cfg, word))
+    word_counts = words.value_counts(sort=False)
+    grouped = word_counts.groupby(lambda word: get_reducer_id_for_word(cfg, word))
     assert len(grouped) == cfg.shuffle.num_reducers, grouped
     return [group for _, group in grouped]
 
