@@ -12,7 +12,7 @@ golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
 figheight = figwidth * golden_ratio  # height in inches
 figsize = (figwidth, figheight)
-fontsize = 9
+fontsize = 7
 
 plt.rcParams.update(
     {
@@ -38,7 +38,7 @@ def plot():
     df["accuracy"] = df["accuracy"] * 100
     figname = "ludwig_distributed"
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_ylabel("Validation accuracy", fontsize=11)
+    ax.set_ylabel("Accuracy", fontsize=11)
     g = sns.lineplot(data=df, x="time", y="accuracy", hue="run", ax=ax, marker="o")
     plt.ylim((40, 80))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))

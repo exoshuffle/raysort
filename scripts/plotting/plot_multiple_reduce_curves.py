@@ -15,7 +15,7 @@ golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
 figheight = figwidth * golden_ratio  # height in inches
 figsize = (figwidth, figheight)
-fontsize = 9
+fontsize = 7
 
 plt.rcParams.update(
     {
