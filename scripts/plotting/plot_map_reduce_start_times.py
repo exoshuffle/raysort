@@ -8,7 +8,8 @@ import pandas as pd
 import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
-fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
+# Get fig_width_pt from LaTeX using \the\columnwidth
+fig_width_pt = 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
