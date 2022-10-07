@@ -14,6 +14,7 @@ NUM_PARTITIONS = 2232
 PARTITION_PATHS = []
 TOP_LANGUAGES = (
     "en ja de ru es fr it zh commons pl pt tr nl www ar sv id fa ko cs".split()
+)
 
 
 @dataclasses.dataclass

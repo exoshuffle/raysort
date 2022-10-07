@@ -1,7 +1,8 @@
-import requests
-import boto3
 import gzip
 import shutil
+
+import boto3
+import requests
 
 
 def upload_files():
