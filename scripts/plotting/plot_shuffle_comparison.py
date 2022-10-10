@@ -226,6 +226,7 @@ def plot_large():
         "Job Completion Time (h)",
     )
 
+
 # https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=1160118221
 def plot_simple_vs_push():
     df = pd.DataFrame(
@@ -236,7 +237,6 @@ def plot_simple_vs_push():
             [f"{SYS}-1tb-1000", "push", 662],
             [f"{SYS}-1tb-2000", "simple", 1201],
             [f"{SYS}-1tb-2000", "push", 688],
-
             [f"{SYS}-100gb-100", "simple", 49],
             [f"{SYS}-100gb-100", "push", 46],
             [f"{SYS}-100gb-1000", "simple", 182],
@@ -258,6 +258,7 @@ def plot_simple_vs_push():
         "",
         "Job Completion Time (s)",
     )
+
 
 def plot(
     df,
