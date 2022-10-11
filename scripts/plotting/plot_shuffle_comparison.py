@@ -227,6 +227,39 @@ def plot_large():
     )
 
 
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=1160118221
+def plot_simple_vs_push():
+    df = pd.DataFrame(
+        [
+            [f"{SYS}-1tb-100", "simple", 540],
+            [f"{SYS}-1tb-100", "push", 597],
+            [f"{SYS}-1tb-1000", "simple", 517],
+            [f"{SYS}-1tb-1000", "push", 662],
+            [f"{SYS}-1tb-2000", "simple", 1201],
+            [f"{SYS}-1tb-2000", "push", 688],
+            [f"{SYS}-100gb-100", "simple", 49],
+            [f"{SYS}-100gb-100", "push", 46],
+            [f"{SYS}-100gb-1000", "simple", 182],
+            [f"{SYS}-100gb-1000", "push", 53],
+            [f"{SYS}-100gb-2000", "simple", 672],
+            [f"{SYS}-100gb-2000", "push", 65],
+        ],
+        columns=["version", "shuffle", "time"],
+    )
+    theoretical = []
+    return plot(
+        df,
+        theoretical,
+        "shuffle_comparison_push_vs_simple",
+        "version",
+        "time",
+        "shuffle",
+        "Shuffle",
+        "",
+        "Job Completion Time (s)",
+    )
+
+
 def plot(
     df,
     theoretical,
@@ -282,7 +315,7 @@ def plot(
         )
     #    plt.xticks(rotation=45)
     g.despine(left=True)
-    ax.set_yscale("log")
+    # ax.set_yscale("log")
     g.set_axis_labels(xtitle, ytitle)
     plt.xticks(rotation=45, horizontalalignment="right")
     if g.legend:
@@ -295,4 +328,5 @@ def plot(
 plot_hdd()
 plot_ssd()
 plot_large()
+plot_simple_vs_push()
 # plot_mb_all()
