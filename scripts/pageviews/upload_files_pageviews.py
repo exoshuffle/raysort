@@ -2,8 +2,8 @@ import gzip
 import shutil
 
 import boto3
-import requests
 import ray
+import requests
 
 
 @ray.remote()

@@ -1,11 +1,11 @@
 # pylint: disable=too-many-instance-attributes
 import collections
+import csv
 import dataclasses
 import io
 
 import pandas as pd
 import ray
-import csv
 
 from raysort import s3_utils, tracing_utils
 from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
