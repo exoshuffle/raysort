@@ -1263,14 +1263,14 @@ __configs__ = [
     JobConfig(
         name="mpo",
         cluster=dict(
-            instance_count=8,
+            instance_count=10,
             instance_type=r6i_2xl,
             instance_lifetime=InstanceLifetime.SPOT,
         ),
         system=dict(),
         app=dict(
             **get_steps(),
-            total_gb=64,
+            total_gb=1000,
             input_part_gb=1,
         ),
     ),

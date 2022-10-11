@@ -2,18 +2,30 @@
 import collections
 import dataclasses
 import io
-from lib2to3.pgen2.pgen import DFAState
 
 import pandas as pd
 import ray
+import csv
 
 from raysort import s3_utils, tracing_utils
 from raysort.shuffle_lib import ShuffleConfig, ShuffleStrategy, shuffle
 
+
+def get_partition_paths():
+    partitions = []
+    for i in range(1, 6, 2):
+        for j in range(1, 32):
+            for k in range(0, 24):
+                partitions.append(f"wikimedia/pagecounts-20160{i}{j:02d}-{k:02d}0000")
+    return partitions
+
+
 NUM_PARTITIONS = 2232
-PARTITION_PATHS = []
+PARTITION_PATHS = get_partition_paths()
+# NUM_PARTITIONS = 1
+# PARTITION_PATHS = ["wikimedia/pagecounts-20160101-000000"]
 TOP_LANGUAGES = (
-    "en ja de ru es fr it zh commons pl pt tr nl www ar sv id fa ko cs".split()
+    "en ja de es ru fr it zh pt pl commons nl tr ar www id sv fa ko cs".split()
 )
 
 
@@ -39,8 +51,7 @@ def load_partition(cfg: AppConfig, part_id: int) -> pd.DataFrame:
         buf,
         sep=" ",
         names=["language", "title", "requests", "size"],
-        engine="python",
-        quoting=3,
+        quoting=csv.QUOTE_NONE,
     )
     return df
 
@@ -60,7 +71,7 @@ def mapper(cfg: AppConfig, mapper_id: int) -> list[M]:
         return [pd.Series(dtype=str) for _ in range(cfg.shuffle.num_reducers)]
     df = load_partition(cfg, mapper_id)
     grouped = df.groupby(df["language"])["requests"].sum()
-    grouped = grouped.groupby(lambda language: str(language).split(".")[0]).sum()
+    grouped = grouped.groupby(lambda language: language.split(".")[0]).sum()
     grouped = grouped.groupby(
         lambda language: get_reducer_id_for_language(cfg, language)
     )
@@ -99,56 +110,11 @@ def top_languages_print(_cfg: AppConfig, summary: S):
     print(f"\nTop {num_correct} languages are correct")
 
 
-def upload_files():
-    for i in range(1, 6, 2):
-        for j in range(1, 32):
-            for k in range(0, 24):
-                if j < 10 and k < 10:
-                    title = (
-                        "wikimedia/pagecounts-20160"
-                        + str(i)
-                        + "0"
-                        + str(j)
-                        + "-0"
-                        + str(k)
-                        + "0000"
-                    )
-                elif j < 10 and k >= 10:
-                    title = (
-                        "wikimedia/pagecounts-20160"
-                        + str(i)
-                        + "0"
-                        + str(j)
-                        + "-"
-                        + str(k)
-                        + "0000"
-                    )
-                elif j >= 10 and k < 10:
-                    title = (
-                        "wikimedia/pagecounts-20160"
-                        + str(i)
-                        + str(j)
-                        + "-0"
-                        + str(k)
-                        + "0000"
-                    )
-                else:
-                    title = (
-                        "wikimedia/pagecounts-20160"
-                        + str(i)
-                        + str(j)
-                        + "-"
-                        + str(k)
-                        + "0000"
-                    )
-                PARTITION_PATHS.append(title)
-
-
 def page_views_main():
     shuffle_cfg = ShuffleConfig(
         num_mappers=NUM_PARTITIONS,
         num_mappers_per_round=32,
-        num_reducers=8,
+        num_reducers=10,
         map_fn=mapper,
         reduce_fn=reducer,
         summary_map_fn=top_languages_map,
@@ -157,7 +123,6 @@ def page_views_main():
         strategy=ShuffleStrategy.SIMPLE,
         # strategy=ShuffleStrategy.STREAMING,
     )
-    upload_files()
     app_cfg = AppConfig(shuffle=shuffle_cfg)
     # app_cfg.fail_node = True
     print(app_cfg)
