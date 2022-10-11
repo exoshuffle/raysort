@@ -33,17 +33,25 @@ sns.set_palette("Set2")
 
 
 # Plot the map and reduce start times
-def plot():
-    df = pd.read_csv("ludwig_distributed.csv")
+def plot(figname):
+    df = pd.read_csv(f"{figname}.csv")
     df["accuracy"] = df["accuracy"] * 100
-    figname = "ludwig_distributed"
+    df["time"] = df["time"] / 60
     fig, ax = plt.subplots(figsize=figsize)
     ax.set_ylabel("Accuracy", fontsize=11)
-    g = sns.lineplot(data=df, x="time", y="accuracy", hue="run", ax=ax, marker="o")
+    g = sns.lineplot(
+        data=df,
+        x="time",
+        y="accuracy",
+        hue="run",
+        ax=ax,
+        style="run",
+        markers=["o", "v"],
+    )
     plt.ylim((40, 80))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
     plt.grid(axis="y")
-    plt.xlabel("Time (s)")
+    plt.xlabel("Time (min)")
     plt.legend()
     plt.tight_layout()
     filename = figname + ".pdf"
@@ -51,4 +59,5 @@ def plot():
     plt.savefig(filename, bbox_inches="tight")
 
 
-plot()
+plot("ludwig_single")
+plot("ludwig_distributed")
