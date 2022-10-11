@@ -22,8 +22,6 @@ def get_partition_paths():
 
 NUM_PARTITIONS = 2232
 PARTITION_PATHS = get_partition_paths()
-# NUM_PARTITIONS = 1
-# PARTITION_PATHS = ["wikimedia/pagecounts-20160101-000000"]
 TOP_LANGUAGES = (
     "en ja de es ru fr it zh pt pl commons nl tr ar www id sv fa ko cs".split()
 )
