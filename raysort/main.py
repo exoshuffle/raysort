@@ -289,7 +289,7 @@ def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
     get_reduce_master_args: Callable[[int], List],
-) -> List[ray.ObjectRef]:
+) -> List[PartInfo]:
     with tracing_utils.timeit("reduce_stage"):
         if cfg.skip_final_reduce:
             ray_utils.wait(merge_results.flatten(), wait_all=True)
