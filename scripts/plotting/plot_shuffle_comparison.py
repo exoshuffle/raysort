@@ -27,8 +27,8 @@ SMALL_SIZE = 8
 MEDIUM_SIZE = 10
 BIG_SIZE = 12
 
-SYS = "S"
-SYS_FULL = "Scramble"
+SYS = "LS"
+SYS_FULL = "LibShuffle"
 
 plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
 plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
@@ -132,23 +132,23 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "2K", 2799],
-            [f"{SYS}-simple", "1K", 1929],
-            [f"{SYS}-simple", "500", 1297],
-            [f"{SYS}-merge", "2K", 2163],
-            [f"{SYS}-merge", "1K", 1334],
-            [f"{SYS}-merge", "500", 1409],
-            [f"{SYS}-push", "2K", 748],
-            [f"{SYS}-push", "1K", 700],
-            [f"{SYS}-push", "500", 761],
-            [f"{SYS}-push", "500[F]", 775],
-            [f"{SYS}-push-opt", "2K", 743],
-            [f"{SYS}-push-opt", "1K", 634],
-            [f"{SYS}-push-opt", "500", 702],
-            [f"{SYS}-push-opt", "500[F]", 757],
-            ["Spark-default", "2K", 1609],
-            ["Spark-default", "1K", 1701],
-            ["Spark-default", "500", 1558],
+            [f"{SYS}-simple", "1TB/2K", 2799],
+            [f"{SYS}-simple", "1TB/1K", 1929],
+            [f"{SYS}-simple", "1TB/500", 1297],
+            [f"{SYS}-merge", "1TB/2K", 2163],
+            [f"{SYS}-merge", "1TB/1K", 1334],
+            [f"{SYS}-merge", "1TB/500", 1409],
+            [f"{SYS}-push", "1TB/2K", 748],
+            [f"{SYS}-push", "1TB/1K", 700],
+            [f"{SYS}-push", "1TB/500", 761],
+            [f"{SYS}-push*", "1TB/2K", 743],
+            [f"{SYS}-push*", "1TB/1K", 634],
+            [f"{SYS}-push*", "1TB/500", 702],
+            [f"{SYS}-push [F]", "1TB/500", 775],
+            [f"{SYS}-push* [F]", "1TB/500", 757],
+            # ["Spark-default", "1TB/2K", 1609],
+            # ["Spark-default", "1TB/1K", 1701],
+            ["Spark-default", "1TB/500", 1558],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -156,11 +156,11 @@ def plot_hdd():
     return plot(
         df,
         theoretical,
-        "shuffle_comparison",
-        "version",
-        "time",
+        "shuffle_comparison_hdd",
         "partitions",
-        "Partitions",
+        "time",
+        "version",
+        "",
         "",
         "Job Completion Time (s)",
     )
@@ -170,35 +170,35 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "2K", 1085],
-            [f"{SYS}-simple", "1K", 628],
-            [f"{SYS}-simple", "500", 570],
-            [f"{SYS}-merge", "2K", 728],
-            [f"{SYS}-merge", "1K", 660],
-            [f"{SYS}-merge", "500", 711],
-            [f"{SYS}-push", "2K", 626],
-            [f"{SYS}-push", "1K", 580],
-            [f"{SYS}-push", "500", 602],
-            [f"{SYS}-push", "500[F]", 666],
-            [f"{SYS}-push-opt", "2K", 553],
-            [f"{SYS}-push-opt", "1K", 533],
-            [f"{SYS}-push-opt", "500", 596],
-            [f"{SYS}-push-opt", "500[F]", 657],
-            ["Spark-default", "2K", 1498],
-            ["Spark-default", "1K", 1533],
-            ["Spark-default", "500", 1614],
+            [f"{SYS}-simple", "1TB/2K", 1085],
+            [f"{SYS}-simple", "1TB/1K", 628],
+            [f"{SYS}-simple", "1TB/500", 570],
+            [f"{SYS}-merge", "1TB/2K", 728],
+            [f"{SYS}-merge", "1TB/1K", 660],
+            [f"{SYS}-merge", "1TB/500", 711],
+            [f"{SYS}-push", "1TB/2K", 626],
+            [f"{SYS}-push", "1TB/1K", 580],
+            [f"{SYS}-push", "1TB/500", 602],
+            [f"{SYS}-push*", "1TB/2K", 553],
+            [f"{SYS}-push*", "1TB/1K", 533],
+            [f"{SYS}-push*", "1TB/500", 596],
+            [f"{SYS}-push [F]", "1TB/500", 666],
+            [f"{SYS}-push* [F]", "1TB/500", 657],
+            # ["Spark-default", "1TB/2K", 1498],
+            # ["Spark-default", "1TB/1K", 1533],
+            ["Spark-default", "1TB/500", 1614],
         ],
         columns=["version", "partitions", "time"],
     )
-    theoretical = [543]
+    theoretical = [533]
     return plot(
         df,
         theoretical,
         "shuffle_comparison_ssd",
-        "version",
-        "time",
         "partitions",
-        "Partitions",
+        "time",
+        "version",
+        "",
         "",
         "Job Completion Time (s)",
     )
@@ -207,9 +207,9 @@ def plot_ssd():
 def plot_large():
     df = pd.DataFrame(
         [
-            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
+            [f"{SYS}-push*", "100TB", 10707 / SECS_PER_HR],
             ["Spark-push", "100TB", 19293 / SECS_PER_HR],
-            [f"{SYS_FULL}", "100TB", 10707 / SECS_PER_HR],
+            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
     )
@@ -231,18 +231,18 @@ def plot_large():
 def plot_simple_vs_push():
     df = pd.DataFrame(
         [
-            [f"{SYS}-1tb-100", "simple", 540],
-            [f"{SYS}-1tb-100", "push", 597],
-            [f"{SYS}-1tb-1000", "simple", 517],
-            [f"{SYS}-1tb-1000", "push", 662],
-            [f"{SYS}-1tb-2000", "simple", 1201],
-            [f"{SYS}-1tb-2000", "push", 688],
-            [f"{SYS}-100gb-100", "simple", 49],
-            [f"{SYS}-100gb-100", "push", 46],
-            [f"{SYS}-100gb-1000", "simple", 182],
-            [f"{SYS}-100gb-1000", "push", 53],
-            [f"{SYS}-100gb-2000", "simple", 672],
-            [f"{SYS}-100gb-2000", "push", 65],
+            ["1TB,100", "simple", 540],
+            ["1TB,100", "push", 597],
+            ["1TB,1000", "simple", 517],
+            ["1TB,1000", "push", 662],
+            ["1TB,2000", "simple", 1201],
+            ["1TB,2000", "push", 688],
+            ["100GB,100", "simple", 49],
+            ["100GB,100", "push", 46],
+            ["100GB,1000", "simple", 182],
+            ["100GB,1000", "push", 53],
+            ["100GB,2000", "simple", 672],
+            ["100GB,2000", "push", 65],
         ],
         columns=["version", "shuffle", "time"],
     )
@@ -296,14 +296,6 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
-    # # Add hatches to bars.
-    # import itertools
-    # ax = fig.gca()
-    # hatches = itertools.cycle(["", "/", "\\"])
-    # for i, bar in enumerate(ax.patches):
-    #     if i % 3 == 0:
-    #         hatch = next(hatches)
-    #     bar.set_hatch(hatch)
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(
@@ -315,7 +307,7 @@ def plot(
         )
     #    plt.xticks(rotation=45)
     g.despine(left=True)
-    # ax.set_yscale("log")
+    # g.set(yscale="log")
     g.set_axis_labels(xtitle, ytitle)
     plt.xticks(rotation=45, horizontalalignment="right")
     if g.legend:
