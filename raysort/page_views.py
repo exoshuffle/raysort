@@ -3,6 +3,7 @@ import collections
 import csv
 import dataclasses
 import io
+import json
 
 import pandas as pd
 import ray
@@ -23,7 +24,7 @@ def get_partition_paths():
 NUM_PARTITIONS = 2232
 PARTITION_PATHS = get_partition_paths()
 TOP_LANGUAGES = (
-    "en ja de es ru fr it zh pt pl commons nl tr ar www id sv fa ko cs".split()
+    "en ja es de ru fr it zh pt pl commons nl tr www ar id sv fa ko cs".split()
 )
 
 
@@ -96,6 +97,10 @@ def top_languages_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
     return pd.concat(most_commons).sort_values(ascending=False)[: cfg.top_k]
 
 
+def top_languages_proportions_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
+    return pd.concat(most_commons).sort_values(ascending=False)[:]
+
+
 def top_languages_print(_cfg: AppConfig, summary: S):
     num_correct = 0
     correct_so_far = True
@@ -108,18 +113,35 @@ def top_languages_print(_cfg: AppConfig, summary: S):
     print(f"\nTop {num_correct} languages are correct")
 
 
+def top_languages_proportions_print(_cfg: AppConfig, summary: S):
+    total = 0
+    language_proportions = {}
+    for (language, count) in summary.items():
+        total += count
+
+    for (language, count) in summary.items():
+        print(language, f"{count / total:.2f}", end=" " * 4)
+        language_proportions[language] = count / total
+
+    json_object = json.dumps(language_proportions)
+
+    with open("/home/ubuntu/raysort/raysort/language_proportions.json", "a") as fp:
+        fp.write(json_object)
+        fp.write("\n")
+
+
 def page_views_main():
     shuffle_cfg = ShuffleConfig(
         num_mappers=NUM_PARTITIONS,
-        num_mappers_per_round=32,
+        num_mappers_per_round=40,
         num_reducers=10,
         map_fn=mapper,
         reduce_fn=reducer,
         summary_map_fn=top_languages_map,
-        summary_reduce_fn=top_languages_reduce,
-        summary_print_fn=top_languages_print,
-        strategy=ShuffleStrategy.SIMPLE,
-        # strategy=ShuffleStrategy.STREAMING,
+        summary_reduce_fn=top_languages_proportions_reduce,
+        summary_print_fn=top_languages_proportions_print,
+        # strategy=ShuffleStrategy.SIMPLE,
+        strategy=ShuffleStrategy.STREAMING,
     )
     app_cfg = AppConfig(shuffle=shuffle_cfg)
     # app_cfg.fail_node = True

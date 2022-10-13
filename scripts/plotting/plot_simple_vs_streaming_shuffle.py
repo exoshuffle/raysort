@@ -68,7 +68,7 @@ def get_json_input(fname, run):
     if run == "Streaming":
         reduce_data.insert(0, (0, 0.000001, "reduce", run))
     else:
-        reduce_data.insert(0, (0, 1665447131 - start, "reduce", run))
+        reduce_data.insert(0, (0, 1665563561 - start, "reduce", run))
 
     map_data.append((100, max_end - start, "map", run))
     reduce_data.append((100, max_end - start, "reduce", run))
