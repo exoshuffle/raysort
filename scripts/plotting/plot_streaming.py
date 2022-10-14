@@ -72,6 +72,7 @@ def get_json_input(fname, run):
     df_map = pd.DataFrame(map_data, columns=["pct", "time", "Task", "run"])
     df_reduce = pd.DataFrame(reduce_data, columns=["pct", "time", "Task", "run"])
     max_end = max_end - start
+    print(max_end)
     return df_map, df_reduce, max_end
 
 
@@ -89,14 +90,14 @@ def plot(
     y="pct",
     hue="run",
 ):
-    palette = sns.color_palette("Set2")
+    colors = sns.color_palette("Set2")
     fig, ax = plt.subplots(figsize=figsize)
     g = sns.lineplot(
         data=df_simple_map,
         x=x,
         y=y,
         hue=hue,
-        palette=[palette[0]],
+        palette=[colors[0]],
         ax=ax,
         linestyle=":",
     )
@@ -105,7 +106,7 @@ def plot(
         x=x,
         y=y,
         hue=hue,
-        palette=[palette[1]],
+        palette=[colors[1]],
         ax=ax,
         linestyle=":",
     )
@@ -114,7 +115,7 @@ def plot(
         x=x,
         y=y,
         hue=hue,
-        palette=[palette[0]],
+        palette=[colors[0]],
         legend=False,
         ax=ax,
     )
@@ -123,7 +124,7 @@ def plot(
         x=x,
         y=y,
         hue=hue,
-        palette=[palette[1]],
+        palette=[colors[1]],
         legend=False,
         ax=ax,
     )
@@ -171,7 +172,6 @@ def get_error_metric(df_streaming, fname):
 
     error_fn = kl_divergence
     errors = [error_fn(p, truth_vector) for p in p_vectors]
-    print(errors)
     return get_error_metric_df(df_streaming, errors)
 
 

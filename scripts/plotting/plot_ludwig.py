@@ -30,10 +30,11 @@ plt.rcParams.update(
 
 sns.set_theme(style="ticks", font_scale=1)
 sns.set_palette("Set2")
+colors = sns.color_palette("Set2")
 
 
 # Plot the map and reduce start times
-def plot(figname):
+def plot(figname, palette=None):
     df = pd.read_csv(f"{figname}.csv")
     df["accuracy"] = df["accuracy"] * 100
     df["time"] = df["time"] / 60
@@ -47,6 +48,7 @@ def plot(figname):
         ax=ax,
         style="run",
         markers=["o", "v"],
+        palette=palette,
     )
     plt.ylim((40, 80))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
@@ -60,4 +62,4 @@ def plot(figname):
 
 
 plot("ludwig_single")
-plot("ludwig_distributed")
+plot("ludwig_distributed", palette=[colors[0], colors[2]])

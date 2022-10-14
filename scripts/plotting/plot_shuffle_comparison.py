@@ -132,23 +132,23 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "1TB/2K", 2799],
-            [f"{SYS}-simple", "1TB/1K", 1929],
-            [f"{SYS}-simple", "1TB/500", 1297],
-            [f"{SYS}-merge", "1TB/2K", 2163],
-            [f"{SYS}-merge", "1TB/1K", 1334],
-            [f"{SYS}-merge", "1TB/500", 1409],
-            [f"{SYS}-push", "1TB/2K", 748],
-            [f"{SYS}-push", "1TB/1K", 700],
-            [f"{SYS}-push", "1TB/500", 761],
-            [f"{SYS}-push*", "1TB/2K", 743],
-            [f"{SYS}-push*", "1TB/1K", 634],
-            [f"{SYS}-push*", "1TB/500", 702],
-            [f"{SYS}-push [F]", "1TB/500", 775],
-            [f"{SYS}-push* [F]", "1TB/500", 757],
-            # ["Spark-default", "1TB/2K", 1609],
-            # ["Spark-default", "1TB/1K", 1701],
-            ["Spark-default", "1TB/500", 1558],
+            [f"{SYS}-simple", "2000", 2799],
+            [f"{SYS}-simple", "1000", 1929],
+            [f"{SYS}-simple", "500", 1297],
+            [f"{SYS}-merge", "2000", 2163],
+            [f"{SYS}-merge", "1000", 1334],
+            [f"{SYS}-merge", "500", 1409],
+            [f"{SYS}-push", "2000", 748],
+            [f"{SYS}-push", "1000", 700],
+            [f"{SYS}-push", "500", 761],
+            [f"{SYS}-push*", "2000", 743],
+            [f"{SYS}-push*", "1000", 634],
+            [f"{SYS}-push*", "500", 702],
+            [f"{SYS}-push [F]", "500", 775],
+            [f"{SYS}-push* [F]", "500", 757],
+            # ["Spark-default", "2000", 1609],
+            # ["Spark-default", "1000", 1701],
+            ["Spark-default", "500", 1558],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -161,7 +161,7 @@ def plot_hdd():
         "time",
         "version",
         "",
-        "",
+        "Number of Partitions",
         "Job Completion Time (s)",
     )
 
@@ -170,23 +170,23 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "1TB/2K", 1085],
-            [f"{SYS}-simple", "1TB/1K", 628],
-            [f"{SYS}-simple", "1TB/500", 570],
-            [f"{SYS}-merge", "1TB/2K", 728],
-            [f"{SYS}-merge", "1TB/1K", 660],
-            [f"{SYS}-merge", "1TB/500", 711],
-            [f"{SYS}-push", "1TB/2K", 626],
-            [f"{SYS}-push", "1TB/1K", 580],
-            [f"{SYS}-push", "1TB/500", 602],
-            [f"{SYS}-push*", "1TB/2K", 553],
-            [f"{SYS}-push*", "1TB/1K", 533],
-            [f"{SYS}-push*", "1TB/500", 596],
-            [f"{SYS}-push [F]", "1TB/500", 666],
-            [f"{SYS}-push* [F]", "1TB/500", 657],
-            # ["Spark-default", "1TB/2K", 1498],
-            # ["Spark-default", "1TB/1K", 1533],
-            ["Spark-default", "1TB/500", 1614],
+            [f"{SYS}-simple", "2000", 1085],
+            [f"{SYS}-simple", "1000", 628],
+            [f"{SYS}-simple", "500", 570],
+            [f"{SYS}-merge", "2000", 728],
+            [f"{SYS}-merge", "1000", 660],
+            [f"{SYS}-merge", "500", 711],
+            [f"{SYS}-push", "2000", 626],
+            [f"{SYS}-push", "1000", 580],
+            [f"{SYS}-push", "500", 602],
+            [f"{SYS}-push*", "2000", 553],
+            [f"{SYS}-push*", "1000", 533],
+            [f"{SYS}-push*", "500", 596],
+            [f"{SYS}-push [F]", "500", 666],
+            [f"{SYS}-push* [F]", "500", 657],
+            # ["Spark-default", "2000", 1498],
+            # ["Spark-default", "1000", 1533],
+            ["Spark-default", "500", 1614],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -199,7 +199,7 @@ def plot_ssd():
         "time",
         "version",
         "",
-        "",
+        "Number of Partitions",
         "Job Completion Time (s)",
     )
 
@@ -280,8 +280,8 @@ def plot(
         plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
         plt.rc("axes", titlesize=MEDIUM_SIZE)  # fontsize of the axes title
         plt.rc("axes", labelsize=TINY_SIZE)  # fontsize of the x and y labels
-        plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-        plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("xtic000", labelsize=SMALL_SIZE)  # fontsize of the tick labels
+        plt.rc("ytic000", labelsize=SMALL_SIZE)  # fontsize of the tick labels
         plt.rc("legend", fontsize=SMALL_SIZE)
         plt.rcParams.update({"font.size": fontsize})
 
@@ -320,5 +320,5 @@ def plot(
 plot_hdd()
 plot_ssd()
 plot_large()
-plot_simple_vs_push()
+# plot_simple_vs_push()
 # plot_mb_all()
