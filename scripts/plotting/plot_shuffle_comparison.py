@@ -153,6 +153,7 @@ def plot_hdd():
         columns=["version", "partitions", "time"],
     )
     theoretical = [339]
+    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -163,6 +164,10 @@ def plot_hdd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
+        palette=sns.color_palette(
+            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
+        ),
+        hatches=[""] * 4 + ["////////"] * 2,
     )
 
 
@@ -191,6 +196,7 @@ def plot_ssd():
         columns=["version", "partitions", "time"],
     )
     theoretical = [533]
+    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -201,6 +207,10 @@ def plot_ssd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
+        palette=sns.color_palette(
+            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
+        ),
+        hatches=[""] * 4 + ["////////"] * 2,
     )
 
 
@@ -271,6 +281,7 @@ def plot(
     xtitle,
     ytitle,
     palette="Set2",
+    hatches=[],
     fontsize=None,
 ):
     if fontsize:
@@ -296,6 +307,9 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
+    for patches, hatch in zip(g.ax.containers, hatches):
+        for patch in patches:
+            patch.set_hatch(hatch)
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(
