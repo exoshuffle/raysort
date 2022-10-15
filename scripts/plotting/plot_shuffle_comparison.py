@@ -23,24 +23,24 @@ plt.rcParams.update(
 SECS_PER_MIN = 60
 SECS_PER_HR = 3600
 
-SMALL_SIZE = 8
-MEDIUM_SIZE = 10
-BIG_SIZE = 12
+SMALL_SIZE = 9
+MEDIUM_SIZE = 12
+BIG_SIZE = 14
 
 SYS = "LS"
 SYS_FULL = "LibShuffle"
 
-plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
-plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
+plt.rc("font", size=BIG_SIZE)  # controls default text sizes
+plt.rc("axes", titlesize=BIG_SIZE)  # fontsize of the axes title
 plt.rc("axes", labelsize=SMALL_SIZE)  # fontsize of the x and y labels
-plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
+plt.rc("xtick", labelsize=BIG_SIZE)  # fontsize of the tick labels
+plt.rc("ytick", labelsize=BIG_SIZE)  # fontsize of the tick labels
+plt.rc("legend", fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 # sns.set_theme(style="ticks")
 sns.set_palette("Set2")
-sns.set(font_scale=0.75)
+# sns.set(font_scale=0.85)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
 
@@ -144,8 +144,8 @@ def plot_hdd():
             [f"{SYS}-push*", "2000", 743],
             [f"{SYS}-push*", "1000", 634],
             [f"{SYS}-push*", "500", 702],
-            [f"{SYS}-push [F]", "500", 775],
-            [f"{SYS}-push* [F]", "500", 757],
+            [f"_{SYS}-push [F]", "500", 775],
+            [f"_{SYS}-push* [F]", "500", 757],
             # ["Spark-default", "2000", 1609],
             # ["Spark-default", "1000", 1701],
             ["Spark-default", "500", 1558],
@@ -153,6 +153,7 @@ def plot_hdd():
         columns=["version", "partitions", "time"],
     )
     theoretical = [339]
+    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -163,6 +164,10 @@ def plot_hdd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
+        palette=sns.color_palette(
+            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
+        ),
+        hatches=[""] * 4 + ["////////"] * 2,
     )
 
 
@@ -182,8 +187,8 @@ def plot_ssd():
             [f"{SYS}-push*", "2000", 553],
             [f"{SYS}-push*", "1000", 533],
             [f"{SYS}-push*", "500", 596],
-            [f"{SYS}-push [F]", "500", 666],
-            [f"{SYS}-push* [F]", "500", 657],
+            [f"_{SYS}-push [F]", "500", 666],
+            [f"_{SYS}-push* [F]", "500", 657],
             # ["Spark-default", "2000", 1498],
             # ["Spark-default", "1000", 1533],
             ["Spark-default", "500", 1614],
@@ -191,6 +196,7 @@ def plot_ssd():
         columns=["version", "partitions", "time"],
     )
     theoretical = [533]
+    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -201,6 +207,10 @@ def plot_ssd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
+        palette=sns.color_palette(
+            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
+        ),
+        hatches=[""] * 4 + ["////////"] * 2,
     )
 
 
@@ -271,6 +281,7 @@ def plot(
     xtitle,
     ytitle,
     palette="Set2",
+    hatches=[],
     fontsize=None,
 ):
     if fontsize:
@@ -296,6 +307,9 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
+    for patches, hatch in zip(g.ax.containers, hatches):
+        for patch in patches:
+            patch.set_hatch(hatch)
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(
@@ -309,7 +323,7 @@ def plot(
     g.despine(left=True)
     # g.set(yscale="log")
     g.set_axis_labels(xtitle, ytitle)
-    plt.xticks(rotation=45, horizontalalignment="right")
+    # plt.xticks(rotation=45, horizontalalignment="right")
     if g.legend:
         g.legend.set_title(legend_title)
     filename = figname + ".pdf"
