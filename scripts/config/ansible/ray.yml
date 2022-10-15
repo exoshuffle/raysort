@@ -15,6 +15,8 @@
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
     shared_memory_bytes: "{{ (28 * 1024 + 1) * 1024 * 1024 }}"
   environment:
+    AWS_ACCESS_KEY_ID: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+    AWS_SECRET_ACCESS_KEY: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
     RAY_STORAGE: "s3://{{ lookup('env', 'S3_BUCKET') }}"
     S3_BUCKET: "{{ lookup('env', 'S3_BUCKET') }}"
   tasks:
