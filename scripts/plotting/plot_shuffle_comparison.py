@@ -40,6 +40,7 @@ plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 # sns.set_theme(style="ticks")
 sns.set_palette("Set2")
+set2 = sns.color_palette("Set2")
 # sns.set(font_scale=0.85)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
@@ -132,6 +133,9 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
+            ["Spark-default", "2000", 1609],
+            ["Spark-default", "1000", 1701],
+            ["Spark-default", "500", 1558],
             [f"{SYS}-simple", "2000", 2799],
             [f"{SYS}-simple", "1000", 1929],
             [f"{SYS}-simple", "500", 1297],
@@ -146,14 +150,10 @@ def plot_hdd():
             [f"{SYS}-push*", "500", 702],
             [f"_{SYS}-push [F]", "500", 775],
             [f"_{SYS}-push* [F]", "500", 757],
-            # ["Spark-default", "2000", 1609],
-            # ["Spark-default", "1000", 1701],
-            ["Spark-default", "500", 1558],
         ],
         columns=["version", "partitions", "time"],
     )
     theoretical = [339]
-    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -164,10 +164,8 @@ def plot_hdd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
-        palette=sns.color_palette(
-            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
-        ),
-        hatches=[""] * 4 + ["////////"] * 2,
+        palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
+        hatches=[""] * 5 + ["////////"] * 2,
     )
 
 
@@ -175,6 +173,9 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
+            ["Spark-default", "2000", 1498],
+            ["Spark-default", "1000", 1533],
+            ["Spark-default", "500", 1614],
             [f"{SYS}-simple", "2000", 1085],
             [f"{SYS}-simple", "1000", 628],
             [f"{SYS}-simple", "500", 570],
@@ -189,14 +190,10 @@ def plot_ssd():
             [f"{SYS}-push*", "500", 596],
             [f"_{SYS}-push [F]", "500", 666],
             [f"_{SYS}-push* [F]", "500", 657],
-            # ["Spark-default", "2000", 1498],
-            # ["Spark-default", "1000", 1533],
-            ["Spark-default", "500", 1614],
         ],
         columns=["version", "partitions", "time"],
     )
     theoretical = [533]
-    set2 = sns.color_palette("Set2")
     return plot(
         df,
         theoretical,
@@ -207,10 +204,8 @@ def plot_ssd():
         "",
         "Number of Partitions",
         "Job Completion Time (s)",
-        palette=sns.color_palette(
-            [set2[0], set2[1], set2[2], set2[3], set2[2], set2[3], "grey"]
-        ),
-        hatches=[""] * 4 + ["////////"] * 2,
+        palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
+        hatches=[""] * 5 + ["////////"] * 2,
     )
 
 
@@ -234,6 +229,7 @@ def plot_large():
         "",
         "",
         "Job Completion Time (h)",
+        palette=[set2[0], "gray", "gray"],
     )
 
 
@@ -282,20 +278,7 @@ def plot(
     ytitle,
     palette="Set2",
     hatches=[],
-    fontsize=None,
 ):
-    if fontsize:
-        TINY_SIZE = 16
-        SMALL_SIZE = fontsize - 3
-        MEDIUM_SIZE = fontsize
-        plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
-        plt.rc("axes", titlesize=MEDIUM_SIZE)  # fontsize of the axes title
-        plt.rc("axes", labelsize=TINY_SIZE)  # fontsize of the x and y labels
-        plt.rc("xtic000", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-        plt.rc("ytic000", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-        plt.rc("legend", fontsize=SMALL_SIZE)
-        plt.rcParams.update({"font.size": fontsize})
-
     g = sns.catplot(
         data=df,
         kind="bar",
@@ -323,7 +306,9 @@ def plot(
     g.despine(left=True)
     # g.set(yscale="log")
     g.set_axis_labels(xtitle, ytitle)
-    # plt.xticks(rotation=45, horizontalalignment="right")
+    if x != "partitions":
+        plt.xticks(fontsize=SMALL_SIZE, rotation=45, horizontalalignment="right")
+        plt.yticks(fontsize=SMALL_SIZE)
     if g.legend:
         g.legend.set_title(legend_title)
     filename = figname + ".pdf"
