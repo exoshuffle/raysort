@@ -1,4 +1,4 @@
-cluster_name: $CONFIG-$USERNAME
+cluster_name: $CONFIG-$USER
 
 max_workers: 10
 

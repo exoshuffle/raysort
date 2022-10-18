@@ -44,14 +44,17 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
-    instance_lifetime: InstanceLifetime = InstanceLifetime.SPOT
+    instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     instance_disk_gb: int = 40
     ebs: bool = False
     local: bool = False
+    name: str = ""
 
     def __post_init__(self):
         if self.ebs:
             self.instance_type.disk_count += 1
+        if self.name == "":
+            self.name = f"{self.instance_type.name}-{self.instance_count}"
 
 
 @dataclass
@@ -96,7 +99,7 @@ class AppConfig:
     num_reducers: int = field(init=False)
     num_reducers_per_worker: int = field(init=False)
 
-    num_concurrent_rounds: int = 1
+    num_concurrent_rounds: int = 2
     merge_factor: int = 2
     io_parallelism_multiplier: InitVar[float] = 2.0
     map_parallelism_multiplier: InitVar[float] = 0.5
@@ -911,23 +914,6 @@ __configs__ = [
             use_yield=True,
         ),
     ),
-    JobConfig(
-        name="4tb-2gb-i4i8x-s3",
-        cluster=dict(
-            instance_count=10,
-            instance_type=i4i_8xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=4000,
-            input_part_gb=2,
-            num_shards_per_mapper=4,
-            s3_buckets=get_s3_buckets(),
-            reduce_parallelism_multiplier=1,
-            use_yield=True,
-        ),
-    ),
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 10 nodes
     # ------------------------------------------------------------
@@ -986,7 +972,7 @@ __configs__ = [
             total_gb=4000,
             input_part_gb=2,
             num_shards_per_mapper=4,
-            s3_buckets=get_s3_buckets(10),
+            s3_buckets=get_s3_buckets(4),
             reduce_parallelism_multiplier=1,
             use_yield=True,
         ),
@@ -1003,8 +989,9 @@ __configs__ = [
             **get_steps(),
             total_gb=20000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(4),
             reduce_parallelism_multiplier=1,
+            use_yield=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -1025,6 +1012,7 @@ __configs__ = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(10),
             reduce_parallelism_multiplier=1,
+            use_yield=True,
         ),
     ),
     JobConfig(
@@ -1275,21 +1263,25 @@ __configs__ = [
         ),
     ),
     # ------------------------------------------------------------
-    #     Pipelined ML Test Cluster
+    #     Ad Hoc Experiments
     # ------------------------------------------------------------
     JobConfig(
-        name="pml",
+        name="i3-simple",
         cluster=dict(
-            instance_count=4,
-            instance_type=r6i_2xl,
-            instance_lifetime=InstanceLifetime.SPOT,
-            instance_disk_gb=200,
+            instance_count=10,
+            instance_type=i3_2xl,
+            local=False,
         ),
         system=dict(),
         app=dict(
             **get_steps(),
-            total_gb=64,
-            input_part_gb=1,
+            total_gb=100,
+            input_part_gb=1.25,
+            use_yield=True,
+            reduce_parallelism_multiplier=1,
+            # simple
+            simple_shuffle=True,
+            map_parallelism_multiplier=1,
         ),
     ),
 ]
