@@ -325,9 +325,9 @@ def setup_grafana() -> None:
 
 
 def get_cluster_name() -> str:
-    username = os.getenv("USERNAME")
-    assert username, "Environment variable $USERNAME is not set"
-    return f"{cfg.name}-{username}"
+    user = os.getenv("USER")
+    assert user, "$USER is not set"
+    return f"{cfg.cluster.name}-{user}"
 
 
 def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
