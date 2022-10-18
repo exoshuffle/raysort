@@ -212,8 +212,8 @@ def plot_ssd():
 def plot_large():
     df = pd.DataFrame(
         [
-            [f"{SYS}-p*", "100TB", 10707 / SECS_PER_HR],
-            ["Spark-p", "100TB", 19293 / SECS_PER_HR],
+            [f"{SYS}-push*", "100TB", 10707 / SECS_PER_HR],
+            ["Spark-push", "100TB", 19293 / SECS_PER_HR],
             ["Spark", "100TB", 30240 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
