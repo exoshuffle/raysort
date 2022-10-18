@@ -32,7 +32,7 @@ SYS_FULL = "LibShuffle"
 
 plt.rc("font", size=BIG_SIZE)  # controls default text sizes
 plt.rc("axes", titlesize=BIG_SIZE)  # fontsize of the axes title
-plt.rc("axes", labelsize=SMALL_SIZE)  # fontsize of the x and y labels
+plt.rc("axes", labelsize=BIG_SIZE)  # fontsize of the x and y labels
 plt.rc("xtick", labelsize=BIG_SIZE)  # fontsize of the tick labels
 plt.rc("ytick", labelsize=BIG_SIZE)  # fontsize of the tick labels
 plt.rc("legend", fontsize=MEDIUM_SIZE)  # legend fontsize
@@ -88,7 +88,7 @@ def plot_dask_comparison():
         columns[1],
         "",
         "Data Size",
-        "Job Completion Time (s)",
+        "Job Time (s)",
     )
 
 
@@ -133,9 +133,9 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
-            ["Spark-default", "2000", 1609],
-            ["Spark-default", "1000", 1701],
-            ["Spark-default", "500", 1558],
+            ["Spark", "2000", 1609],
+            ["Spark", "1000", 1701],
+            ["Spark", "500", 1558],
             [f"{SYS}-simple", "2000", 2799],
             [f"{SYS}-simple", "1000", 1929],
             [f"{SYS}-simple", "500", 1297],
@@ -161,9 +161,9 @@ def plot_hdd():
         "partitions",
         "time",
         "version",
-        "",
+        None,  # remove legend
         "Number of Partitions",
-        "Job Completion Time (s)",
+        "Job Time (s)",
         palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
         hatches=[""] * 5 + ["////////"] * 2,
     )
@@ -173,9 +173,9 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            ["Spark-default", "2000", 1498],
-            ["Spark-default", "1000", 1533],
-            ["Spark-default", "500", 1614],
+            ["Spark", "2000", 1498],
+            ["Spark", "1000", 1533],
+            ["Spark", "500", 1614],
             [f"{SYS}-simple", "2000", 1085],
             [f"{SYS}-simple", "1000", 628],
             [f"{SYS}-simple", "500", 570],
@@ -193,7 +193,7 @@ def plot_ssd():
         ],
         columns=["version", "partitions", "time"],
     )
-    theoretical = [533]
+    theoretical = [533 - 30]  # because the line is too thick
     return plot(
         df,
         theoretical,
@@ -203,7 +203,7 @@ def plot_ssd():
         "version",
         "",
         "Number of Partitions",
-        "Job Completion Time (s)",
+        "Job Time (s)",
         palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
         hatches=[""] * 5 + ["////////"] * 2,
     )
@@ -212,9 +212,9 @@ def plot_ssd():
 def plot_large():
     df = pd.DataFrame(
         [
-            [f"{SYS}-push*", "100TB", 10707 / SECS_PER_HR],
-            ["Spark-push", "100TB", 19293 / SECS_PER_HR],
-            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
+            [f"{SYS}-p*", "100TB", 10707 / SECS_PER_HR],
+            ["Spark-p", "100TB", 19293 / SECS_PER_HR],
+            ["Spark", "100TB", 30240 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
     )
@@ -228,41 +228,38 @@ def plot_large():
         None,
         "",
         "",
-        "Job Completion Time (h)",
-        palette=[set2[0], "gray", "gray"],
+        "Job Time (h)",
+        palette=[set2[3], "darkgrey", "dimgrey"],
     )
 
 
 # https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=1160118221
-def plot_simple_vs_push():
+def plot_small():
     df = pd.DataFrame(
         [
-            ["1TB,100", "simple", 540],
-            ["1TB,100", "push", 597],
-            ["1TB,1000", "simple", 517],
-            ["1TB,1000", "push", 662],
-            ["1TB,2000", "simple", 1201],
-            ["1TB,2000", "push", 688],
-            ["100GB,100", "simple", 49],
-            ["100GB,100", "push", 46],
-            ["100GB,1000", "simple", 182],
-            ["100GB,1000", "push", 53],
-            ["100GB,2000", "simple", 672],
-            ["100GB,2000", "push", 65],
+            ["80", "simple", 4.529596],
+            ["80", "push*", 7.783609],
+            ["200", "simple", 12.101356],
+            ["200", "push*", 7.709302],
+            ["80 ", "simple", 43.732640],
+            ["80 ", "push*", 54.506559],
+            ["200 ", "simple", 53.726337],
+            ["200 ", "push*", 42.215111],
         ],
-        columns=["version", "shuffle", "time"],
+        columns=["partitions", "shuffle", "time"],
     )
     theoretical = []
     return plot(
         df,
         theoretical,
-        "shuffle_comparison_push_vs_simple",
-        "version",
+        "shuffle_comparison_small",
+        "partitions",
         "time",
         "shuffle",
-        "Shuffle",
         "",
-        "Job Completion Time (s)",
+        r"10GB \hspace*{3em} 100GB",
+        "Job Time (s)",
+        palette=[set2[0], set2[3]] * 4,
     )
 
 
@@ -278,6 +275,7 @@ def plot(
     ytitle,
     palette="Set2",
     hatches=[],
+    logscale=False,
 ):
     g = sns.catplot(
         data=df,
@@ -304,20 +302,20 @@ def plot(
         )
     #    plt.xticks(rotation=45)
     g.despine(left=True)
-    # g.set(yscale="log")
+    if logscale:
+        g.set(yscale="log")
     g.set_axis_labels(xtitle, ytitle)
-    if x != "partitions":
-        plt.xticks(fontsize=SMALL_SIZE, rotation=45, horizontalalignment="right")
-        plt.yticks(fontsize=SMALL_SIZE)
     if g.legend:
         g.legend.set_title(legend_title)
+    if legend_title is None:
+        g.legend.remove()
     filename = figname + ".pdf"
     print(filename)
-    g.savefig(filename)
+    g.savefig(filename, bbox="tight")
 
 
 plot_hdd()
 plot_ssd()
 plot_large()
-# plot_simple_vs_push()
+plot_small()
 # plot_mb_all()
