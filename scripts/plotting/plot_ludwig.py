@@ -10,9 +10,9 @@ fig_width_pt = 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
-figheight = figwidth * golden_ratio  # height in inches
+figheight = figwidth * 0.7 # golden_ratio  # height in inches
 figsize = (figwidth, figheight)
-fontsize = 7
+fontsize = 16
 
 plt.rcParams.update(
     {
@@ -39,7 +39,7 @@ def plot(figname, palette=None):
     df["accuracy"] = df["accuracy"] * 100
     df["time"] = df["time"] / 60
     fig, ax = plt.subplots(figsize=figsize)
-    ax.set_ylabel("Accuracy", fontsize=11)
+    ax.set_ylabel("Accuracy", fontsize=16)
     g = sns.lineplot(
         data=df,
         x="time",
@@ -53,8 +53,8 @@ def plot(figname, palette=None):
     plt.ylim((40, 80))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
     plt.grid(axis="y")
-    plt.xlabel("Time (min)")
-    plt.legend()
+    plt.xlabel("Time (min)", fontsize=16)
+    plt.legend(fontsize=13)
     plt.tight_layout()
     filename = figname + ".pdf"
     print(filename)

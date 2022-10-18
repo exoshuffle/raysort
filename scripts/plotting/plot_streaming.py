@@ -8,13 +8,13 @@ import pandas as pd
 import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
-fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
+fig_width_pt = 300 # 241.14749  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
 figheight = figwidth * golden_ratio  # height in inches
 figsize = (figwidth, figheight)
-fontsize = 7
+fontsize = 7 
 
 plt.rcParams.update(
     {
@@ -32,6 +32,15 @@ plt.rcParams.update(
 
 sns.set_theme(style="ticks", font_scale=1)
 sns.set_palette("Set2")
+
+def lighten(c, amount=0.75):
+    import colorsys
+
+    import matplotlib.colors as mc
+
+    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+    return colorsys.hls_to_rgb(c[0], 1 - amount * (1 - c[1]), c[2])
+
 
 # Read in json file of timestamps for map and reduce tasks
 def get_json_input(fname, run):
@@ -100,13 +109,14 @@ def plot(
         palette=[colors[0]],
         ax=ax,
         linestyle=":",
+        linewidth=3,
     )
     g = sns.lineplot(
         data=df_streaming_map,
         x=x,
         y=y,
         hue=hue,
-        palette=[colors[1]],
+        palette=[lighten(colors[1], 1.5)],
         ax=ax,
         linestyle=":",
     )
@@ -118,13 +128,14 @@ def plot(
         palette=[colors[0]],
         legend=False,
         ax=ax,
+        linewidth=2,
     )
     g = sns.lineplot(
         data=df_streaming_reduce,
         x=x,
         y=y,
         hue=hue,
-        palette=[colors[1]],
+        palette=[lighten(colors[1], 1.5)],
         legend=False,
         ax=ax,
     )
@@ -138,12 +149,15 @@ def plot(
         linestyle="--",
     )
     g.get_legend().set_title(None)
-    #    plt.fill_between(df[x].values, df[y].values, alpha=0.1)
+    plt.legend(fontsize=13)
+    plt.xlabel("Time (s)", fontsize=16)
+    plt.ylabel("% Tasks completed", fontsize=16)
+#    plt.fill_between(df[x].values, df[y].values, alpha=0.1)
     plt.xlim((0, int(math.ceil(max(end_time_simple, end_time_streaming)))))
     plt.ylim((0, 100))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
-    plt.xlabel("Time (s)")
-    plt.ylabel("% Tasks completed")
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
     plt.grid(axis="y")
     filename = figname + ".pdf"
     print(filename)

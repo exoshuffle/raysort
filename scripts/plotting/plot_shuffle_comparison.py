@@ -5,7 +5,7 @@ import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 # Get fig_width_pt from LaTeX using \the\columnwidth
-fig_width_pt = 240.94499  # acmart-SIGPLAN
+fig_width_pt = 350 # 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
@@ -39,8 +39,8 @@ plt.rc("legend", fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 # sns.set_theme(style="ticks")
-sns.set_palette("Set2")
-set2 = sns.color_palette("Set2")
+sns.set_palette("rocket")
+set2 = sns.color_palette("rocket")
 # sns.set(font_scale=0.85)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
@@ -59,26 +59,28 @@ def plot_dask_comparison():
     columns = ["data size", "setup", "time"]
     df = pd.DataFrame(
         [
-            ["1 GB", "Dask: 32 procs x 1 thread", 9.257539613],
-            ["1 GB", "Dask: 8 procs x 4 threads", 9.152182102],
-            ["1 GB", "Dask: 1 proc x 32 threads", 29.10137018],
-            ["1 GB", "Dask-on-Ray (32 procs)", 8.962659121],
-            ["10 GB", "Dask: 32 procs x 1 thread", 117.7881519],
-            ["10 GB", "Dask: 8 procs x 4 threads", 112.825515],
-            ["10 GB", "Dask: 1 proc x 32 threads", 356.3388017],
-            ["10 GB", "Dask-on-Ray (32 procs)", 98.41430688],
-            ["20 GB", "Dask: 32 procs x 1 thread", 0],
-            ["20 GB", "Dask: 8 procs x 4 threads", 252.654465],
-            ["20 GB", "Dask: 1 proc x 32 threads", 1327.135815],
-            ["20 GB", "Dask-on-Ray (32 procs)", 186.0701251],
-            ["100 GB", "Dask: 32 procs x 1 thread", 0],
-            ["100 GB", "Dask: 8 procs x 4 threads", 0],
-            ["100 GB", "Dask: 1 proc x 32 threads", 14221.8383],
-            ["100 GB", "Dask-on-Ray (32 procs)", 1588.793045],
+            ["1", "Dask: 32 procs x 1 thread", 9.257539613],
+            ["1", "Dask: 8 procs x 4 threads", 9.152182102],
+            ["1", "Dask: 1 proc x 32 threads", 29.10137018],
+            ["1", "Dask-on-Ray (32 procs)", 8.962659121],
+            ["10", "Dask: 32 procs x 1 thread", 117.7881519],
+            ["10", "Dask: 8 procs x 4 threads", 112.825515],
+            ["10", "Dask: 1 proc x 32 threads", 356.3388017],
+            ["10", "Dask-on-Ray (32 procs)", 98.41430688],
+            ["20", "Dask: 32 procs x 1 thread", 0],
+            ["20", "Dask: 8 procs x 4 threads", 252.654465],
+            ["20", "Dask: 1 proc x 32 threads", 1327.135815],
+            ["20", "Dask-on-Ray (32 procs)", 186.0701251],
+            ["100", "Dask: 32 procs x 1 thread", 0],
+            ["100", "Dask: 8 procs x 4 threads", 0],
+            ["100", "Dask: 1 proc x 32 threads", 14221.8383],
+            ["100", "Dask-on-Ray (32 procs)", 1588.793045],
         ],
         columns=columns,
     )
     figname = "dask_on_ray_comp"
+    gray = sns.color_palette("gist_gray_r")
+    color = sns.color_palette("Set2")
     return plot(
         df,
         [],
@@ -87,8 +89,9 @@ def plot_dask_comparison():
         columns[2],
         columns[1],
         "",
-        "Data Size",
+        "Data Size (GB)",
         "Job Completion Time (s)",
+        palette=sns.color_palette([gray[1], gray[2], gray[3], lighten(color[0], amount=1.75)]),
     )
 
 
@@ -124,7 +127,7 @@ def plot_mb_all():
         "Object Size",
         "I/O Time (s)",
         palette=sns.color_palette(
-            [set2[0], lighten(set2[0]), set2[1], lighten(set2[1])]
+            [lighten(set2[0], 1.1), lighten(set2[0]), lighten(set2[1], 1.9), lighten(set2[1], 1.4)]
         ),
     )
 
@@ -304,20 +307,25 @@ def plot(
         )
     #    plt.xticks(rotation=45)
     g.despine(left=True)
-    # g.set(yscale="log")
-    g.set_axis_labels(xtitle, ytitle)
+#    g.set(yscale="log")
+#    g.set_axis_labels(xtitle, ytitle)
+    plt.xlabel(xtitle, fontsize=16)
+    plt.ylabel(ytitle, fontsize=16)
     if x != "partitions":
-        plt.xticks(fontsize=SMALL_SIZE, rotation=45, horizontalalignment="right")
-        plt.yticks(fontsize=SMALL_SIZE)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
     if g.legend:
+#        plt.setp(g.legend.get_texts(), fontsize='13')
+        plt.legend(fontsize='13.5')
         g.legend.set_title(legend_title)
     filename = figname + ".pdf"
     print(filename)
     g.savefig(filename)
 
 
-plot_hdd()
-plot_ssd()
-plot_large()
+# plot_dask_comparison()
+#plot_hdd()
+#plot_ssd()
+#plot_large()
 # plot_simple_vs_push()
-# plot_mb_all()
+plot_mb_all()
