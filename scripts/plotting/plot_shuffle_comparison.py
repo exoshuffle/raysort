@@ -39,8 +39,8 @@ plt.rc("legend", fontsize=MEDIUM_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 # sns.set_theme(style="ticks")
-sns.set_palette("rocket")
-set2 = sns.color_palette("rocket")
+sns.set_palette("Set2")
+set2 = sns.color_palette("Set2")
 # sns.set(font_scale=0.85)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
@@ -166,7 +166,13 @@ def plot_hdd():
         None,  # remove legend
         "Number of Partitions",
         "Job Time (s)",
-        palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
+        palette=["dimgray", 
+                 lighten(set2[0], 0.5), 
+                 set2[1], 
+                 lighten(set2[2], 1.3), 
+                 lighten(set2[3], 2.8),
+                 lighten(set2[2], 1.3), 
+                 lighten(set2[3], 2.8)],
         hatches=[""] * 5 + ["////////"] * 2,
     )
 
@@ -206,7 +212,13 @@ def plot_ssd():
         "",
         "Number of Partitions",
         "Job Time (s)",
-        palette=["gray", set2[0], set2[1], set2[2], set2[3], set2[2], set2[3]],
+        palette=["dimgray", 
+                 lighten(set2[0], 0.5), 
+                 set2[1], 
+                 lighten(set2[2], 1.3), 
+                 lighten(set2[3], 2.8),
+                 lighten(set2[2], 1.3), 
+                 lighten(set2[3], 2.8)],
         hatches=[""] * 5 + ["////////"] * 2,
     )
 
@@ -231,7 +243,7 @@ def plot_large():
         "",
         "",
         "Job Time (h)",
-        palette=[set2[3], "darkgrey", "dimgrey"],
+        palette=[lighten(set2[0], 0.5), "darkgrey", "dimgrey"],
     )
 
 
@@ -259,9 +271,9 @@ def plot_small():
         "time",
         "shuffle",
         "",
-        r"10GB \hspace*{3em} 100GB",
+        r"10GB \hspace*{4.5em} 100GB",
         "Job Time (s)",
-        palette=[set2[0], set2[3]] * 4,
+        palette=[set2[0], lighten(set2[2], 1.3)] * 4,
     )
 
 
@@ -304,27 +316,27 @@ def plot(
         )
     #    plt.xticks(rotation=45)
     g.despine(left=True)
-    plt.xlabel(xtitle, fontsize=16)
-    plt.ylabel(ytitle, fontsize=16)
-    if x != "partitions":
-        plt.xticks(fontsize=14)
-        plt.yticks(fontsize=14)
+    plt.xlabel(xtitle, fontsize=20)
+    plt.ylabel(ytitle, fontsize=20)
+#    if x != "partitions":
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     if logscale:
         g.set(yscale="log")
     if g.legend:
-#        plt.setp(g.legend.get_texts(), fontsize='13')
-        plt.legend(fontsize='13.5')
+        plt.setp(g.legend.get_texts(), fontsize='15')
+#        plt.legend(fontsize='15')
         g.legend.set_title(legend_title)
     if legend_title is None:
         g.legend.remove()
     filename = figname + ".pdf"
     print(filename)
-    g.savefig(filename, bbox="tight")
+    g.savefig(filename, bbox_inches="tight")
 
 
 # plot_dask_comparison()
-plot_hdd()
+#plot_hdd()
 plot_ssd()
-plot_large()
-plot_small()
+#plot_large()
+#plot_small()
 # plot_mb_all()
