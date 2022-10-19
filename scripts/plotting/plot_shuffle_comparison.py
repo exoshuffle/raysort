@@ -5,7 +5,7 @@ import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 # Get fig_width_pt from LaTeX using \the\columnwidth
-fig_width_pt = 350 # 240.94499  # acmart-SIGPLAN
+fig_width_pt = 350  # 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
@@ -35,13 +35,12 @@ plt.rc("axes", titlesize=BIG_SIZE)  # fontsize of the axes title
 plt.rc("axes", labelsize=BIG_SIZE)  # fontsize of the x and y labels
 plt.rc("xtick", labelsize=BIG_SIZE)  # fontsize of the tick labels
 plt.rc("ytick", labelsize=BIG_SIZE)  # fontsize of the tick labels
-plt.rc("legend", fontsize=MEDIUM_SIZE)  # legend fontsize
+plt.rc("legend", fontsize=BIG_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
 # sns.set_theme(style="ticks")
 sns.set_palette("Set2")
 set2 = sns.color_palette("Set2")
-# sns.set(font_scale=0.85)
 sns.set_style("whitegrid")
 sns.set_style("ticks")
 
@@ -59,28 +58,32 @@ def plot_dask_comparison():
     columns = ["data size", "setup", "time"]
     df = pd.DataFrame(
         [
-            ["1", "Dask: 32 procs x 1 thread", 9.257539613],
-            ["1", "Dask: 8 procs x 4 threads", 9.152182102],
-            ["1", "Dask: 1 proc x 32 threads", 29.10137018],
-            ["1", "Dask-on-Ray (32 procs)", 8.962659121],
-            ["10", "Dask: 32 procs x 1 thread", 117.7881519],
-            ["10", "Dask: 8 procs x 4 threads", 112.825515],
-            ["10", "Dask: 1 proc x 32 threads", 356.3388017],
-            ["10", "Dask-on-Ray (32 procs)", 98.41430688],
-            ["20", "Dask: 32 procs x 1 thread", 0],
-            ["20", "Dask: 8 procs x 4 threads", 252.654465],
-            ["20", "Dask: 1 proc x 32 threads", 1327.135815],
-            ["20", "Dask-on-Ray (32 procs)", 186.0701251],
-            ["100", "Dask: 32 procs x 1 thread", 0],
-            ["100", "Dask: 8 procs x 4 threads", 0],
-            ["100", "Dask: 1 proc x 32 threads", 14221.8383],
-            ["100", "Dask-on-Ray (32 procs)", 1588.793045],
+            ["1", "Dask (32 x 1)", 9.257539613],
+            ["1", "Dask (8 x 4)", 9.152182102],
+            ["1", "Dask (1 x 32)", 29.10137018],
+            ["1", "Dask-on-Ray", 8.962659121],
+            ["10", "Dask (32 x 1)", 117.7881519],
+            ["10", "Dask (8 x 4)", 112.825515],
+            ["10", "Dask (1 x 32)", 356.3388017],
+            ["10", "Dask-on-Ray", 98.41430688],
+            ["20", "Dask (32 x 1)", 0],
+            ["20", "Dask (8 x 4)", 252.654465],
+            ["20", "Dask (1 x 32)", 1327.135815],
+            ["20", "Dask-on-Ray", 186.0701251],
+            ["100", "Dask (32 x 1)", 0],
+            ["100", "Dask (8 x 4)", 0],
+            ["100", "Dask (1 x 32)", 14221.8383],
+            ["100", "Dask-on-Ray", 1588.793045],
         ],
         columns=columns,
     )
     figname = "dask_on_ray_comp"
-    gray = sns.color_palette("gist_gray_r")
-    color = sns.color_palette("Set2")
+    text_kwargs = dict(
+        fontsize=14,
+        fontweight="black",
+        ha="center",
+        va="center",
+    )
     return plot(
         df,
         [],
@@ -91,6 +94,19 @@ def plot_dask_comparison():
         "",
         "Data Size (GB)",
         "Job Time (s)",
+        palette=[
+            "silver",
+            "gray",
+            "dimgray",
+            set2[0],
+        ],
+        texts=[
+            ((1.70, 9, "X"), dict(**text_kwargs, color="silver")),
+            ((2.72, 9, "X"), dict(**text_kwargs, color="silver")),
+            ((2.90, 9, "X"), dict(**text_kwargs, color="gray")),
+        ],
+        logscale=True,
+        use_seaborn_legend=True,
     )
 
 
@@ -126,8 +142,14 @@ def plot_mb_all():
         "Object Size",
         "I/O Time (s)",
         palette=sns.color_palette(
-            [lighten(set2[0], 1.1), lighten(set2[0]), lighten(set2[1], 1.9), lighten(set2[1], 1.4)]
+            [
+                lighten(set2[0], 1.1),
+                lighten(set2[0]),
+                lighten(set2[1], 1.9),
+                lighten(set2[1], 1.4),
+            ]
         ),
+        use_seaborn_legend=True,
     )
 
 
@@ -166,13 +188,15 @@ def plot_hdd():
         None,  # remove legend
         "Number of Partitions",
         "Job Time (s)",
-        palette=["dimgray", 
-                 lighten(set2[0], 0.5), 
-                 set2[1], 
-                 lighten(set2[2], 1.3), 
-                 lighten(set2[3], 2.8),
-                 lighten(set2[2], 1.3), 
-                 lighten(set2[3], 2.8)],
+        palette=[
+            "dimgray",
+            lighten(set2[0], 0.5),
+            set2[1],
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+        ],
         hatches=[""] * 5 + ["////////"] * 2,
     )
 
@@ -212,14 +236,17 @@ def plot_ssd():
         "",
         "Number of Partitions",
         "Job Time (s)",
-        palette=["dimgray", 
-                 lighten(set2[0], 0.5), 
-                 set2[1], 
-                 lighten(set2[2], 1.3), 
-                 lighten(set2[3], 2.8),
-                 lighten(set2[2], 1.3), 
-                 lighten(set2[3], 2.8)],
+        palette=[
+            "dimgray",
+            lighten(set2[0], 0.5),
+            set2[1],
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+        ],
         hatches=[""] * 5 + ["////////"] * 2,
+        use_seaborn_legend=True,
     )
 
 
@@ -244,6 +271,7 @@ def plot_large():
         "",
         "Job Time (h)",
         palette=[lighten(set2[2], 1.3), "darkgrey", "dimgrey"],
+        use_seaborn_legend=True,
     )
 
 
@@ -289,7 +317,9 @@ def plot(
     ytitle,
     palette="Set2",
     hatches=[],
+    texts=[],
     logscale=False,
+    use_seaborn_legend=False,
 ):
     g = sns.catplot(
         data=df,
@@ -305,6 +335,25 @@ def plot(
     for patches, hatch in zip(g.ax.containers, hatches):
         for patch in patches:
             patch.set_hatch(hatch)
+    for args, kwargs in texts:
+        g.ax.text(*args, **kwargs)
+    g.despine(left=True)
+    plt.xlabel(xtitle, fontsize=20)
+    plt.ylabel(ytitle, fontsize=20)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    if logscale:
+        g.set(yscale="log")
+    # Legend.
+    if use_seaborn_legend:
+        if g.legend:
+            g.legend.set_title(legend_title)
+            plt.setp(g.legend.get_texts(), fontsize=16)
+    else:
+        if g.legend:
+            g.legend.remove()
+        if legend_title is not None:
+            plt.legend(title=legend_title, fontsize=16)
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(
@@ -314,29 +363,14 @@ def plot(
             linestyle="--",
             label="theoretical",
         )
-    #    plt.xticks(rotation=45)
-    g.despine(left=True)
-    plt.xlabel(xtitle, fontsize=20)
-    plt.ylabel(ytitle, fontsize=20)
-#    if x != "partitions":
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18)
-    if logscale:
-        g.set(yscale="log")
-    if g.legend:
-        plt.setp(g.legend.get_texts(), fontsize='15')
-#        plt.legend(fontsize='15')
-        g.legend.set_title(legend_title)
-    if legend_title is None:
-        g.legend.remove()
     filename = figname + ".pdf"
     print(filename)
     g.savefig(filename, bbox_inches="tight")
 
 
-# plot_dask_comparison()
-#plot_hdd()
-#plot_ssd()
+plot_dask_comparison()
+plot_hdd()
+plot_ssd()
 plot_large()
-#plot_small()
-# plot_mb_all()
+plot_small()
+plot_mb_all()

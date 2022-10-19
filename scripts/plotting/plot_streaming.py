@@ -8,30 +8,34 @@ import pandas as pd
 import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
-fig_width_pt = 300 # 241.14749  # Get this from LaTeX using \showthe\columnwidth
+fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
-golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
+golden_ratio = 9 / 16
 figwidth = fig_width_pt * inches_per_pt  # width in inches
 figheight = figwidth * golden_ratio  # height in inches
 figsize = (figwidth, figheight)
-fontsize = 7 
 
 plt.rcParams.update(
     {
-        "axes.titlesize": fontsize,
-        "axes.labelsize": fontsize,
-        "font.size": fontsize,
+        "axes.titlesize": 14,
+        "axes.labelsize": 14,
+        "font.size": 14,
         "figure.figsize": figsize,
         "figure.dpi": 150,
-        "legend.fontsize": fontsize,
+        "legend.fontsize": 16,
         "text.usetex": True,
-        "xtick.labelsize": fontsize,
-        "ytick.labelsize": fontsize,
+        "xtick.labelsize": 16,
+        "ytick.labelsize": 16,
+        "mathtext.fontset": "custom",
+        "mathtext.rm": "Bitstream Vera Sans",
+        "mathtext.it": "Bitstream Vera Sans:italic",
+        "mathtext.bf": "Bitstream Vera Sans:bold",
     }
 )
 
 sns.set_theme(style="ticks", font_scale=1)
 sns.set_palette("Set2")
+
 
 def lighten(c, amount=0.75):
     import colorsys
@@ -146,18 +150,17 @@ def plot(
         hue=hue,
         palette=["gray"],
         ax=ax,
-        linestyle="--",
     )
     g.get_legend().set_title(None)
-    plt.legend(fontsize=13)
-    plt.xlabel("Time (s)", fontsize=16)
-    plt.ylabel("% Tasks completed", fontsize=16)
-#    plt.fill_between(df[x].values, df[y].values, alpha=0.1)
+    plt.legend(fontsize=14)
+    plt.xlabel("Time (s)")
+    plt.ylabel("% Tasks completed")
+    #    plt.fill_between(df[x].values, df[y].values, alpha=0.1)
     plt.xlim((0, int(math.ceil(max(end_time_simple, end_time_streaming)))))
     plt.ylim((0, 100))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
+    plt.xticks()
+    plt.yticks()
     plt.grid(axis="y")
     filename = figname + ".pdf"
     print(filename)
