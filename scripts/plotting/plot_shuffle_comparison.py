@@ -243,7 +243,7 @@ def plot_large():
         "",
         "",
         "Job Time (h)",
-        palette=[lighten(set2[0], 0.5), "darkgrey", "dimgrey"],
+        palette=[lighten(set2[2], 1.3), "darkgrey", "dimgrey"],
     )
 
 
@@ -336,7 +336,7 @@ def plot(
 
 # plot_dask_comparison()
 #plot_hdd()
-plot_ssd()
-#plot_large()
+#plot_ssd()
+plot_large()
 #plot_small()
 # plot_mb_all()
