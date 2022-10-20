@@ -10,7 +10,7 @@ fig_width_pt = 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
-figheight = figwidth * 0.7 # golden_ratio  # height in inches
+figheight = figwidth * 0.7  # golden_ratio  # height in inches
 figsize = (figwidth, figheight)
 fontsize = 16
 
