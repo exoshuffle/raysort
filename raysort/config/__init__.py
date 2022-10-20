@@ -7,7 +7,7 @@ from raysort.config.common import (  # Expose these types to consumers of this m
     AppConfig,
     JobConfig,
     SystemConfig,
-)
+)  # Expose these types to consumers of this module.
 from raysort.config.local import configs as local_configs
 
 __config_dict__ = {cfg.name: cfg for cfg in (aws_configs + local_configs)}
