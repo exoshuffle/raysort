@@ -4,8 +4,8 @@ from raysort.config.common import (
     InstanceType,
     JobConfig,
     SpillingMode,
-    get_steps,
     get_s3_buckets,
+    get_steps,
 )
 
 # ------------------------------------------------------------

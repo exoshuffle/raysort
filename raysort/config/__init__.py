@@ -7,7 +7,7 @@ from raysort.config.common import (
     AppConfig,
     JobConfig,
     SystemConfig,
-)
+)  # Expose these types to consumers of this module.
 from raysort.config.local import configs as local_configs
 
 
