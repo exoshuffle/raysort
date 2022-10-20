@@ -113,6 +113,9 @@ class AppConfig:
     merge_io_parallelism: int = field(init=False)
     reduce_io_parallelism: int = field(init=False)
 
+    shuffle_wait_percentile: float = 0.75
+    shuffle_wait_timeout: float = 5.0
+
     skip_sorting: bool = False
     skip_input: bool = False
     skip_output: bool = False
@@ -132,6 +135,7 @@ class AppConfig:
     simple_shuffle: bool = False
     riffle: bool = False
     magnet: bool = False
+    sort_optimized: bool = False
 
     s3_buckets: List[str] = field(default_factory=list)
 
@@ -929,7 +933,6 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
             use_yield=True,
@@ -950,7 +953,6 @@ __configs__ = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(2),
             reduce_parallelism_multiplier=1,
             use_yield=True,
@@ -971,7 +973,6 @@ __configs__ = [
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(4),
             reduce_parallelism_multiplier=1,
             use_yield=True,
