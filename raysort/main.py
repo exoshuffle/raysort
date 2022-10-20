@@ -214,8 +214,6 @@ def merge_blocks_yield(
     blocks: Tuple[np.ndarray],
     allow_timeouts: bool = False,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    if len(blocks) == 0:
-        print(_merge_id, blocks)
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
     yield timeouts
     with tracing_utils.timeit("merge"):
@@ -342,14 +340,16 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 map_results[:, 0], num_returns=part_id - num_map_tasks_per_round + 1
             )
 
-    tasks = []
-    for r in range(cfg.num_reducers):
-        tasks.append(
-            final_merge.options(**ray_utils.node_i(cfg, r)).remote(
-                cfg, r, 0, *map_results[:, r]
-            )
-        )
-    return flatten(ray.get(tasks))
+    ray_utils.fail_and_restart_node(cfg)
+
+    return reduce_stage(
+        cfg,
+        map_results[:, 0],
+        lambda w: [
+            map_results[:, w * cfg.num_reducers_per_worker + r]
+            for r in range(cfg.num_reducers_per_worker)
+        ],
+    )
 
 
 def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
