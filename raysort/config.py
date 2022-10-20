@@ -330,8 +330,8 @@ local_mini_app_config = dict(
 
 local_app_config = dict(
     **local_base_app_config,
-    total_gb=1.024,
-    input_part_gb=0.004,
+    total_gb=0.512,
+    input_part_gb=0.002,
 )
 
 
