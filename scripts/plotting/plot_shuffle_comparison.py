@@ -38,11 +38,9 @@ plt.rc("ytick", labelsize=BIG_SIZE)  # fontsize of the tick labels
 plt.rc("legend", fontsize=BIG_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
-# sns.set_theme(style="ticks")
+sns.set_style("ticks")
 sns.set_palette("Set2")
 set2 = sns.color_palette("Set2")
-sns.set_style("whitegrid")
-sns.set_style("ticks")
 
 
 def lighten(c, amount=0.75):
@@ -106,7 +104,6 @@ def plot_dask_comparison():
             ((2.90, 9, "X"), dict(**text_kwargs, color="gray")),
         ],
         logscale=True,
-        use_seaborn_legend=True,
     )
 
 
@@ -149,7 +146,7 @@ def plot_mb_all():
                 lighten(set2[1], 1.4),
             ]
         ),
-        use_seaborn_legend=True,
+        legend_kwargs=dict(bbox_to_anchor=(0.5, 0.6)),
     )
 
 
@@ -246,7 +243,6 @@ def plot_ssd():
             lighten(set2[3], 2.8),
         ],
         hatches=[""] * 5 + ["////////"] * 2,
-        use_seaborn_legend=True,
     )
 
 
@@ -271,7 +267,6 @@ def plot_large():
         "",
         "Job Time (h)",
         palette=[lighten(set2[2], 1.3), "darkgrey", "dimgrey"],
-        use_seaborn_legend=True,
     )
 
 
@@ -319,7 +314,7 @@ def plot(
     hatches=[],
     texts=[],
     logscale=False,
-    use_seaborn_legend=False,
+    legend_kwargs={},
 ):
     g = sns.catplot(
         data=df,
@@ -345,15 +340,21 @@ def plot(
     if logscale:
         g.set(yscale="log")
     # Legend.
-    if use_seaborn_legend:
-        if g.legend:
-            g.legend.set_title(legend_title)
-            plt.setp(g.legend.get_texts(), fontsize=16)
-    else:
-        if g.legend:
+    if g.legend:
+        if legend_title is None:
             g.legend.remove()
-        if legend_title is not None:
-            plt.legend(title=legend_title, fontsize=16)
+        else:
+            kwargs = dict(
+                title=legend_title,
+                bbox_to_anchor=(0.75, 0.5),
+                fontsize=16,
+            )
+            kwargs.update(legend_kwargs)
+            sns.move_legend(
+                g,
+                "center left",
+                **kwargs,
+            )
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(

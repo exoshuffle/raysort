@@ -10,7 +10,7 @@ import seaborn as sns
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 fig_width_pt = 241.14749  # Get this from LaTeX using \showthe\columnwidth
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
-golden_ratio = 9 / 16
+golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
 figheight = figwidth * golden_ratio  # height in inches
 figsize = (figwidth, figheight)
@@ -33,7 +33,8 @@ plt.rcParams.update(
     }
 )
 
-sns.set_theme(style="ticks", font_scale=1)
+# sns.set_theme(style="ticks", font_scale=1)
+sns.set_style("ticks")
 sns.set_palette("Set2")
 
 
@@ -151,11 +152,15 @@ def plot(
         palette=["gray"],
         ax=ax,
     )
-    g.get_legend().set_title(None)
-    plt.legend(fontsize=14)
+    sns.move_legend(
+        g,
+        "center left",
+        title=None,
+        bbox_to_anchor=(1, 0.5),
+        fontsize=16,
+    )
     plt.xlabel("Time (s)")
     plt.ylabel("% Tasks completed")
-    #    plt.fill_between(df[x].values, df[y].values, alpha=0.1)
     plt.xlim((0, int(math.ceil(max(end_time_simple, end_time_streaming)))))
     plt.ylim((0, 100))
     ax.yaxis.set_major_formatter(mpl.ticker.PercentFormatter(decimals=0))
