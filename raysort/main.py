@@ -130,10 +130,6 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
     return ret
 
 
-SHUFFLE_WAIT_PERCENTILE = 0.75
-SHUFFLE_WAIT_SLACK = 5.0  # seconds
-
-
 def _merge_blocks_prep(
     cfg: AppConfig,
     bounds: List[int],
@@ -146,10 +142,10 @@ def _merge_blocks_prep(
         if allow_timeouts:
             ray.wait(
                 refs,
-                num_returns=int(len(refs) * SHUFFLE_WAIT_PERCENTILE),
+                num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
             )
             refs, timeout_refs = ray.wait(
-                refs, num_returns=len(refs), timeout=SHUFFLE_WAIT_SLACK
+                refs, num_returns=len(refs), timeout=cfg.shuffle_wait_timeout
             )
             if timeout_refs:
                 print(f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}")

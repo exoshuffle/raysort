@@ -113,6 +113,9 @@ class AppConfig:
     merge_io_parallelism: int = field(init=False)
     reduce_io_parallelism: int = field(init=False)
 
+    shuffle_wait_percentile: float = 0.75
+    shuffle_wait_timeout: float = 5.0
+
     skip_sorting: bool = False
     skip_input: bool = False
     skip_output: bool = False
