@@ -929,7 +929,6 @@ __configs__ = [
             **get_steps(),
             total_gb=1000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
             use_yield=True,

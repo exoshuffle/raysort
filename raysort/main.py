@@ -130,21 +130,39 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
     return ret
 
 
+SHUFFLE_WAIT_PERCENTILE = 0.75
+SHUFFLE_WAIT_SLACK = 5.0  # seconds
+
+
 def _merge_blocks_prep(
-    cfg: AppConfig, bounds: List[int], blocks: Tuple[np.ndarray]
-) -> Iterable[np.ndarray]:
+    cfg: AppConfig,
+    bounds: List[int],
+    blocks: Tuple[ray.ObjectRef],
+    allow_timeouts: bool,
+) -> Tuple[Iterable[np.ndarray], List[ray.ObjectRef]]:
+    refs = list(blocks)
+    timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
-        blocks = ray.get(list(blocks))
+        if allow_timeouts:
+            ray.wait(
+                refs,
+                num_returns=int(len(refs) * SHUFFLE_WAIT_PERCENTILE),
+            )
+            refs, timeout_refs = ray.wait(
+                refs, num_returns=len(refs), timeout=SHUFFLE_WAIT_SLACK
+            )
+            if timeout_refs:
+                print(f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}")
+        blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
 
-    M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
     num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
     get_block = functools.partial(_get_block, blocks)
 
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-    return merge_fn(M, get_block, num_records, False, bounds)
+    return merge_fn(len(blocks), get_block, num_records, False, bounds), timeout_refs
 
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
@@ -155,10 +173,11 @@ def merge_blocks(
     merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
+    allow_timeouts: bool = True,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    merger = _merge_blocks_prep(cfg, bounds, blocks)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
     with tracing_utils.timeit("merge"):
-        ret = [None]
+        ret = [timeouts]
         spill_tasks = []
         spill_remote = ray_utils.remote(spill_block)
         for i, datachunk in enumerate(merger):
@@ -197,9 +216,12 @@ def merge_blocks_yield(
     _merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
+    allow_timeouts: bool = True,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    merger = _merge_blocks_prep(cfg, bounds, blocks)
-    yield None
+    if len(blocks) == 0:
+        print(_merge_id, blocks)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
+    yield timeouts
     with tracing_utils.timeit("merge"):
         for datachunk in merger:
             yield datachunk
@@ -531,6 +553,7 @@ def sort_push_based(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     num_map_tasks_per_round = cfg.num_workers * cfg.merge_factor
     num_concurrent_rounds = cfg.map_parallelism // 4 * 3
     merge_tasks_in_flight = []
+    timeout_map_blocks = [[]] * cfg.num_workers
     for rnd in range(num_rounds):
         # Submit a new round of map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
@@ -545,16 +568,23 @@ def sort_push_based(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
         # Wait for all merge tasks from the previous round to finish.
         if rnd >= num_concurrent_rounds:
-            to_wait = merge_tasks_in_flight.pop(0)
-            ray_utils.wait(to_wait, wait_all=True)
+            tasks = merge_tasks_in_flight.pop(0)
+            timeout_map_blocks = ray.get(tasks)
+            # TODO(@lsf): do something about the timeout map blocks.
+            # For example, launch competing tasks?
 
         # Submit a new round of merge tasks.
         merge_tasks = []
         m = rnd
         for w in range(cfg.num_workers):
             merge_id = constants.merge_part_ids(w, m)
+            map_blocks = map_results[:, w].tolist() + timeout_map_blocks[w]
             refs = merge_fn.options(**merger_opt, **ray_utils.node_i(cfg, w)).remote(
-                cfg, merge_id, merge_bounds[w], map_results[:, w]
+                cfg,
+                merge_id,
+                merge_bounds[w],
+                map_blocks,
+                allow_timeouts=rnd < num_rounds - num_concurrent_rounds,
             )
             merge_tasks.append(refs[0])
             merge_results[w, m, :] = refs[1:]
