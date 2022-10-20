@@ -15,6 +15,7 @@ cython_debug
 bin
 data
 wandb
+/*.csv
 
 .terraform*
 **/_*.yml
