@@ -360,7 +360,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     merge_bounds, _ = get_boundaries(cfg.num_reducers)
 
     mapper_opt = {"num_returns": 2}
-    merger_opt = {"num_returns": cfg.num_reducers}
+    merger_opt = {"num_returns": cfg.num_reducers + 1}
     merge_results = np.empty(
         (cfg.num_workers * cfg.num_mergers_per_worker, cfg.num_reducers),
         dtype=object,
@@ -409,7 +409,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds, map_blocks)
+                ).remote(cfg, merge_id, merge_bounds, map_blocks)[1:]
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
