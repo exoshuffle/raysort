@@ -532,13 +532,10 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
-def sort_push_based(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
+def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     map_bounds, merge_bounds = get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
     )
-
-    map_fn = mapper_yield if cfg.use_yield else mapper
-    merge_fn = merge_blocks_yield if cfg.use_yield else merge_blocks
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}
     merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
@@ -562,7 +559,7 @@ def sort_push_based(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
             opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
             m = part_id % num_map_tasks_per_round
-            refs = map_fn.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
+            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
             map_results[m, :] = refs
             part_id += 1
 
@@ -579,7 +576,9 @@ def sort_push_based(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         for w in range(cfg.num_workers):
             merge_id = constants.merge_part_ids(w, m)
             map_blocks = map_results[:, w].tolist() + timeout_map_blocks[w]
-            refs = merge_fn.options(**merger_opt, **ray_utils.node_i(cfg, w)).remote(
+            refs = merge_blocks_yield.options(
+                **merger_opt, **ray_utils.node_i(cfg, w)
+            ).remote(
                 cfg,
                 merge_id,
                 merge_bounds[w],
@@ -626,6 +625,8 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
 
+    if cfg.sort_optimized:
+        results = sort_optimized(cfg, parts)
     if cfg.simple_shuffle:
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
@@ -633,8 +634,7 @@ def sort_main(cfg: AppConfig):
     elif cfg.skip_first_stage:
         results = sort_reduce_only(cfg)
     else:
-        # results = sort_two_stage(cfg, parts)
-        results = sort_push_based(cfg, parts)
+        results = sort_two_stage(cfg, parts)
 
     if not cfg.skip_output:
         with open(sort_utils.get_manifest_file(cfg, kind="output"), "w") as fout:
