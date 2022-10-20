@@ -1,4 +1,5 @@
 # pylint: disable=too-many-instance-attributes
+import enum
 import math
 import os
 from dataclasses import InitVar, dataclass, field
@@ -26,6 +27,11 @@ def get_s3_buckets(count: int = 1) -> List[str]:
     return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
 
+class Cloud(enum.Enum):
+    AZURE = "azure"
+    AWS = "aws"
+
+
 @dataclass
 class InstanceType:
     name: str
@@ -44,6 +50,7 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
+    cloud: Cloud = Cloud.AWS
     instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     instance_disk_gb: int = 40
     ebs: bool = False

@@ -2,14 +2,13 @@ import os
 from typing import Optional
 
 from raysort.config.aws import configs as aws_configs
-from raysort.config.common import (
+from raysort.config.common import (  # Expose these types to consumers of this module.
     CONFIG_NAME_ENV_VAR,
     AppConfig,
     JobConfig,
     SystemConfig,
-)  # Expose these types to consumers of this module.
+)
 from raysort.config.local import configs as local_configs
-
 
 __config_dict__ = {cfg.name: cfg for cfg in (aws_configs + local_configs)}
 
