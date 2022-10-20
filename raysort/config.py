@@ -355,9 +355,7 @@ __configs__ = [
     JobConfig(
         name="LocalManualSpillingDisk",
         cluster=local_cluster,
-        system=dict(
-            ray_storage=None,
-        ),
+        system=dict(),
         app=dict(
             **local_app_config,
             spilling=SpillingMode.DISK,
@@ -955,7 +953,6 @@ __configs__ = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(2),
             reduce_parallelism_multiplier=1,
             use_yield=True,
@@ -976,7 +973,6 @@ __configs__ = [
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(4),
             reduce_parallelism_multiplier=1,
             use_yield=True,
