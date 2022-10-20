@@ -173,7 +173,7 @@ def merge_blocks(
     merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
-    allow_timeouts: bool = True,
+    allow_timeouts: bool = False,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
     with tracing_utils.timeit("merge"):
@@ -216,7 +216,7 @@ def merge_blocks_yield(
     _merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
-    allow_timeouts: bool = True,
+    allow_timeouts: bool = False,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
     if len(blocks) == 0:
         print(_merge_id, blocks)
