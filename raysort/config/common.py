@@ -28,8 +28,8 @@ def get_s3_buckets(count: int = 1) -> List[str]:
 
 
 class Cloud(enum.Enum):
-    AZURE = "azure"
     AWS = "aws"
+    AZURE = "azure"
 
 
 @dataclass
@@ -37,6 +37,7 @@ class InstanceType:
     name: str
     cpu: int
     memory_gib: float
+    cloud: Cloud = Cloud.AWS
     memory_bytes: int = field(init=False)
     disk_count: int = 0
     disk_device_offset: int = 1
@@ -50,7 +51,6 @@ class InstanceType:
 class ClusterConfig:
     instance_count: int
     instance_type: InstanceType
-    cloud: Cloud = Cloud.AWS
     instance_lifetime: InstanceLifetime = InstanceLifetime.DEDICATED
     instance_disk_gb: int = 40
     ebs: bool = False
@@ -62,6 +62,8 @@ class ClusterConfig:
             self.instance_type.disk_count += 1
         if self.name == "":
             self.name = f"{self.instance_type.name}-{self.instance_count}"
+            if self.instance_type.cloud == Cloud.AZURE:
+                self.name = self.name.replace("_", "-")
 
 
 @dataclass
