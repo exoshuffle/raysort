@@ -141,6 +141,25 @@ def aws_action(cluster_name: str, method: str, verb: str) -> None:
     click.secho(f"{verb} {cluster_name} ({len(ids)} instances)", fg="green")
 
 
+def enable_s3_access_logs() -> None:
+    s3 = boto3.resource('s3')
+    output_bucket = s3.Bucket("raysort-logs")
+    bucket = os.getenv("S3_BUCKET")
+    try:
+        logging = s3.BucketLogging(bucket)
+        if not logging.logging_enabled:
+            logging.put(
+                BucketLoggingStatus={
+                    'LoggingEnabled': {
+                        'TargetBucket': output_bucket,
+                        'TargetPrefix': f'raysort-logs/{bucket}/'
+                    }
+                }
+            )
+    except Exception as e:
+        click.echo(f"Got error while enabling access logs for {bucket}: {e}")
+
+
 # ------------------------------------------------------------
 #     Ansible
 # ------------------------------------------------------------
@@ -411,6 +430,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
                 ),
             }
         )
+        enable_s3_access_logs()
     else:
         mnt_paths = get_mnt_paths()
         if len(mnt_paths) == 0:
@@ -580,6 +600,7 @@ def up(
         )
     if yarn:
         restart_yarn(inventory_path)
+    enable_s3_access_logs()
     print_after_setup(cluster_name)
 
 
