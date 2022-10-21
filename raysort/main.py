@@ -143,12 +143,17 @@ def _merge_blocks_prep(
             ray.wait(
                 refs,
                 num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
+                fetch_local=False,
             )
             refs, timeout_refs = ray.wait(
-                refs, num_returns=len(refs), timeout=cfg.shuffle_wait_timeout
+                refs,
+                num_returns=len(refs),
+                timeout=cfg.shuffle_wait_timeout,
             )
             if timeout_refs:
                 print(f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}")
+        if len(refs) == 0:
+            print("IMPOSSIBLE", refs, blocks)
         blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
@@ -623,7 +628,7 @@ def sort_main(cfg: AppConfig):
 
     if cfg.sort_optimized:
         results = sort_optimized(cfg, parts)
-    if cfg.simple_shuffle:
+    elif cfg.simple_shuffle:
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
         results = sort_riffle(cfg, parts)
