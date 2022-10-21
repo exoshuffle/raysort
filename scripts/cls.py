@@ -174,11 +174,11 @@ def get_or_create_ansible_inventory(
     return path
 
 
-def get_ansible_ssh_args() -> str:
+def get_ssh_key() -> str:
     if cfg.cluster.instance_type.cloud == config.Cloud.AWS:
-        return " -u ubuntu --key-file /home/ubuntu/.aws/login-us-west-2.pem"
+        return "/home/ubuntu/.aws/login-us-west-2.pem"
     if cfg.cluster.instance_type.cloud == config.Cloud.AZURE:
-        return " -u azureuser --key-file /home/azureuser/.ssh/lsf-azure-aa.pem"
+        return "/home/azureuser/.ssh/lsf-azure-aa.pem"
     return ""
 
 
@@ -194,7 +194,7 @@ def run_ansible_playbook(
         playbook += ".yml"
     playbook_path = ANSIBLE_DIR / playbook
     cmd = "ansible-playbook"
-    cmd += get_ansible_ssh_args()
+    cmd += " --key-file " + get_ssh_key()
     cmd += f" -f {PARALLELISM} -i {inventory_path} {playbook_path}"
     if ev:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
@@ -362,8 +362,8 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
         update_workers_file(ips)
         update_hadoop_config(head_ip, get_mnt_paths(), cfg.cluster.instance_type.hdd)
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    if not cluster_exists:
-        shell_utils.sleep(60, "worker nodes starting up")
+    # if not cluster_exists:
+    #     shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
     run_ansible_playbook(inventory_path, "setup", ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
@@ -380,6 +380,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
         "memory_usage_threshold_fraction": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
+        "verbose_spill_logs": 0,
     }
     if cfg.system.s3_spill > 0:
         # system_config.update(
@@ -478,7 +479,7 @@ def restart_yarn(inventory_path: pathlib.Path) -> None:
     mnt_paths = get_mnt_paths()
     env = dict(
         os.environ,
-        HADOOP_SSH_OPTS="-i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
+        HADOOP_SSH_OPTS=f"-i {get_ssh_key()} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
         HADOOP_OPTIONAL_TOOLS="hadoop-aws",
     )
     HADOOP_HOME = os.getenv("HADOOP_HOME")
@@ -647,7 +648,7 @@ def ssh(worker_id_or_ip: str):
     except ValueError:
         ip = worker_id_or_ip
     shell_utils.run(
-        f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
+        f"ssh -i {get_ssh_key()} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
 
 
