@@ -1,5 +1,5 @@
 output "instance_ips" {
-  description = "Private IP addresses of the EC2 instances"
+  description = "Private IP addresses of the instances"
   value       = aws_instance.cluster[*].private_ip
 }
 
