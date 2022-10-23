@@ -17,7 +17,7 @@ KiB = 1024
 MiB = KiB * 1024
 
 
-def s3() -> botocore.client.BaseClient:
+def client() -> botocore.client.BaseClient:
     return boto3.session.Session().client(
         "s3",
         config=botocore.config.Config(
@@ -29,20 +29,20 @@ def s3() -> botocore.client.BaseClient:
     )
 
 
-def upload_s3(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> None:
+def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> None:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     try:
-        s3().upload_file(src, pinfo.bucket, pinfo.path, Config=config)
+        client().upload_file(src, pinfo.bucket, pinfo.path, Config=config)
     finally:
         if delete_src:
             os.remove(src)
 
 
-def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
+def download_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
     io_buffers = [io.BytesIO() for _ in pinfolist]
     threads = [
         threading.Thread(
-            target=download_s3,
+            target=download,
             args=(pinfo,),
             kwargs={"buf": buf, "max_concurrency": 2},
         )
@@ -59,19 +59,19 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
     return np.frombuffer(ret, dtype=np.uint8)
 
 
-def download_s3(
+def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
     buf: Optional[io.BytesIO] = None,
     **kwargs
-) -> Optional[np.ndarray]:
+) -> np.ndarray:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if filename:
-        s3().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
-        return None
+        client().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
+        return np.empty(0, dtype=np.uint8)
     if buf is None:
         buf = io.BytesIO()
-    s3().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
+    client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
 
@@ -80,7 +80,7 @@ def upload_s3_buffer(
 ) -> None:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     # TODO: avoid copying
-    s3().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
+    client().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
 
 
 def single_upload(
@@ -103,7 +103,7 @@ def multi_upload(
 
     def upload(data, chunk_id):
         sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
-        sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", s3=True)
+        sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", cloud=True)
         upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
         mpu_queue.put(sub_pinfo)
 
@@ -120,7 +120,7 @@ def multi_upload(
         chunk_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
-    # we need to fuse into one chunk before uploading to S3.
+    # we need to fuse into one chunk before uploading.
     tail = io.BytesIO()
     for datachunk in merger:
         if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
@@ -149,7 +149,7 @@ def multipart_upload(
     # return single_upload(cfg, pinfo, merger)
     # return multi_upload(cfg, pinfo, merger)
     parallelism = cfg.reduce_io_parallelism
-    s3_client = s3()
+    s3_client = client()
     mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
     upload_threads = []
     mpu_queue = queue.PriorityQueue()
