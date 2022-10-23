@@ -579,7 +579,9 @@ def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
             opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
             m = part_id % num_map_tasks_per_round
-            refs = mapper_yield.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
+            refs = mapper_yield.options(**opt).remote(
+                cfg, part_id, map_bounds, pinfolist
+            )
             map_results[m, :] = refs
             part_id += 1
 
