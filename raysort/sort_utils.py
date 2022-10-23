@@ -187,7 +187,7 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        # _run_gensort(offset, size, path, cfg.cloud_storage)
+        _run_gensort(offset, size, path, cfg.cloud_storage)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,

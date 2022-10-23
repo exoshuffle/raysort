@@ -40,12 +40,8 @@ def get_blob_client(container: str, blob: str) -> BlobClient:
 def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True) -> None:
     try:
         blob_client = get_blob_client(pinfo.bucket, pinfo.path)
-        blob_client.upload_blob(
-            b"0" * 2_000_000_000, overwrite=True, max_concurrency=10
-        )
-        delete_src = False
-        # with open(src, "rb") as fin:
-        #     blob_client.upload_blob(fin, overwrite=True, max_concurrency=20)
+        with open(src, "rb") as fin:
+            blob_client.upload_blob(fin, overwrite=True, max_concurrency=20)
     finally:
         if delete_src:
             os.remove(src)
