@@ -71,7 +71,7 @@ def mapper(
 @ray.remote(num_cpus=0)
 def mapper_yield(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
-) -> List[np.ndarray]:
+) -> Iterable[np.ndarray]:
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         for offset, size in blocks:
@@ -131,20 +131,39 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
 
 
 def _merge_blocks_prep(
-    cfg: AppConfig, bounds: List[int], blocks: Tuple[np.ndarray]
-) -> Iterable[np.ndarray]:
+    cfg: AppConfig,
+    bounds: List[int],
+    blocks: Tuple[ray.ObjectRef],
+    allow_timeouts: bool,
+) -> Tuple[Iterable[np.ndarray], List[ray.ObjectRef]]:
+    refs = list(blocks)
+    timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
-        blocks = ray.get(list(blocks))
+        if allow_timeouts:
+            ray.wait(
+                refs,
+                num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
+                fetch_local=False,
+            )
+            refs, timeout_refs = ray.wait(
+                refs,
+                num_returns=len(refs),
+                timeout=cfg.shuffle_wait_timeout,
+            )
+            if timeout_refs:
+                print(f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}")
+        if len(refs) == 0:
+            print("IMPOSSIBLE", refs, blocks)
+        blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
 
-    M = len(blocks)
     total_bytes = sum(b.size for b in blocks)
     num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
     get_block = functools.partial(_get_block, blocks)
 
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
-    return merge_fn(M, get_block, num_records, False, bounds)
+    return merge_fn(len(blocks), get_block, num_records, False, bounds), timeout_refs
 
 
 # Memory usage: input_part_size * merge_factor / (N/W) * 2 = 320MB
@@ -155,10 +174,11 @@ def merge_blocks(
     merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
+    allow_timeouts: bool = False,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    merger = _merge_blocks_prep(cfg, bounds, blocks)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
     with tracing_utils.timeit("merge"):
-        ret = []
+        ret = [timeouts]
         spill_tasks = []
         spill_remote = ray_utils.remote(spill_block)
         for i, datachunk in enumerate(merger):
@@ -186,7 +206,7 @@ def merge_blocks(
             else:
                 spill_block(cfg, pinfo, datachunk)
             ret.append(pinfo)
-        assert len(ret) == len(bounds), (ret, bounds)
+        assert len(ret) == len(bounds) + 1, (len(ret), len(bounds))
         ray_utils.wait(spill_tasks, wait_all=True)
         return ret
 
@@ -197,8 +217,10 @@ def merge_blocks_yield(
     _merge_id: PartId,
     bounds: List[int],
     blocks: Tuple[np.ndarray],
+    allow_timeouts: bool = False,
 ) -> Union[List[PartInfo], List[np.ndarray]]:
-    merger = _merge_blocks_prep(cfg, bounds, blocks)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
+    yield timeouts
     with tracing_utils.timeit("merge"):
         for datachunk in merger:
             yield datachunk
@@ -289,19 +311,17 @@ def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
     get_reduce_master_args: Callable[[int], List],
-) -> List[ray.ObjectRef]:
-    with tracing_utils.timeit("reduce_stage"):
-        if cfg.skip_final_reduce:
-            ray_utils.wait(merge_results.flatten(), wait_all=True)
-            return []
-
-        tasks = [
-            reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
-                cfg, w, get_reduce_master_args(w)
-            )
-            for w in range(cfg.num_workers)
-        ]
-        return flatten(ray.get(tasks))
+) -> List[PartInfo]:
+    if cfg.skip_final_reduce:
+        ray_utils.wait(merge_results.flatten(), wait_all=True)
+        return []
+    tasks = [
+        reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
+            cfg, w, get_reduce_master_args(w)
+        )
+        for w in range(cfg.num_workers)
+    ]
+    return flatten(ray.get(tasks))
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
@@ -345,7 +365,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     merge_bounds, _ = get_boundaries(cfg.num_reducers)
 
     mapper_opt = {"num_returns": 2}
-    merger_opt = {"num_returns": cfg.num_reducers}
+    merger_opt = {"num_returns": cfg.num_reducers + 1}
     merge_results = np.empty(
         (cfg.num_workers * cfg.num_mergers_per_worker, cfg.num_reducers),
         dtype=object,
@@ -394,7 +414,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 merge_results[w + m * cfg.num_workers, :] = merge_blocks.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds, map_blocks)
+                ).remote(cfg, merge_id, merge_bounds, map_blocks)[1:]
 
         if start_time > 0 and (time.time() - start_time) > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
@@ -427,7 +447,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     merge_fn = merge_blocks_yield if cfg.use_yield else merge_blocks
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}
-    merger_opt = {"num_returns": cfg.num_reducers_per_worker}
+    merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
     merge_results = np.empty(
         (cfg.num_workers, cfg.num_mergers_per_worker, cfg.num_reducers_per_worker),
         dtype=object,
@@ -488,7 +508,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
                 merge_id = constants.merge_part_ids(w, m)
                 refs = merge_fn.options(
                     **merger_opt, **ray_utils.node_i(cfg, w)
-                ).remote(cfg, merge_id, merge_bounds[w], map_blocks)
+                ).remote(cfg, merge_id, merge_bounds[w], map_blocks)[1:]
                 merge_results[w, m, :] = refs
                 ref_recorder.record(
                     refs, lambda i, merge_id=merge_id: f"merge_{merge_id:010x}_{i}"
@@ -505,6 +525,73 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
         if cfg.fail_node and start_time and time.time() - start_time > cfg.fail_time:
             ray_utils.fail_and_restart_node(cfg)
             start_time = None
+
+    return reduce_stage(
+        cfg,
+        merge_results,
+        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
+    )
+
+
+def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
+    map_bounds, merge_bounds = get_boundaries(
+        cfg.num_workers, cfg.num_reducers_per_worker
+    )
+
+    mapper_opt = {"num_returns": cfg.num_workers + 1}
+    merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
+    merge_results = np.empty(
+        (cfg.num_workers, cfg.num_mergers_per_worker, cfg.num_reducers_per_worker),
+        dtype=object,
+    )
+
+    part_id = 0
+    num_shards = cfg.num_shards_per_mapper
+    num_rounds = int(np.ceil(cfg.num_mappers / cfg.num_workers / cfg.merge_factor))
+    num_map_tasks_per_round = cfg.num_workers * cfg.merge_factor
+    num_concurrent_rounds = cfg.map_parallelism // 4 * 3
+    merge_tasks_in_flight = []
+    timeout_map_blocks = [[]] * cfg.num_workers
+    for rnd in range(num_rounds):
+        # Submit a new round of map tasks.
+        num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
+        map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
+        for _ in range(num_map_tasks):
+            pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
+            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
+            m = part_id % num_map_tasks_per_round
+            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
+            map_results[m, :] = refs
+            part_id += 1
+
+        # Wait for all merge tasks from the previous round to finish.
+        if rnd >= num_concurrent_rounds:
+            tasks = merge_tasks_in_flight.pop(0)
+            timeout_map_blocks = ray.get(tasks)
+            # TODO(@lsf): do something about the timeout map blocks.
+            # For example, launch competing tasks?
+
+        # Submit a new round of merge tasks.
+        merge_tasks = []
+        m = rnd
+        for w in range(cfg.num_workers):
+            merge_id = constants.merge_part_ids(w, m)
+            map_blocks = map_results[:, w].tolist() + timeout_map_blocks[w]
+            refs = merge_blocks_yield.options(
+                **merger_opt, **ray_utils.node_i(cfg, w)
+            ).remote(
+                cfg,
+                merge_id,
+                merge_bounds[w],
+                map_blocks,
+                allow_timeouts=rnd < num_rounds - num_concurrent_rounds,
+            )
+            merge_tasks.append(refs[0])
+            merge_results[w, m, :] = refs[1:]
+        merge_tasks_in_flight.append(merge_tasks)
+
+        # Delete references to map output blocks as soon as possible.
+        del map_results
 
     return reduce_stage(
         cfg,
@@ -539,7 +626,9 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
 
-    if cfg.simple_shuffle:
+    if cfg.sort_optimized:
+        results = sort_optimized(cfg, parts)
+    elif cfg.simple_shuffle:
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
         results = sort_riffle(cfg, parts)

@@ -187,7 +187,7 @@ def wait(
         return [], []
     kwargs_ = dict(
         fetch_local=False,
-        num_returns=len(to_wait) if wait_all else 1,
+        num_returns=len(to_wait) if wait_all else kwargs.get("num_returns", 1),
         timeout=soft_timeout,
     )
     kwargs_.update(kwargs)

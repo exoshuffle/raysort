@@ -4,6 +4,7 @@ import os
 import pathlib
 import shutil
 import signal
+import socket
 import string
 import subprocess
 from typing import Dict, List, Optional, Tuple, Union
@@ -22,17 +23,12 @@ cfg = config.get()
 
 MNT_PATH_PATTERN = "/mnt/data*"
 MNT_PATH_FMT = "/mnt/data{i}"
-PARALLELISM = os.cpu_count() * 4
+PARALLELISM = (os.cpu_count() or 1) * 4
 SCRIPT_DIR = pathlib.Path(os.path.dirname(__file__))
 
 ANSIBLE_DIR = SCRIPT_DIR / "config" / "ansible"
 HADOOP_TEMPLATE_DIR = SCRIPT_DIR / "config" / "hadoop"
 TERRAFORM_DIR = SCRIPT_DIR / "config" / "terraform"
-TERRAFORM_TEMPLATE_DIR = (
-    "aws-template"
-    if cfg.cluster.instance_lifetime == InstanceLifetime.DEDICATED
-    else "aws-spot-template"
-)
 RAY_SYSTEM_CONFIG_FILE_PATH = SCRIPT_DIR.parent / "_ray_config.yml"
 
 GRAFANA_SERVER_PORT = 3000
@@ -48,6 +44,14 @@ MiB = KiB * 1024
 # ------------------------------------------------------------
 #     Terraform and AWS
 # ------------------------------------------------------------
+
+
+def get_tf_template_dir() -> str:
+    if cfg.cluster.instance_type.cloud == config.Cloud.AZURE:
+        return "azure-template"
+    if cfg.cluster.instance_lifetime == InstanceLifetime.DEDICATED:
+        return "aws-template"
+    return "aws-spot-template"
 
 
 def get_tf_dir(cluster_name: str) -> pathlib.Path:
@@ -66,6 +70,7 @@ def get_instances(filters: Dict) -> List[Dict]:
 
 
 def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) -> bool:
+    # TODO(@lsf): check azure
     instances = get_instances(
         {
             "tag:ClusterName": [cluster_name],
@@ -96,7 +101,7 @@ def get_or_create_tf_dir(cluster_name: str, must_exist: bool = False) -> pathlib
     if must_exist:
         raise FileNotFoundError(f"Cluster configuration does not exist {tf_dir}")
 
-    template_dir = TERRAFORM_DIR / TERRAFORM_TEMPLATE_DIR
+    template_dir = TERRAFORM_DIR / get_tf_template_dir()
     assert not os.path.exists(tf_dir), f"{tf_dir} must not exist"
     assert os.path.exists(template_dir), f"{template_dir} must exist"
     shutil.copytree(template_dir, tf_dir)
@@ -169,6 +174,14 @@ def get_or_create_ansible_inventory(
     return path
 
 
+def get_ssh_key() -> str:
+    if cfg.cluster.instance_type.cloud == config.Cloud.AWS:
+        return "/home/ubuntu/.aws/login-us-west-2.pem"
+    if cfg.cluster.instance_type.cloud == config.Cloud.AZURE:
+        return "/home/azureuser/.ssh/lsf-azure-aa.pem"
+    return ""
+
+
 def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
@@ -180,7 +193,9 @@ def run_ansible_playbook(
     if not playbook.endswith(".yml"):
         playbook += ".yml"
     playbook_path = ANSIBLE_DIR / playbook
-    cmd = f"ansible-playbook -f {PARALLELISM} {playbook_path} -i {inventory_path}"
+    cmd = "ansible-playbook"
+    cmd += " --key-file " + get_ssh_key()
+    cmd += f" -f {PARALLELISM} -i {inventory_path} {playbook_path}"
     if ev:
         cmd += f" --extra-vars '{json.dumps(ev)}'"
     return shell_utils.run(
@@ -325,13 +340,19 @@ def setup_grafana() -> None:
 
 
 def get_cluster_name() -> str:
-    username = os.getenv("USERNAME")
-    assert username, "Environment variable $USERNAME is not set"
-    return f"{cfg.name}-{username}"
+    user = os.getenv("USER")
+    assert user, "$USER is not set"
+    return f"{cfg.cluster.name}-{user}"
+
+
+def get_current_ip() -> str:
+    if cfg.cluster.instance_type.cloud == config.Cloud.AWS:
+        return shell_utils.run_output("ec2metadata --local-ipv4")
+    return socket.gethostbyname(socket.gethostname())
 
 
 def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
-    head_ip = shell_utils.run_output("ec2metadata --local-ipv4")
+    head_ip = get_current_ip()
     ips = get_tf_output(cluster_name, "instance_ips")
     inventory_path = get_or_create_ansible_inventory(cluster_name, ips=ips)
     if not os.environ.get("HADOOP_HOME"):
@@ -341,10 +362,10 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
         update_workers_file(ips)
         update_hadoop_config(head_ip, get_mnt_paths(), cfg.cluster.instance_type.hdd)
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    if not cluster_exists:
-        shell_utils.sleep(60, "worker nodes starting up")
+    # if not cluster_exists:
+    #     shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
-    run_ansible_playbook(inventory_path, "setup_aws", ev=ev, retries=10)
+    run_ansible_playbook(inventory_path, "setup", ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
     setup_grafana()
     return inventory_path
@@ -359,6 +380,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
         "memory_usage_threshold_fraction": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
+        "verbose_spill_logs": 0,
     }
     if cfg.system.s3_spill > 0:
         # system_config.update(
@@ -437,7 +459,7 @@ def restart_ray(
     shell_utils.run("ray stop -f")
     ray_cmd, ray_system_config = get_ray_start_cmd()
     shell_utils.run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage))
-    head_ip = shell_utils.run_output("ec2metadata --local-ipv4")
+    head_ip = get_current_ip()
     ev = {
         "head_ip": head_ip,
         "clear_data_dir": clear_data_dir,
@@ -457,7 +479,7 @@ def restart_yarn(inventory_path: pathlib.Path) -> None:
     mnt_paths = get_mnt_paths()
     env = dict(
         os.environ,
-        HADOOP_SSH_OPTS="-i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
+        HADOOP_SSH_OPTS=f"-i {get_ssh_key()} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR",
         HADOOP_OPTIONAL_TOOLS="hadoop-aws",
     )
     HADOOP_HOME = os.getenv("HADOOP_HOME")
@@ -626,7 +648,7 @@ def ssh(worker_id_or_ip: str):
     except ValueError:
         ip = worker_id_or_ip
     shell_utils.run(
-        f"ssh -i ~/.aws/login-us-west-2.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
+        f"ssh -i {get_ssh_key()} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null {ip}"
     )
 
 

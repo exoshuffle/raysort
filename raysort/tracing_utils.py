@@ -22,7 +22,7 @@ Span = collections.namedtuple(
     "Span",
     ["time", "duration", "event", "address", "pid"],
 )
-SAVE_SPANS_EVERY = 100
+SAVE_SPANS_EVERY = 1000
 
 
 class timeit:
@@ -44,6 +44,8 @@ class timeit:
         return self.tracker
 
     def __enter__(self) -> None:
+        if not self.report_completed:
+            return
         tracker = self._get_tracker()
         if self.event == "sort":
             tracker.record_start_time.remote()
@@ -62,10 +64,11 @@ class timeit:
             ),
             log_to_wandb=self.log_to_wandb,
         )
-        tracker.inc.remote(
-            f"{self.event}_completed",
-            echo=self.report_completed,
-        )
+        if self.report_completed:
+            tracker.inc.remote(
+                f"{self.event}_completed",
+                echo=True,
+            )
         return False
 
 
@@ -183,7 +186,7 @@ class ProgressTracker:
                 wandb.config.update(yaml.safe_load(fin))
         logging.info(wandb.config)
 
-    def inc(self, metric: str, value: float = 1, echo=False, log_to_wandb=False):
+    def inc(self, metric: str, value: int = 1, echo=False, log_to_wandb=False):
         self.counts[metric] += value
         self.gauges[metric].set(self.counts[metric])
         if echo:
@@ -191,7 +194,7 @@ class ProgressTracker:
         if log_to_wandb:
             wandb.log({metric: self.counts[metric]})
 
-    def dec(self, metric: str, value: float = 1, echo=False):
+    def dec(self, metric: str, value: int = 1, echo=False):
         return self.inc(metric, -value, echo)
 
     def record_value(
@@ -239,6 +242,9 @@ class ProgressTracker:
         df = pd.DataFrame(ret, columns=["task", "mean", "std", "max", "min", "count"])
         print(self.series.get("output_time"))
         print(df.set_index("task"))
+        self.job_cfg.app.worker_ids = []
+        self.job_cfg.app.worker_ips = []
+        self.job_cfg.app.worker_ip_to_id = {}
         print(self.job_cfg)
         wandb.log({"performance_summary": wandb.Table(dataframe=df)})
         wandb.finish()

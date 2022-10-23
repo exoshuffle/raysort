@@ -5,8 +5,7 @@ import seaborn as sns
 
 # https://scipy-cookbook.readthedocs.io/items/Matplotlib_LaTeX_Examples.html
 # Get fig_width_pt from LaTeX using \the\columnwidth
-# fig_width_pt = 241.14749  # SIGCONF (SIGCOMM)
-fig_width_pt = 241.02039  # USENIX (NSDI)
+fig_width_pt = 350  # 240.94499  # acmart-SIGPLAN
 inches_per_pt = 1.0 / 72.27  # Convert pt to inches
 golden_ratio = (np.sqrt(5) - 1.0) / 2.0  # Aesthetic ratio
 figwidth = fig_width_pt * inches_per_pt  # width in inches
@@ -24,26 +23,24 @@ plt.rcParams.update(
 SECS_PER_MIN = 60
 SECS_PER_HR = 3600
 
-SMALL_SIZE = 8
-MEDIUM_SIZE = 10
-BIG_SIZE = 12
+SMALL_SIZE = 9
+MEDIUM_SIZE = 12
+BIG_SIZE = 14
 
-SYS = "S"
-SYS_FULL = "Scramble"
+SYS = "LS"
+SYS_FULL = "LibShuffle"
 
-plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
-plt.rc("axes", titlesize=SMALL_SIZE)  # fontsize of the axes title
-plt.rc("axes", labelsize=SMALL_SIZE)  # fontsize of the x and y labels
-plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-plt.rc("legend", fontsize=SMALL_SIZE)  # legend fontsize
+plt.rc("font", size=BIG_SIZE)  # controls default text sizes
+plt.rc("axes", titlesize=BIG_SIZE)  # fontsize of the axes title
+plt.rc("axes", labelsize=BIG_SIZE)  # fontsize of the x and y labels
+plt.rc("xtick", labelsize=BIG_SIZE)  # fontsize of the tick labels
+plt.rc("ytick", labelsize=BIG_SIZE)  # fontsize of the tick labels
+plt.rc("legend", fontsize=BIG_SIZE)  # legend fontsize
 plt.rc("figure", titlesize=BIG_SIZE)  # fontsize of the figure title
 
-# sns.set_theme(style="ticks")
-sns.set_palette("Set2")
-sns.set(font_scale=0.75)
-sns.set_style("whitegrid")
 sns.set_style("ticks")
+sns.set_palette("Set2")
+set2 = sns.color_palette("Set2")
 
 
 def lighten(c, amount=0.75):
@@ -59,26 +56,32 @@ def plot_dask_comparison():
     columns = ["data size", "setup", "time"]
     df = pd.DataFrame(
         [
-            ["1 GB", "Dask: 32 procs x 1 thread", 9.257539613],
-            ["1 GB", "Dask: 8 procs x 4 threads", 9.152182102],
-            ["1 GB", "Dask: 1 proc x 32 threads", 29.10137018],
-            ["1 GB", "Dask-on-Ray (32 procs)", 8.962659121],
-            ["10 GB", "Dask: 32 procs x 1 thread", 117.7881519],
-            ["10 GB", "Dask: 8 procs x 4 threads", 112.825515],
-            ["10 GB", "Dask: 1 proc x 32 threads", 356.3388017],
-            ["10 GB", "Dask-on-Ray (32 procs)", 98.41430688],
-            ["20 GB", "Dask: 32 procs x 1 thread", 0],
-            ["20 GB", "Dask: 8 procs x 4 threads", 252.654465],
-            ["20 GB", "Dask: 1 proc x 32 threads", 1327.135815],
-            ["20 GB", "Dask-on-Ray (32 procs)", 186.0701251],
-            ["100 GB", "Dask: 32 procs x 1 thread", 0],
-            ["100 GB", "Dask: 8 procs x 4 threads", 0],
-            ["100 GB", "Dask: 1 proc x 32 threads", 14221.8383],
-            ["100 GB", "Dask-on-Ray (32 procs)", 1588.793045],
+            ["1", "Dask (32 x 1)", 9.257539613],
+            ["1", "Dask (8 x 4)", 9.152182102],
+            ["1", "Dask (1 x 32)", 29.10137018],
+            ["1", "Dask-on-Ray", 8.962659121],
+            ["10", "Dask (32 x 1)", 117.7881519],
+            ["10", "Dask (8 x 4)", 112.825515],
+            ["10", "Dask (1 x 32)", 356.3388017],
+            ["10", "Dask-on-Ray", 98.41430688],
+            ["20", "Dask (32 x 1)", 0],
+            ["20", "Dask (8 x 4)", 252.654465],
+            ["20", "Dask (1 x 32)", 1327.135815],
+            ["20", "Dask-on-Ray", 186.0701251],
+            ["100", "Dask (32 x 1)", 0],
+            ["100", "Dask (8 x 4)", 0],
+            ["100", "Dask (1 x 32)", 14221.8383],
+            ["100", "Dask-on-Ray", 1588.793045],
         ],
         columns=columns,
     )
     figname = "dask_on_ray_comp"
+    text_kwargs = dict(
+        fontsize=14,
+        fontweight="black",
+        ha="center",
+        va="center",
+    )
     return plot(
         df,
         [],
@@ -87,8 +90,20 @@ def plot_dask_comparison():
         columns[2],
         columns[1],
         "",
-        "Data Size",
-        "Job Completion Time (s)",
+        "Data Size (GB)",
+        "Job Time (s)",
+        palette=[
+            "silver",
+            "gray",
+            "dimgray",
+            set2[0],
+        ],
+        texts=[
+            ((1.70, 9, "X"), dict(**text_kwargs, color="silver")),
+            ((2.72, 9, "X"), dict(**text_kwargs, color="silver")),
+            ((2.90, 9, "X"), dict(**text_kwargs, color="gray")),
+        ],
+        logscale=True,
     )
 
 
@@ -124,8 +139,14 @@ def plot_mb_all():
         "Object Size",
         "I/O Time (s)",
         palette=sns.color_palette(
-            [set2[0], lighten(set2[0]), set2[1], lighten(set2[1])]
+            [
+                lighten(set2[0], 1.1),
+                lighten(set2[0]),
+                lighten(set2[1], 1.9),
+                lighten(set2[1], 1.4),
+            ]
         ),
+        legend_kwargs=dict(bbox_to_anchor=(0.5, 0.6)),
     )
 
 
@@ -133,23 +154,23 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "2K", 2799],
-            [f"{SYS}-simple", "1K", 1929],
+            ["Spark", "2000", 1609],
+            ["Spark", "1000", 1701],
+            ["Spark", "500", 1558],
+            [f"{SYS}-simple", "2000", 2799],
+            [f"{SYS}-simple", "1000", 1929],
             [f"{SYS}-simple", "500", 1297],
-            [f"{SYS}-merge", "2K", 2163],
-            [f"{SYS}-merge", "1K", 1334],
+            [f"{SYS}-merge", "2000", 2163],
+            [f"{SYS}-merge", "1000", 1334],
             [f"{SYS}-merge", "500", 1409],
-            [f"{SYS}-push", "2K", 748],
-            [f"{SYS}-push", "1K", 700],
+            [f"{SYS}-push", "2000", 748],
+            [f"{SYS}-push", "1000", 700],
             [f"{SYS}-push", "500", 761],
-            [f"{SYS}-push", "500[F]", 775],
-            [f"{SYS}-push-opt", "2K", 743],
-            [f"{SYS}-push-opt", "1K", 634],
-            [f"{SYS}-push-opt", "500", 702],
-            [f"{SYS}-push-opt", "500[F]", 757],
-            ["Spark-default", "2K", 1609],
-            ["Spark-default", "1K", 1701],
-            ["Spark-default", "500", 1558],
+            [f"{SYS}-push*", "2000", 743],
+            [f"{SYS}-push*", "1000", 634],
+            [f"{SYS}-push*", "500", 702],
+            [f"_{SYS}-push [F]", "500", 775],
+            [f"_{SYS}-push* [F]", "500", 757],
         ],
         columns=["version", "partitions", "time"],
     )
@@ -157,13 +178,23 @@ def plot_hdd():
     return plot(
         df,
         theoretical,
-        "shuffle_comparison",
-        "version",
-        "time",
+        "shuffle_comparison_hdd",
         "partitions",
-        "Partitions",
-        "",
-        "Job Completion Time (s)",
+        "time",
+        "version",
+        None,  # remove legend
+        "Number of Partitions",
+        "Job Time (s)",
+        palette=[
+            "dimgray",
+            lighten(set2[0], 0.5),
+            set2[1],
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+        ],
+        hatches=[""] * 5 + ["////////"] * 2,
     )
 
 
@@ -171,46 +202,56 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            [f"{SYS}-simple", "2K", 1085],
-            [f"{SYS}-simple", "1K", 628],
+            ["Spark", "2000", 1498],
+            ["Spark", "1000", 1533],
+            ["Spark", "500", 1614],
+            [f"{SYS}-simple", "2000", 1085],
+            [f"{SYS}-simple", "1000", 628],
             [f"{SYS}-simple", "500", 570],
-            [f"{SYS}-merge", "2K", 728],
-            [f"{SYS}-merge", "1K", 660],
+            [f"{SYS}-merge", "2000", 728],
+            [f"{SYS}-merge", "1000", 660],
             [f"{SYS}-merge", "500", 711],
-            [f"{SYS}-push", "2K", 626],
-            [f"{SYS}-push", "1K", 580],
+            [f"{SYS}-push", "2000", 626],
+            [f"{SYS}-push", "1000", 580],
             [f"{SYS}-push", "500", 602],
-            [f"{SYS}-push", "500[F]", 666],
-            [f"{SYS}-push-opt", "2K", 553],
-            [f"{SYS}-push-opt", "1K", 533],
-            [f"{SYS}-push-opt", "500", 596],
-            [f"{SYS}-push-opt", "500[F]", 657],
-            ["Spark-default", "2K", 1498],
-            ["Spark-default", "1K", 1533],
-            ["Spark-default", "500", 1614],
+            [f"{SYS}-push*", "2000", 553],
+            [f"{SYS}-push*", "1000", 533],
+            [f"{SYS}-push*", "500", 596],
+            [f"_{SYS}-push [F]", "500", 666],
+            [f"_{SYS}-push* [F]", "500", 657],
         ],
         columns=["version", "partitions", "time"],
     )
-    theoretical = [543]
+    theoretical = [533 - 30]  # because the line is too thick
     return plot(
         df,
         theoretical,
         "shuffle_comparison_ssd",
-        "version",
-        "time",
         "partitions",
-        "Partitions",
+        "time",
+        "version",
         "",
-        "Job Completion Time (s)",
+        "Number of Partitions",
+        "Job Time (s)",
+        palette=[
+            "dimgray",
+            lighten(set2[0], 0.5),
+            set2[1],
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+        ],
+        hatches=[""] * 5 + ["////////"] * 2,
     )
 
 
 def plot_large():
     df = pd.DataFrame(
         [
-            ["Spark-default", "100TB", 30240 / SECS_PER_HR],
+            [f"{SYS}-push*", "100TB", 10707 / SECS_PER_HR],
             ["Spark-push", "100TB", 19293 / SECS_PER_HR],
-            [f"{SYS_FULL}", "100TB", 10707 / SECS_PER_HR],
+            ["Spark", "100TB", 30240 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
     )
@@ -224,7 +265,38 @@ def plot_large():
         None,
         "",
         "",
-        "Job Completion Time (h)",
+        "Job Time (h)",
+        palette=[lighten(set2[2], 1.3), "darkgrey", "dimgrey"],
+    )
+
+
+# https://docs.google.com/spreadsheets/d/194sEiPCan_VXzOK5roMgB-7ewF4uNTnsF4eTIFmyslk/edit#gid=1160118221
+def plot_small():
+    df = pd.DataFrame(
+        [
+            ["80", "simple", 4.529596],
+            ["80", "push*", 7.783609],
+            ["200", "simple", 12.101356],
+            ["200", "push*", 7.709302],
+            ["80 ", "simple", 43.732640],
+            ["80 ", "push*", 54.506559],
+            ["200 ", "simple", 53.726337],
+            ["200 ", "push*", 42.215111],
+        ],
+        columns=["partitions", "shuffle", "time"],
+    )
+    theoretical = []
+    return plot(
+        df,
+        theoretical,
+        "shuffle_comparison_small",
+        "partitions",
+        "time",
+        "shuffle",
+        "",
+        r"10GB \hspace*{4.5em} 100GB",
+        "Job Time (s)",
+        palette=[set2[0], lighten(set2[2], 1.3)] * 4,
     )
 
 
@@ -239,20 +311,11 @@ def plot(
     xtitle,
     ytitle,
     palette="Set2",
-    fontsize=None,
+    hatches=[],
+    texts=[],
+    logscale=False,
+    legend_kwargs={},
 ):
-    if fontsize:
-        TINY_SIZE = 16
-        SMALL_SIZE = fontsize - 3
-        MEDIUM_SIZE = fontsize
-        plt.rc("font", size=SMALL_SIZE)  # controls default text sizes
-        plt.rc("axes", titlesize=MEDIUM_SIZE)  # fontsize of the axes title
-        plt.rc("axes", labelsize=TINY_SIZE)  # fontsize of the x and y labels
-        plt.rc("xtick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-        plt.rc("ytick", labelsize=SMALL_SIZE)  # fontsize of the tick labels
-        plt.rc("legend", fontsize=SMALL_SIZE)
-        plt.rcParams.update({"font.size": fontsize})
-
     g = sns.catplot(
         data=df,
         kind="bar",
@@ -264,14 +327,34 @@ def plot(
         aspect=1 / golden_ratio,
     )
     fig = g.figure
-    # # Add hatches to bars.
-    # import itertools
-    # ax = fig.gca()
-    # hatches = itertools.cycle(["", "/", "\\"])
-    # for i, bar in enumerate(ax.patches):
-    #     if i % 3 == 0:
-    #         hatch = next(hatches)
-    #     bar.set_hatch(hatch)
+    for patches, hatch in zip(g.ax.containers, hatches):
+        for patch in patches:
+            patch.set_hatch(hatch)
+    for args, kwargs in texts:
+        g.ax.text(*args, **kwargs)
+    g.despine(left=True)
+    plt.xlabel(xtitle, fontsize=20)
+    plt.ylabel(ytitle, fontsize=20)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    if logscale:
+        g.set(yscale="log")
+    # Legend.
+    if g.legend:
+        if legend_title is None:
+            g.legend.remove()
+        else:
+            kwargs = dict(
+                title=legend_title,
+                bbox_to_anchor=(0.75, 0.5),
+                fontsize=16,
+            )
+            kwargs.update(legend_kwargs)
+            sns.move_legend(
+                g,
+                "center left",
+                **kwargs,
+            )
     # Add a horizontal line.
     for t in theoretical:
         plt.axhline(
@@ -281,19 +364,14 @@ def plot(
             linestyle="--",
             label="theoretical",
         )
-    #    plt.xticks(rotation=45)
-    g.despine(left=True)
-    ax.set_yscale("log")
-    g.set_axis_labels(xtitle, ytitle)
-    plt.xticks(rotation=45, horizontalalignment="right")
-    if g.legend:
-        g.legend.set_title(legend_title)
     filename = figname + ".pdf"
     print(filename)
-    g.savefig(filename)
+    g.savefig(filename, bbox_inches="tight")
 
 
+plot_dask_comparison()
 plot_hdd()
 plot_ssd()
 plot_large()
-# plot_mb_all()
+plot_small()
+plot_mb_all()

@@ -53,6 +53,7 @@ def download_s3_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
     for thd in threads:
         thd.join()
     ret = bytearray()
+    # TODO(@lsf): preallocate the download buffers
     for buf in io_buffers:
         ret += buf.getbuffer()
     return np.frombuffer(ret, dtype=np.uint8)

@@ -12,6 +12,11 @@
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
     hadoop_config_dir: /opt/hadoop/etc/hadoop
+  # environment:
+  #   CC: /home/ubuntu/intel/oneapi/compiler/latest/linux/bin/icx
+  #   CXX: /home/ubuntu/intel/oneapi/compiler/latest/linux/bin/icpx
+  #   CFLAGS: "-Ofast -xHost"
+  #   CXXFLAGS: "-Ofast -xHost"
   tasks:
     - name: Create a filesystem on each of the data disks
       become: true
@@ -88,6 +93,8 @@
     - name: Install project packages
       ansible.builtin.shell: |
         cd {{ workdir }} && {{ pythondir }}/pip install -e .
+        rm -rf {{ workdir }}/raysort/sortlib/build
+        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
       changed_when: true
 
     - name: Set soft and hard ulimit
@@ -113,7 +120,7 @@
         src: "{{ hosts_path }}"
         dest: "{{ hosts_path }}"
         mode: "0644"
-      when: hadoop
+      when: hadoop.stat.exists
 
     - name: Sync Hadoop config files
       ansible.builtin.copy:
@@ -124,7 +131,7 @@
         - core-site.xml
         - hdfs-site.xml
         - yarn-site.xml
-      when: hadoop
+      when: hadoop.stat.exists
 
     - name: Start node_exporter
       ansible.builtin.shell: >

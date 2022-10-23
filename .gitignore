@@ -1,5 +1,4 @@
 *.backup
-*.csv
 *.egg-info
 *.log
 *.pdf
@@ -16,6 +15,7 @@ cython_debug
 bin
 data
 wandb
+/*.csv
 
 .terraform*
 **/_*.yml
