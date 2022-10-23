@@ -26,7 +26,6 @@ FILENAME_FMT = {
     "output": "output-{part_id:010x}",
     "temp": "temp-{part_id:010x}",
 }
-FILEPATH_FMT = "{prefix}/{kind}/{filename}"
 SHARD_FMT = "{shard:04x}"
 TMPFS_PATH = "/mnt/tmpfs/raysort"
 
