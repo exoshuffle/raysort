@@ -114,20 +114,14 @@ def top_languages_print(_cfg: AppConfig, summary: S):
 
 
 def top_languages_proportions_print(_cfg: AppConfig, summary: S):
-    total = 0
+    total = sum(summary.values())
     language_proportions = {}
-    for (language, count) in summary.items():
-        total += count
 
-    for (language, count) in summary.items():
-        print(language, f"{count / total:.2f}", end=" " * 4)
-        language_proportions[language] = count / total
+    language_proportions = {lang: count / total for lang, count in summary.items()}
+    print(language_proportions)
 
-    json_object = json.dumps(language_proportions)
-
-    with open("/home/ubuntu/raysort/raysort/language_proportions.json", "a") as fp:
-        fp.write(json_object)
-        fp.write("\n")
+    with open("/tmp/language_proportions.json", "a") as fp:
+        print(json.dumps(language_proportions), file=fp)
 
 
 def page_views_main():

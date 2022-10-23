@@ -2,42 +2,33 @@ import gzip
 import shutil
 
 import boto3
+import io
 import ray
 import requests
 
 
-@ray.remote()
 def upload_files(i, j, k):
     url_ending = f"/pagecounts-20160{i}{j:02d}-{k:02d}0000.gz"
     title_ending = f"/pagecounts-20160{i}{j:02d}-{k:02d}0000"
 
-    url = (
-        "https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-0"
-        + str(i)
-        + url_ending
-    )
+    url = f"https://dumps.wikimedia.org/other/pagecounts-raw/2016/2016-0{str(i)}{url_ending}"
+
     print(url)
     r = requests.get(url, allow_redirects=True)
-    filename_gz = "file.gz"
-    filename = "file.txt"
+
+    compressedFile = io.BytesIO()
+    compressedFile.write(r.content)
+    compressedFile.seek(0)
+
+    decompressedFile = gzip.GzipFile(fileobj=compressedFile, mode="rb")
+
     s3_client = boto3.client("s3")
-    with open(filename_gz, "wb") as f:
-        for chunk in r.iter_content(chunk_size=1024):
 
-            if chunk:
-                f.write(chunk)
-
-    with gzip.open(filename_gz, "rb") as f_in:
-        with open(filename, "wb") as f_out:
-            shutil.copyfileobj(f_in, f_out)
-
-    s3_client.upload_file(
-        "file.txt",
+    s3_client.upload_fileobj(
+        decompressedFile,
         "lsf-berkeley-edu",
         "wikimedia{}".format(title_ending),
     )
-
-    f.close()
 
 
 def main():
