@@ -12,11 +12,11 @@
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
     hadoop_config_dir: /opt/hadoop/etc/hadoop
-  # environment:
-  #   CC: /home/ubuntu/intel/oneapi/compiler/latest/linux/bin/icx
-  #   CXX: /home/ubuntu/intel/oneapi/compiler/latest/linux/bin/icpx
-  #   CFLAGS: "-Ofast -xHost"
-  #   CXXFLAGS: "-Ofast -xHost"
+  environment:
+    CC: /opt/intel/oneapi/compiler/latest/linux/bin/icx
+    CXX: /opt/intel/oneapi/compiler/latest/linux/bin/icpx
+    CFLAGS: "-Ofast -xHost"
+    CXXFLAGS: "-Ofast -xHost"
   tasks:
     - name: Create a filesystem on each of the data disks
       become: true
@@ -132,10 +132,3 @@
         - hdfs-site.xml
         - yarn-site.xml
       when: hadoop.stat.exists
-
-    - name: Start node_exporter
-      ansible.builtin.shell: >
-        nohup
-        {{ workdir }}/raysort/bin/node_exporter/node_exporter
-        --web.listen-address 0.0.0.0:8091 &
-      changed_when: true
