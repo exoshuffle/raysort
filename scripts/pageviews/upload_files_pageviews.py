@@ -1,8 +1,8 @@
 import gzip
+import io
 import shutil
 
 import boto3
-import io
 import ray
 import requests
 
