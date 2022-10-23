@@ -1,5 +1,16 @@
 # pylint: disable=use-dict-literal
-from raysort.config.common import Cloud, InstanceType, JobConfig, get_steps
+from raysort.config.common import (
+    AZURE_CONTAINER,
+    Cloud,
+    InstanceType,
+    JobConfig,
+    get_steps,
+)
+
+
+def get_azure_containers(count: int = 10) -> list[str]:
+    return [f"{i:03d}-{AZURE_CONTAINER}" for i in range(count)]
+
 
 # ------------------------------------------------------------
 #     VM Types
@@ -32,6 +43,26 @@ configs = [
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
             sort_optimized=True,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     L8s_v3 with Blob Storage
+    # ------------------------------------------------------------
+    JobConfig(
+        # TODO
+        name="1tb-2gb-l8s-blob",
+        cluster=dict(
+            instance_count=10,
+            instance_type=l8s_v3,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+            sort_optimized=True,
+            azure_containers=get_azure_containers(),
         ),
     ),
 ]

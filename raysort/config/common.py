@@ -9,6 +9,7 @@ import ray
 
 from raysort.typing import AppStep, InstanceLifetime, SpillingMode
 
+AZURE_CONTAINER = os.getenv("AZURE_CONTAINER")
 S3_BUCKET = os.getenv("S3_BUCKET")
 
 CONFIG_NAME_ENV_VAR = "CONFIG"
@@ -147,6 +148,8 @@ class AppConfig:
     sort_optimized: bool = False
 
     s3_buckets: List[str] = field(default_factory=list)
+    azure_containers: str = ""
+    cloud_storage: bool = field(init=False)
 
     fail_node: Optional[str] = None
     fail_time: int = 45
@@ -217,6 +220,8 @@ class AppConfig:
 
         self.merge_io_parallelism = self.io_parallelism // self.merge_parallelism
         self.reduce_io_parallelism = self.io_parallelism // self.reduce_parallelism
+
+        self.cloud_storage = bool(self.s3_buckets or self.azure_containers)
 
 
 @dataclass

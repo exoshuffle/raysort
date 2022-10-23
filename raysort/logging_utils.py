@@ -7,3 +7,4 @@ def init():
         format=fmt,
         level=logging.INFO,
     )
+    logging.getLogger("azure").setLevel(logging.WARNING)

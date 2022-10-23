@@ -115,7 +115,7 @@ def restore_block(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         os.remove(pinfo.path)
         return ret
     if cfg.spilling == SpillingMode.S3:
-        return s3_utils.download_s3(pinfo, use_threads=False)
+        return s3_utils.download(pinfo, use_threads=False)
     raise RuntimeError(f"{cfg}")
 
 
@@ -140,20 +140,18 @@ def _merge_blocks_prep(
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
         if allow_timeouts:
-            ray.wait(
+            ready, not_ready = ray.wait(
                 refs,
                 num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
-                fetch_local=False,
             )
-            refs, timeout_refs = ray.wait(
-                refs,
-                num_returns=len(refs),
+            late, timeout_refs = ray.wait(
+                not_ready,
+                num_returns=len(not_ready),
                 timeout=cfg.shuffle_wait_timeout,
             )
+            refs = ready + late
             if timeout_refs:
                 print(f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}")
-        if len(refs) == 0:
-            print("IMPOSSIBLE", refs, blocks)
         blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
@@ -195,7 +193,7 @@ def merge_blocks(
                 continue
             part_id = constants.merge_part_ids(merge_id, i)
             pinfo = sort_utils.part_info(
-                cfg, part_id, kind="temp", s3=(cfg.spilling == SpillingMode.S3)
+                cfg, part_id, kind="temp", cloud=(cfg.spilling == SpillingMode.S3)
             )
             if cfg.merge_io_parallelism > 0:
                 spill_tasks.append(spill_remote.remote(cfg, pinfo, datachunk))
@@ -264,7 +262,7 @@ def final_merge(
 
         part_id = constants.merge_part_ids(worker_id, reducer_id)
         pinfo = sort_utils.part_info(
-            cfg, part_id, kind="output", s3=bool(cfg.s3_buckets)
+            cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
         merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
         merger = merge_fn(M, get_block)
@@ -540,10 +538,6 @@ def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}
     merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
-    merge_results = np.empty(
-        (cfg.num_workers, cfg.num_mergers_per_worker, cfg.num_reducers_per_worker),
-        dtype=object,
-    )
 
     part_id = 0
     num_shards = cfg.num_shards_per_mapper
@@ -552,6 +546,31 @@ def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     num_concurrent_rounds = cfg.map_parallelism // 4 * 3
     merge_tasks_in_flight = []
     timeout_map_blocks = [[]] * cfg.num_workers
+    merge_results = np.empty(
+        (cfg.num_workers, num_rounds + 1, cfg.num_reducers_per_worker),
+        dtype=object,
+    )
+
+    def submit_merge_tasks(m, get_map_blocks, allow_timeouts=True):
+        ret = []
+        for w in range(cfg.num_workers):
+            map_blocks = get_map_blocks(w)
+            if len(map_blocks) == 0:
+                continue
+            merge_id = constants.merge_part_ids(w, m)
+            refs = merge_blocks_yield.options(
+                **merger_opt, **ray_utils.node_i(cfg, w)
+            ).remote(
+                cfg,
+                merge_id,
+                merge_bounds[w],
+                map_blocks,
+                allow_timeouts=allow_timeouts,
+            )
+            ret.append(refs[0])
+            merge_results[w, m, :] = refs[1:]
+        return ret
+
     for rnd in range(num_rounds):
         # Submit a new round of map tasks.
         num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
@@ -560,7 +579,7 @@ def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
             opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
             m = part_id % num_map_tasks_per_round
-            refs = mapper.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
+            refs = mapper_yield.options(**opt).remote(cfg, part_id, map_bounds, pinfolist)
             map_results[m, :] = refs
             part_id += 1
 
@@ -572,26 +591,22 @@ def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
             # For example, launch competing tasks?
 
         # Submit a new round of merge tasks.
-        merge_tasks = []
-        m = rnd
-        for w in range(cfg.num_workers):
-            merge_id = constants.merge_part_ids(w, m)
-            map_blocks = map_results[:, w].tolist() + timeout_map_blocks[w]
-            refs = merge_blocks_yield.options(
-                **merger_opt, **ray_utils.node_i(cfg, w)
-            ).remote(
-                cfg,
-                merge_id,
-                merge_bounds[w],
-                map_blocks,
-                allow_timeouts=rnd < num_rounds - num_concurrent_rounds,
-            )
-            merge_tasks.append(refs[0])
-            merge_results[w, m, :] = refs[1:]
+        merge_tasks = submit_merge_tasks(
+            rnd,
+            lambda w: map_results[:, w].tolist() + timeout_map_blocks[w],
+        )
         merge_tasks_in_flight.append(merge_tasks)
 
         # Delete references to map output blocks as soon as possible.
         del map_results
+
+    # Handle the last few rounds' timeout map blocks.
+    timeout_map_blocks = np.sum(
+        [ray.get(merge_tasks) for merge_tasks in merge_tasks_in_flight], axis=0
+    )
+    submit_merge_tasks(
+        num_rounds, lambda w: timeout_map_blocks[w], allow_timeouts=False
+    )
 
     return reduce_stage(
         cfg,
