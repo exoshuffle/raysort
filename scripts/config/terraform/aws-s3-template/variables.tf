@@ -1,10 +1,10 @@
 variable "bucket_prefix" {
   type        = string
-  description = "a unique name that identifies the cluster and its instances"
+  description = "bucket prefix"
 }
 
 variable "bucket_count" {
   type        = number
-  description = "the number of instances to launch"
+  description = "the number of buckets to create"
   default     = 1
 }

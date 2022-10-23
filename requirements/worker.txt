@@ -1,4 +1,5 @@
 absl-py
+azure-storage-blob
 boto3
 Cython
 numpy

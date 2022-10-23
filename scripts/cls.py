@@ -362,8 +362,8 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
         update_workers_file(ips)
         update_hadoop_config(head_ip, get_mnt_paths(), cfg.cluster.instance_type.hdd)
     # TODO: use boto3 to wait for describe_instance_status to be "ok" for all
-    # if not cluster_exists:
-    #     shell_utils.sleep(60, "worker nodes starting up")
+    if cfg.cluster.instance_type.cloud == config.Cloud.AWS and cluster_exists:
+        shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
     run_ansible_playbook(inventory_path, "setup", ev=ev, retries=10)
     setup_prometheus(head_ip, ips)

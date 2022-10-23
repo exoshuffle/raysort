@@ -1,5 +1,5 @@
 ansible
-# azure-cli
+azure-cli
 black
 click
 IPython
