@@ -4,9 +4,9 @@ import queue
 import threading
 from typing import Iterable, List, Optional
 
-from azure.storage.blob import BlobClient
 import numpy as np
 import requests
+from azure.storage.blob import BlobClient
 from requests.adapters import HTTPAdapter
 
 from raysort import constants
@@ -15,6 +15,7 @@ from raysort.typing import PartInfo, Path
 
 
 AZURE_STORAGE_URL: str = os.getenv("AZURE_STORAGE_URL", "")
+CONCURRENCY: int = 10
 
 
 class BigBlockSizeHTTPAdapter(HTTPAdapter):
@@ -41,7 +42,7 @@ def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True) -> None:
     try:
         blob_client = get_blob_client(pinfo.bucket, pinfo.path)
         with open(src, "rb") as fin:
-            blob_client.upload_blob(fin, overwrite=True, max_concurrency=20)
+            blob_client.upload_blob(fin, overwrite=True, max_concurrency=CONCURRENCY)
     finally:
         if delete_src:
             os.remove(src)
@@ -49,7 +50,7 @@ def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True) -> None:
 
 def download(pinfo: PartInfo, filename: Optional[Path] = None) -> np.ndarray:
     blob_client = get_blob_client(pinfo.bucket, pinfo.path)
-    stream = blob_client.download_blob(max_concurrency=20)
+    stream = blob_client.download_blob(max_concurrency=CONCURRENCY)
     if filename:
         with open(filename, "wb") as fout:
             stream.readinto(fout)
@@ -62,7 +63,7 @@ def download(pinfo: PartInfo, filename: Optional[Path] = None) -> np.ndarray:
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
 ) -> List[PartInfo]:
-    parallelism = 20
+    concurrency = CONCURRENCY
     blob_client = get_blob_client(pinfo.bucket, pinfo.path)
     upload_threads = []
     mpu_queue = queue.PriorityQueue()
@@ -77,10 +78,10 @@ def multipart_upload(
 
     def upload_part(data):
         nonlocal mpu_part_id
-        if len(upload_threads) >= parallelism > 0:
+        if len(upload_threads) >= concurrency > 0:
             upload_threads.pop(0).join()
         args = (data, mpu_part_id)
-        if parallelism > 0:
+        if concurrency > 0:
             thd = threading.Thread(target=upload, args=args)
             thd.start()
             upload_threads.append(thd)
