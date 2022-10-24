@@ -46,11 +46,11 @@ configs = [
         ),
     ),
     # ------------------------------------------------------------
-    #     L8s_v3 with Blob Storage
+    #     L8s_v3 with Azure Storage
     # ------------------------------------------------------------
     JobConfig(
         # TODO
-        name="1tb-2gb-l8s-blob",
+        name="1tb-2gb-l8s-as",
         cluster=dict(
             instance_count=10,
             instance_type=l8s_v3,

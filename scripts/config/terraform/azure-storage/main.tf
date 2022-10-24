@@ -32,8 +32,8 @@ data "azurerm_storage_account_sas" "app" {
 
   resource_types {
     service   = true
-    container = false
-    object    = false
+    container = true
+    object    = true
   }
 
   services {

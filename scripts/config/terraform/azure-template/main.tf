@@ -14,7 +14,7 @@ provider "azurerm" {
 }
 
 data "azurerm_resource_group" "app" {
-  name = "raysort-eastus"
+  name = "lsf-aa"
 }
 
 data "azurerm_shared_image" "image" {
@@ -24,7 +24,7 @@ data "azurerm_shared_image" "image" {
 }
 
 data "azurerm_virtual_network" "app" {
-  name                = "lsf-vnet"
+  name                = "lsf-aa-vnet"
   resource_group_name = data.azurerm_resource_group.app.name
 }
 
