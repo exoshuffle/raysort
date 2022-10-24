@@ -4,7 +4,7 @@ import logging
 import os
 import random
 import time
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import ray
@@ -246,7 +246,7 @@ def final_merge(
 
         M = len(parts)
 
-        def get_block(i: int, d: int) -> np.ndarray:
+        def get_block(i: int, d: int) -> Optional[np.ndarray]:
             if i >= M or d > 0:
                 return None
             part = parts[i]
@@ -531,92 +531,6 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
-def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
-    map_bounds, merge_bounds = get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
-    )
-
-    mapper_opt = {"num_returns": cfg.num_workers + 1}
-    merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
-
-    part_id = 0
-    num_shards = cfg.num_shards_per_mapper
-    num_rounds = int(np.ceil(cfg.num_mappers / cfg.num_workers / cfg.merge_factor))
-    num_map_tasks_per_round = cfg.num_workers * cfg.merge_factor
-    num_concurrent_rounds = cfg.map_parallelism // 4 * 3
-    merge_tasks_in_flight = []
-    timeout_map_blocks = [[]] * cfg.num_workers
-    merge_results = np.empty(
-        (cfg.num_workers, num_rounds + 1, cfg.num_reducers_per_worker),
-        dtype=object,
-    )
-
-    def submit_merge_tasks(m, get_map_blocks, allow_timeouts=True):
-        ret = []
-        for w in range(cfg.num_workers):
-            map_blocks = get_map_blocks(w)
-            if len(map_blocks) == 0:
-                continue
-            merge_id = constants.merge_part_ids(w, m)
-            refs = merge_blocks_yield.options(
-                **merger_opt, **ray_utils.node_i(cfg, w)
-            ).remote(
-                cfg,
-                merge_id,
-                merge_bounds[w],
-                map_blocks,
-                allow_timeouts=allow_timeouts,
-            )
-            ret.append(refs[0])
-            merge_results[w, m, :] = refs[1:]
-        return ret
-
-    for rnd in range(num_rounds):
-        # Submit a new round of map tasks.
-        num_map_tasks = min(num_map_tasks_per_round, cfg.num_mappers - part_id)
-        map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
-        for _ in range(num_map_tasks):
-            pinfolist = parts[part_id * num_shards : (part_id + 1) * num_shards]
-            opt = dict(**mapper_opt, **get_node_aff(cfg, pinfolist[0], part_id))
-            m = part_id % num_map_tasks_per_round
-            refs = mapper_yield.options(**opt).remote(
-                cfg, part_id, map_bounds, pinfolist
-            )
-            map_results[m, :] = refs
-            part_id += 1
-
-        # Wait for all merge tasks from the previous round to finish.
-        if rnd >= num_concurrent_rounds:
-            tasks = merge_tasks_in_flight.pop(0)
-            timeout_map_blocks = ray.get(tasks)
-            # TODO(@lsf): do something about the timeout map blocks.
-            # For example, launch competing tasks?
-
-        # Submit a new round of merge tasks.
-        merge_tasks = submit_merge_tasks(
-            rnd,
-            lambda w: map_results[:, w].tolist() + timeout_map_blocks[w],
-        )
-        merge_tasks_in_flight.append(merge_tasks)
-
-        # Delete references to map output blocks as soon as possible.
-        del map_results
-
-    # Handle the last few rounds' timeout map blocks.
-    timeout_map_blocks = np.sum(
-        [ray.get(merge_tasks) for merge_tasks in merge_tasks_in_flight], axis=0
-    )
-    submit_merge_tasks(
-        num_rounds, lambda w: timeout_map_blocks[w], allow_timeouts=False
-    )
-
-    return reduce_stage(
-        cfg,
-        merge_results,
-        lambda w: [merge_results[w, :, r] for r in range(cfg.num_reducers_per_worker)],
-    )
-
-
 def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
     num_returns = cfg.num_reducers_per_worker
     bounds, _ = get_boundaries(num_returns)
@@ -643,9 +557,7 @@ def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
 
-    if cfg.sort_optimized:
-        results = sort_optimized(cfg, parts)
-    elif cfg.simple_shuffle:
+    if cfg.simple_shuffle:
         results = sort_simple(cfg, parts)
     elif cfg.riffle:
         results = sort_riffle(cfg, parts)
