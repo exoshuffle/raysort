@@ -13,7 +13,6 @@ from raysort import constants
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
-
 AZURE_STORAGE_URL: str = os.getenv("AZURE_STORAGE_URL", "")
 CONCURRENCY: int = 10
 
