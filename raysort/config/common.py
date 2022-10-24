@@ -145,7 +145,6 @@ class AppConfig:
     simple_shuffle: bool = False
     riffle: bool = False
     magnet: bool = False
-    sort_optimized: bool = False
 
     s3_buckets: List[str] = field(default_factory=list)
     azure_containers: str = ""

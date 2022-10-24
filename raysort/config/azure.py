@@ -42,14 +42,29 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
-            sort_optimized=True,
         ),
     ),
     # ------------------------------------------------------------
     #     L8s_v3 with Azure Storage
     # ------------------------------------------------------------
     JobConfig(
-        # TODO
+        # 600s
+        name="0.4tb-2gb-l8s-as",
+        cluster=dict(
+            instance_count=4,
+            instance_type=l8s_v3,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=400,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+            azure_containers=get_azure_containers(),
+        ),
+    ),
+    JobConfig(
+        # 600s
         name="1tb-2gb-l8s-as",
         cluster=dict(
             instance_count=10,
@@ -61,7 +76,6 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
-            sort_optimized=True,
             azure_containers=get_azure_containers(),
         ),
     ),
