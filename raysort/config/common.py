@@ -158,6 +158,8 @@ class AppConfig:
     sort: bool = False
     validate_output: bool = False
 
+    skewed: bool = False
+
     # Runtime Context
     worker_ips: List[str] = field(default_factory=list)
     worker_ids: List[ray.NodeID] = field(default_factory=list)

@@ -46,6 +46,26 @@ configs = [
         ),
     ),
     # ------------------------------------------------------------
+    #     L8s_v3 Local SSD Skewed
+    # ------------------------------------------------------------
+    JobConfig(
+        # TODO
+        name="1tb-2gb-l8s",
+        cluster=dict(
+            instance_count=10,
+            instance_type=l8s_v3,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            reduce_parallelism_multiplier=1,
+            sort_optimized=True,
+            skewed=True,
+        ),
+    ),
+    # ------------------------------------------------------------
     #     L8s_v3 with Azure Storage
     # ------------------------------------------------------------
     JobConfig(

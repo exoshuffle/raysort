@@ -162,12 +162,12 @@ def _get_part_path(
     return os.path.join(*parts)
 
 
-def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
+def _run_gensort(offset: int, size: int, path: str, buf: bool = False, skewed: bool = False):
     # Add `,buf` to use buffered I/O instead of direct I/O (for tmpfs).
     if buf:
         path += ",buf"
     subprocess.run(
-        f"{constants.GENSORT_PATH} -b{offset} {size} {path}", shell=True, check=True
+        f"{constants.GENSORT_PATH} -b{offset} {'-s' if skewed else ''} {size} {path}", shell=True, check=True
     )
 
 
@@ -187,7 +187,7 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        _run_gensort(offset, size, path, cfg.cloud_storage)
+        _run_gensort(offset, size, path, cfg.cloud_storage, skewed=cfg.skewed)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
