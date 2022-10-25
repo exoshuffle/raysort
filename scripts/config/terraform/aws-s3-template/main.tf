@@ -20,7 +20,7 @@ resource "aws_s3_bucket" "app" {
 
 resource "aws_s3_bucket_lifecycle_configuration" "app" {
   count  = var.bucket_count
-  bucket = aws_s3_bucket.bucket[count.index].id
+  bucket = aws_s3_bucket.app[count.index].id
 
   rule {
     id = "Delete objects after 1 day"
