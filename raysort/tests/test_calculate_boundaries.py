@@ -19,7 +19,7 @@ def test_calculate_boundaries_uniform():
         0,
         16,
         130,
-        240.25,
+        240,
         255,
     ]
 
@@ -29,14 +29,14 @@ def test_calculate_boundaries_skewed():
     samples = [b"\x01" + b"\x00" * 99, b"\x02" + b"\x00" * 99]
     assert sort_utils.calculate_boundaries(samples, 2, bytes_for_bounds=1) == [
         0,
-        1.5,
+        1,
         255,
     ]
     # Ensure that bounds overlap with when number of partitions increases by a multiple
     assert sort_utils.calculate_boundaries(samples, 4, bytes_for_bounds=1) == [
         0,
-        0.75,
-        1.5,
-        65.25,
+        0,
+        1,
+        65,
         255,
     ]

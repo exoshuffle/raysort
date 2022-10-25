@@ -237,7 +237,7 @@ def calculate_boundaries(samples, n, bytes_for_bounds=8):
     # To ensure that the first and last boundaries match the min and max value
     samples.extend([0, 2 ** (bytes_for_bounds * 8) - 1])
     edges = pandas.qcut(samples, n, labels=False, retbins=True)[1]
-    return list(edges)
+    return list(map(int, edges))
 
 
 # ------------------------------------------------------------
