@@ -14,7 +14,7 @@ def test_calculate_boundaries_uniform():
         130,
         255,
     ]
-    # Ensure that bounds overlap with when number of partitions increases by a mu;tiple
+    # Ensure that bounds overlap with when number of partitions increases by a multiple
     assert sort_utils.calculate_boundaries(samples, 4, bytes_for_bounds=1) == [
         0,
         16,
@@ -32,7 +32,7 @@ def test_calculate_boundaries_skewed():
         1.5,
         255,
     ]
-    # Ensure that bounds overlap with when number of partitions increases by a mu;tiple
+    # Ensure that bounds overlap with when number of partitions increases by a multiple
     assert sort_utils.calculate_boundaries(samples, 4, bytes_for_bounds=1) == [
         0,
         0.75,
