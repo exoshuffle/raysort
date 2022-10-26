@@ -54,6 +54,10 @@ def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
     return np.concatenate([load_partition(cfg, pinfo) for pinfo in pinfolist])
 
 
+def load_sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
+    return s3_utils.download_sample(pinfo)
+
+
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:
         size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)

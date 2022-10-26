@@ -68,6 +68,20 @@ def mapper(
         return ret + [None]
 
 
+@ray.remote
+def sampling_mapper(
+    cfg: AppConfig,
+    pinfo: PartInfo,
+) -> List[np.ndarray]:
+    part = sort_utils.load_sample_partition(cfg, pinfo)
+
+    arr = part.reshape((-1, 100))
+    key_bytes = arr[:, :8].flatten()
+    keys = key_bytes.view(np.uint64)
+    print(keys)
+    return keys
+
+
 @ray.remote(num_cpus=0)
 def mapper_yield(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
@@ -270,10 +284,25 @@ def final_merge(
 
 
 def get_boundaries(
-    num_map_returns: int, num_merge_returns: int = -1
+    cfg: AppConfig,
+    parts: List[PartInfo],
+    num_map_returns: int,
+    num_merge_returns: int = -1,
 ) -> Tuple[List[int], List[List[int]]]:
     if num_merge_returns == -1:
         return sortlib.get_boundaries(num_map_returns), []
+    if cfg.use_sampling:
+        keys = np.concatenate(
+            ray.get(
+                [
+                    sampling_mapper.remote(cfg, parts[part_id])
+                    for part_id in range(cfg.num_mappers)
+                ]
+            )
+        )
+        print(keys)
+        print(len(keys))
+        # return sort_utils.calculate_boundaries(keys, len(keys)):
     merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
     merge_bounds = (
         np.array(merge_bounds_flat, dtype=np.uint64)
@@ -533,7 +562,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
 def sort_optimized(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     map_bounds, merge_bounds = get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
+        cfg, parts, cfg.num_workers, cfg.num_reducers_per_worker
     )
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}

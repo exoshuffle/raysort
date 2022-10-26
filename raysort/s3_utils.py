@@ -75,6 +75,13 @@ def download(
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
 
+def download_sample(
+    pinfo: PartInfo,
+) -> np.ndarray:
+    obj = client().get_object(Bucket=pinfo.bucket, Range="bytes=0-9999")
+    return np.frombuffer(obj)
+
+
 def upload_s3_buffer(
     _cfg: AppConfig, data: np.ndarray, pinfo: PartInfo, **kwargs
 ) -> None:
