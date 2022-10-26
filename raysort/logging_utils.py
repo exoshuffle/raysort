@@ -8,3 +8,4 @@ def init():
         level=logging.INFO,
     )
     logging.getLogger("azure").setLevel(logging.WARNING)
+    logging.getLogger("botocore.credentials").setLevel(logging.WARNING)
