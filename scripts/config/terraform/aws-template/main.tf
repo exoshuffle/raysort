@@ -15,9 +15,11 @@ provider "aws" {
 resource "aws_instance" "cluster" {
   count = var.instance_count
 
-  ami           = "ami-07bf3818d912ab0ed" # raysort-worker-20221011
-  instance_type = var.instance_type
-  key_name      = "login-us-west-2"
+  ami                         = "ami-07bf3818d912ab0ed" # raysort-worker-20221011
+  instance_type               = var.instance_type
+  key_name                    = "login-us-west-2"
+  subnet_id                   = "subnet-084e54bf496121333"
+  associate_public_ip_address = true
 
   root_block_device {
     volume_size = var.instance_disk_gb
