@@ -504,6 +504,24 @@ configs = [
         ),
     ),
     JobConfig(
+        # 498-540s
+        name="4tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=20,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=4000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
         # 2901s, https://wandb.ai/raysort/raysort/runs/q0w17xxi
         name="20tb-2gb-i4i-native-s3",
         cluster=dict(
@@ -572,6 +590,24 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # running
+        name="60tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=32,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=60000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
         ),
     ),
     # ------------------------------------------------------------

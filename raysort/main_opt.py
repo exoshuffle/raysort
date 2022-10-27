@@ -352,9 +352,18 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
                 if tasks[w, 0] is None:
                     tasks[w, :] = _submit_merge(w, all_map_out[:, w])
                     num_submitted += 1
+                    # TODO(@lsf) What if we don't wait for this tail?
+                    # These are the stragglers that we have been hunting for.
+                    if num_submitted >= cfg.shuffle_wait_percentile * cfg.num_workers:
+                        logging.info(
+                            "Waited %.1f seconds; %d nodes ready; not ready: %s",
+                            time.time() - start,
+                            num_submitted,
+                            [w for w in range(cfg.num_workers) if tasks[w, 0] is None]
+                        )
             num_waited += len(ready)
         logging.info(
-            "Took %.1f seconds to submit a new merge round; %d merge tasks completed",
+            "Waited %.1f seconds to submit a new merge round; %d merge tasks completed",
             time.time() - start,
             num_waited,
         )
