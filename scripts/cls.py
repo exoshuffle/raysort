@@ -418,7 +418,9 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
             mnt_paths = ["/tmp"]
         system_config.update(
             **{
-                "max_io_workers": max(4, len(mnt_paths) * 2),
+                "max_io_workers": max(
+                    cfg.cluster.instance_type.cpu, len(mnt_paths) * 2
+                ),
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "filesystem",
