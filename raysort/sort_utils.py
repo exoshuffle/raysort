@@ -59,7 +59,7 @@ def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
         return create_partition(size)
     if cfg.s3_buckets:
-        return s3_utils.download(pinfo)
+        return s3_utils.download(pinfo, size=cfg.input_part_size)
     if cfg.azure_containers:
         return azure_utils.download(pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
@@ -179,7 +179,6 @@ def generate_part(
     offset: RecordCount,
 ) -> PartInfo:
     with tracing_utils.timeit("generate_part"):
-        assert size > 0, (cfg, size)
         logging_utils.init()
         if cfg.cloud_storage:
             pinfo = part_info(cfg, part_id, cloud=True)
@@ -218,6 +217,8 @@ def generate_input(cfg: AppConfig):
     for m in range(cfg.num_mappers_per_worker):
         for w in range(cfg.num_workers):
             for i in range(cfg.num_shards_per_mapper):
+                if offset >= total_size:
+                    break
                 part_id = constants.merge_part_ids(w, m, i)
                 tasks.append(
                     generate_part.options(**ray_utils.node_i(cfg, w)).remote(

@@ -9,28 +9,35 @@ import botocore
 import numpy as np
 from boto3.s3 import transfer
 
-from raysort import constants, sort_utils
+from raysort import constants, s3_custom, sort_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
-KiB = 1024
-MiB = KiB * 1024
+CHUNK_SIZE = 10_000_000
 
 
 def client() -> botocore.client.BaseClient:
     return boto3.session.Session().client(
         "s3",
         config=botocore.config.Config(
+            max_pool_connections=100,
+            parameter_validation=False,
             retries={
                 "max_attempts": 10,
                 "mode": "adaptive",
-            }
+            },
         ),
     )
 
 
+def get_transfer_config(**kwargs) -> transfer.TransferConfig:
+    if "multipart_chunksize" not in kwargs:
+        kwargs["multipart_chunksize"] = CHUNK_SIZE
+    return transfer.TransferConfig(**kwargs)
+
+
 def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> None:
-    config = transfer.TransferConfig(**kwargs) if kwargs else None
+    config = get_transfer_config(**kwargs)
     try:
         client().upload_file(src, pinfo.bucket, pinfo.path, Config=config)
     finally:
@@ -63,22 +70,28 @@ def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
     buf: Optional[io.BytesIO] = None,
-    **kwargs
+    size: Optional[int] = None,
+    **kwargs,
 ) -> np.ndarray:
-    config = transfer.TransferConfig(**kwargs) if kwargs else None
+    config = get_transfer_config(**kwargs)
     if filename:
         client().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
         return np.empty(0, dtype=np.uint8)
     if buf is None:
         buf = io.BytesIO()
-    client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
+    if size:
+        s3_custom.download_fileobj(
+            client(), pinfo.bucket, pinfo.path, buf, size, Config=config
+        )
+    else:
+        client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
 
 def upload_s3_buffer(
     _cfg: AppConfig, data: np.ndarray, pinfo: PartInfo, **kwargs
 ) -> None:
-    config = transfer.TransferConfig(**kwargs) if kwargs else None
+    config = get_transfer_config(**kwargs)
     # TODO: avoid copying
     client().upload_fileobj(io.BytesIO(data), pinfo.bucket, pinfo.path, Config=config)
 
