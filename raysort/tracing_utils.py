@@ -232,6 +232,7 @@ class ProgressTracker:
             ret.append(
                 [
                     key,
+                    ss.median(),
                     ss.mean(),
                     ss.std(),
                     ss.max(),
@@ -239,9 +240,11 @@ class ProgressTracker:
                     ss.count(),
                 ]
             )
-        df = pd.DataFrame(ret, columns=["task", "mean", "std", "max", "min", "count"])
+        df = pd.DataFrame(
+            ret, columns=["task", "median", "mean", "std", "max", "min", "count"]
+        ).set_index("task")
         print(self.series.get("output_time"))
-        print(df.set_index("task"))
+        print(df)
         self.job_cfg.app.worker_ids = []
         self.job_cfg.app.worker_ips = []
         self.job_cfg.app.worker_ip_to_id = {}
