@@ -23,7 +23,7 @@ MB = KB * 1000
 GB = MB * 1000
 
 
-def get_s3_buckets(count: int = 1) -> List[str]:
+def get_s3_buckets(count: int = 10) -> List[str]:
     assert S3_BUCKET
     return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
@@ -111,7 +111,7 @@ class AppConfig:
 
     num_concurrent_rounds: int = 2
     merge_factor: int = 2
-    io_parallelism_multiplier: InitVar[float] = 2.0
+    io_parallelism_multiplier: InitVar[float] = 8.0
     map_parallelism_multiplier: InitVar[float] = 0.5
     reduce_parallelism_multiplier: InitVar[float] = 0.5
     io_parallelism: int = field(init=False)
@@ -145,7 +145,6 @@ class AppConfig:
     simple_shuffle: bool = False
     riffle: bool = False
     magnet: bool = False
-    sort_optimized: bool = False
 
     s3_buckets: List[str] = field(default_factory=list)
     azure_containers: str = ""
@@ -185,13 +184,12 @@ class AppConfig:
 
         self.num_workers = cluster.instance_count
         self.num_mappers = int(math.ceil(self.total_data_size / self.input_part_size))
-        assert self.num_mappers % self.num_workers == 0, (
-            self.num_mappers,
-            self.num_workers,
-        )
         self.num_shards = self.num_mappers * self.num_shards_per_mapper
         self.input_shard_size = self.input_part_size // self.num_shards_per_mapper
-        self.num_mappers_per_worker = self.num_mappers // self.num_workers
+
+        self.num_mappers_per_worker = int(
+            math.ceil(self.num_mappers / self.num_workers)
+        )
         if self.riffle:
             assert self.merge_factor % self.map_parallelism == 0, (
                 self.merge_factor,
@@ -211,12 +209,8 @@ class AppConfig:
             math.ceil(self.num_mappers / self.num_workers / self.map_parallelism)
         )
         self.num_mergers_per_worker = self.num_rounds * self.merge_parallelism
-        self.num_reducers = self.num_mappers
-        assert self.num_reducers % self.num_workers == 0, (
-            self.num_reducers,
-            self.num_workers,
-        )
-        self.num_reducers_per_worker = self.num_reducers // self.num_workers
+        self.num_reducers_per_worker = self.num_mappers_per_worker
+        self.num_reducers = self.num_reducers_per_worker * self.num_workers
 
         self.merge_io_parallelism = self.io_parallelism // self.merge_parallelism
         self.reduce_io_parallelism = self.io_parallelism // self.reduce_parallelism

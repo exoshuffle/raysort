@@ -42,7 +42,6 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
-            sort_optimized=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -61,7 +60,6 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
-            sort_optimized=True,
             azure_containers=get_azure_containers(),
         ),
     ),
