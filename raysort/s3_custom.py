@@ -1,12 +1,8 @@
 from boto3.s3.transfer import TransferConfig
 from s3transfer.download import DownloadSubmissionTask
+from s3transfer.futures import TransferCoordinator, TransferFuture, TransferMeta
 from s3transfer.manager import TransferManager
 from s3transfer.utils import CallArgs
-from s3transfer.futures import (
-    TransferCoordinator,
-    TransferFuture,
-    TransferMeta,
-)
 
 
 class MyTransferManager(TransferManager):
