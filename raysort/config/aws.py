@@ -630,13 +630,13 @@ configs = [
         ),
     ),
     # ------------------------------------------------------------
-    #     S3 + i4i.4xl 55 nodes
+    #     S3 + i4i.4xl 50-ish nodes
     # ------------------------------------------------------------
     JobConfig(
-        # TODO(@lsf)
+        # 707s, first run
         name="10tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=55,
+            instance_count=52,
             instance_type=i4i_4xl,
         ),
         system=dict(),
