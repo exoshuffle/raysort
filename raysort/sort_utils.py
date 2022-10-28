@@ -2,7 +2,6 @@ import csv
 import logging
 import os
 import subprocess
-import sys
 import tempfile
 import time
 from typing import Iterable, List, Optional, Tuple
