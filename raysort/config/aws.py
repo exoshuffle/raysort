@@ -504,7 +504,7 @@ configs = [
         ),
     ),
     JobConfig(
-        # 498-540s
+        # 480s, https://wandb.ai/raysort/raysort/runs/1jxnp16r
         name="4tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=20,
@@ -558,24 +558,6 @@ configs = [
         ),
     ),
     JobConfig(
-        # 547s (making progress!)
-        name="6tb-2gb-i4i4x-s3",
-        cluster=dict(
-            instance_count=32,
-            instance_type=i4i_4xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=6000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            map_parallelism_multiplier=1,
-            reduce_parallelism_multiplier=1,
-            merge_factor=1,
-        ),
-    ),
-    JobConfig(
         # TODO: need to get this down to 4000s
         # 4866s, https://wandb.ai/raysort/raysort/runs/3eaxbo33
         name="48tb-2gb-i4i-native-s3",
@@ -593,10 +575,28 @@ configs = [
         ),
     ),
     JobConfig(
+        # 547s (making progress!), 543s
+        name="6tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=32,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=6000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
         # running
         name="60tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=32,
+            instance_count=36,
             instance_type=i4i_4xl,
         ),
         system=dict(),
