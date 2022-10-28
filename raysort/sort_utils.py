@@ -167,7 +167,11 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False) -> str:
     if buf:
         path += ",buf"
     proc = subprocess.run(
-        f"{constants.GENSORT_PATH} -c -b{offset} {size} {path}", shell=True, check=True, stderr=subprocess.PIPE, text=True
+        f"{constants.GENSORT_PATH} -c -b{offset} {size} {path}",
+        shell=True,
+        check=True,
+        stderr=subprocess.PIPE,
+        text=True,
     )
     return proc.stderr
 
@@ -228,7 +232,7 @@ def generate_input(cfg: AppConfig):
                 )
                 offset += size
     logging.info("Generating %d partitions", len(tasks))
-    
+
     tasks = ray.get(tasks)
     parts = [p[0] for p in tasks]
     checksums = [p[1] for p in tasks]
@@ -299,15 +303,25 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
 def compare_checksums(input_checksums: List[str], output_summary: str):
     input_checksum = sum(input_checksums)
     input_checksum = str(hex(input_checksum))[-16:]
-    
+
     output_attributes = output_summary.split("\\n")
-    assert len(output_attributes) == 5, f"Output summary does not match expected format: {output_summary}"
+    assert (
+        len(output_attributes) == 5
+    ), f"Output summary does not match expected format: {output_summary}"
     output_checksum = output_attributes[1]
-    assert "Checksum" in output_checksum, "Output checksum does not match expected format: {output_summary}"
+    assert (
+        "Checksum" in output_checksum
+    ), "Output checksum does not match expected format: {output_summary}"
 
     output_checksum = output_checksum[-16:]
-    status = "[VALIDATED CHECKSUMS]" if input_checksum == output_checksum else "[CHECKSUMS FAILED]"
-    logging.info(f"{status}: Input checksum: {input_checksum}, Output checksum: {output_checksum}")
+    status = (
+        "[VALIDATED CHECKSUMS]"
+        if input_checksum == output_checksum
+        else "[CHECKSUMS FAILED]"
+    )
+    logging.info(
+        f"{status}: Input checksum: {input_checksum}, Output checksum: {output_checksum}"
+    )
 
 
 def validate_output(cfg: AppConfig):
