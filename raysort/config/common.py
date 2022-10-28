@@ -32,7 +32,7 @@ def get_s3_buckets(count: int = 10) -> List[str]:
 
 
 def enable_s3_access_logs(buckets: List[str]) -> None:
-    s3 = boto3.resource('s3')
+    s3 = boto3.resource("s3")
     output_bucket = os.getenv("LOG_BUCKET")
     for bucket in buckets:
         try:
@@ -40,14 +40,16 @@ def enable_s3_access_logs(buckets: List[str]) -> None:
             if not logging.logging_enabled:
                 logging.put(
                     BucketLoggingStatus={
-                        'LoggingEnabled': {
-                            'TargetBucket': f"{output_bucket}",
-                            'TargetPrefix': f'{S3_BUCKET}/'
+                        "LoggingEnabled": {
+                            "TargetBucket": f"{output_bucket}",
+                            "TargetPrefix": f"{S3_BUCKET}/",
                         }
                     }
                 )
         except Exception as e:
-            print(f"Got an error while enabling access logs for {bucket}, {output_bucket}: {e}")
+            print(
+                f"Got an error while enabling access logs for {bucket}, {output_bucket}: {e}"
+            )
 
 
 class Cloud(enum.Enum):

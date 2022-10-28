@@ -8,7 +8,7 @@ import boto3
 import wandb
 
 
-ATHENA_DATE_PATTERN = '%Y-%m-%d:%H:%M:%s'
+ATHENA_DATE_PATTERN = "%Y-%m-%d:%H:%M:%s"
 CLIENT = boto3.client("athena")
 LOG_BUCKET = os.getenv("LOG_BUCKET")
 S3_BUCKET = os.getenv("S3_BUCKET")
@@ -20,17 +20,15 @@ def get_client() -> Any:
 
 def table_name(bucket_name: str) -> str:
     return bucket_name.replace("-", "_")
-    
+
 
 def run_query(query_string) -> str:
     """Returns the ID of an attempted query."""
     client = get_client()
     id = client.start_query_execution(
-        QueryString = query_string,
-        QueryExecutionContext = {
-            'Database': table_name(LOG_BUCKET)
-        },
-        ResultConfiguration = { 'OutputLocation': f's3://{LOG_BUCKET}/athena-output'}
+        QueryString=query_string,
+        QueryExecutionContext={"Database": table_name(LOG_BUCKET)},
+        ResultConfiguration={"OutputLocation": f"s3://{LOG_BUCKET}/athena-output"},
     )
     return id
 
@@ -82,9 +80,9 @@ def get_run_timestamps(wandb_run: str) -> Tuple[datetime, datetime]:
     """Gets the start and end time of a sort from a W&B run id."""
     api = wandb.Api()
     try:
-        run = api.run(f'raysort/raysort/runs/{wandb_run}')
-        start_time = run.summary['_timestamp']
-        end_time = start_time + run.summary['sort']
+        run = api.run(f"raysort/raysort/runs/{wandb_run}")
+        start_time = run.summary["_timestamp"]
+        end_time = start_time + run.summary["sort"]
     except Exception as e:
         print(e)
         return ""
@@ -95,7 +93,7 @@ def get_run_timestamps(wandb_run: str) -> Tuple[datetime, datetime]:
 
 def get_query_costs(wandb_run: str) -> None:
     """Queries Athena for the costs of S3 access logs and prints the location of the output.
-    
+
     May not be accurate until several hours after the run.
     """
     create_table()
@@ -122,8 +120,12 @@ def get_query_costs(wandb_run: str) -> None:
     """
     query = run_query(query_string)
     time.sleep(5)
-    execution = get_client().get_query_execution(QueryExecutionId=query['QueryExecutionId'])
-    print(f"S3 costs are available at {execution['ResultConfiguration']['OutputLocation']}")
+    execution = get_client().get_query_execution(
+        QueryExecutionId=query["QueryExecutionId"]
+    )
+    print(
+        f"S3 costs are available at {execution['ResultConfiguration']['OutputLocation']}"
+    )
 
 
 if __name__ == "__main__":
