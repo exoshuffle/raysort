@@ -243,6 +243,7 @@ class ProgressTracker:
         df = pd.DataFrame(
             ret, columns=["task", "median", "mean", "std", "max", "min", "count"]
         ).set_index("task")
+        pd.set_option("display.max_colwidth", None)
         print(self.series.get("output_time"))
         print(df)
         self.job_cfg.app.worker_ids = []
@@ -269,7 +270,8 @@ class ProgressTracker:
 
     def performance_report(self):
         self.save_trace(save_to_wandb=True)
-        save_prometheus_snapshot()
+        # Disabling for now as this could take a long time.
+        # save_prometheus_snapshot()
         self.report_spilling()
         self.report()
 
