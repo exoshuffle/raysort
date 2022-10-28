@@ -1,6 +1,8 @@
+import collections
 import csv
 import functools
 import logging
+import threading
 import time
 from typing import Iterable, Optional, Union
 
@@ -176,7 +178,46 @@ def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list) -> list[Par
                     cfg, worker_id, r, *merge_parts[r]
                 )
             )
+            # TODO(@lsf) change this to yielding returns.
         return flatten(ray.get(tasks))
+
+
+@ray.remote(num_cpus=0, max_concurrency=2)
+class ReduceController:
+    def __init__(self, cfg: AppConfig, worker_id: int, reduce_args: list) -> None:
+        self.cfg = cfg
+        self.worker_id = worker_id
+        self.reduce_args = reduce_args
+        self.reduce_args_lock = threading.Lock()
+
+    def run(self) -> list:
+        tasks = []
+        reducer_id = 0
+        while True:
+            if reducer_id >= self.cfg.reduce_parallelism:
+                ray_utils.wait(
+                    tasks[: reducer_id - self.cfg.reduce_parallelism + 1], wait_all=True
+                )
+            with self.reduce_args_lock:
+                if reducer_id >= len(self.reduce_args):
+                    break
+                tasks.append(
+                    final_merge.options(
+                        **ray_utils.node_i(self.cfg, self.worker_id)
+                    ).remote(
+                        self.cfg,
+                        self.worker_id,
+                        reducer_id,
+                        *self.reduce_args[reducer_id],
+                    )
+                )
+        return flatten(ray.get(tasks))
+
+    def give_up_task(self) -> tuple:
+        """Give up a reduce task to another worker."""
+        with self.reduce_args_lock:
+            reducer_id = len(self.reduce_args)
+            return self.reduce_args.pop(), reducer_id
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
@@ -241,7 +282,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 
         # Wait for all merge tasks from the previous round to finish.
         if rnd >= num_concurrent_rounds:
-            tasks = merge_tasks_in_flight.pop(0)
+            tasks = merge_tasks_in_flight.pop(0)  # This is O(N)
             timeout_map_blocks = ray.get(tasks)
             # TODO(@lsf): do something about the timeout map blocks.
             # For example, launch competing tasks?
@@ -276,6 +317,37 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     return flatten(ray.get(tasks))
 
 
+class NodeScheduler:
+    def __init__(self, cfg: AppConfig) -> None:
+        self.num_workers = cfg.num_workers
+        self.node_slots = np.zeros(self.num_workers, dtype=np.int8)
+        self.node_usage_counter = np.zeros(self.num_workers, dtype=np.int_)
+        self.tasks_in_flight = {}
+
+    def get_node(self) -> int:
+        ret = np.argmin(self.node_slots)
+        self.node_slots[ret] += 1
+        self.node_usage_counter[ret] += 1
+        return ret
+
+    def limit_concurrency(self, max_concurrency: int) -> None:
+        if len(self.tasks_in_flight) >= max_concurrency * self.num_workers:
+            self._wait_node()
+
+    def _wait_node(self, num_returns: int = 1) -> None:
+        ready, _ = ray.wait(
+            list(self.tasks_in_flight.keys()),
+            num_returns=num_returns,
+            fetch_local=False,
+        )
+        for task in ready:
+            node = self.tasks_in_flight.pop(task)
+            self.node_slots[node] -= 1
+
+    def register_task(self, task: ray.ObjectRef, node: int) -> None:
+        self.tasks_in_flight[task] = node
+
+
 def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     assert cfg.merge_factor == 1, cfg
     map_bounds, merge_bounds = get_boundaries(
@@ -288,33 +360,17 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     num_shards = cfg.num_shards_per_mapper
     wait_batch = 1
     merge_round = 0
-    map_in_flight = {}
     merges_in_flight = {}
     all_merge_out = []
-    node_slots = np.zeros(cfg.num_workers, dtype=np.int8)
-    node_usage_counter = np.zeros(cfg.num_workers, dtype=np.int8)
-
-    def _get_map_node():
-        ret = np.argmin(node_slots)
-        node_slots[ret] += 1
-        node_usage_counter[ret] += 1
-        return ret
-
-    def _wait_map_node(num_returns: int = wait_batch):
-        ready, _ = ray.wait(
-            list(map_in_flight.keys()), num_returns=num_returns, fetch_local=False
-        )
-        for task in ready:
-            node = map_in_flight.pop(task)
-            node_slots[node] -= 1
+    map_scheduler = NodeScheduler(cfg)
 
     def _submit_map(map_id: int):
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
-        node_id = _get_map_node()
+        node_id = map_scheduler.get_node()
         opt = dict(**mapper_opt, **ray_utils.node_i(cfg, node_id))
         refs = mapper_yield.options(**opt).remote(cfg, map_id, map_bounds, pinfolist)
         task = refs[cfg.num_workers]
-        map_in_flight[task] = node_id
+        map_scheduler.register_task(task, node_id)
         return refs[: cfg.num_workers]
 
     def _submit_merge(w: int, map_out: np.ndarray):
@@ -382,11 +438,10 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         all_merge_out.append(tasks[:, 1:])
         merge_round += 1
 
-    # Main loop.
+    # Main map-merge loop.
     all_map_out = []
     for map_id in range(cfg.num_mappers):
-        if len(map_in_flight) >= cfg.map_parallelism * cfg.num_workers:
-            _wait_map_node()
+        map_scheduler.limit_concurrency(cfg.map_parallelism)
         all_map_out.append(_submit_map(map_id))
         if len(all_map_out) >= cfg.merge_factor * cfg.num_workers:
             _merge_map_out(all_map_out)
@@ -394,20 +449,52 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     if all_map_out:
         _merge_map_out(all_map_out)
 
-    merge_results = np.array(all_merge_out)
     # Reduce stage.
-    get_reduce_master_args = lambda w: [
-        merge_results[:, w, r] for r in range(cfg.num_reducers_per_worker)
-    ]
-    tasks = [
-        reduce_master.options(**ray_utils.node_i(cfg, w)).remote(
-            cfg, w, get_reduce_master_args(w)
+    # all_merge_out: (num_merge_rounds, num_workers, num_reducers_per_worker)
+    # transposed: (num_workers, num_reducers_per_worker, num_merge_rounds)
+    transposed = np.transpose(all_merge_out, axes=[1, 2, 0])
+    reduce_queues = [collections.deque(arr) for arr in transposed]
+    del all_merge_out, transposed
+    reduce_index = np.zeros(cfg.num_workers, dtype=np.int_)
+    all_reduce_out = np.empty(
+        (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
+    )
+    completed = [False] * cfg.num_workers
+    reduce_scheduler = NodeScheduler(cfg)
+
+    def _submit_reduce():
+        node_id = reduce_scheduler.get_node()
+        physical_node_id = node_id
+        if len(reduce_queues[node_id]) > 0:
+            reduce_args = reduce_queues[node_id].popleft()
+        else:
+            completed[node_id] = True
+            for candidate_id in range(cfg.num_workers):
+                if len(reduce_queues[candidate_id]) > 0:
+                    reduce_args = reduce_queues[candidate_id].popleft()
+                    node_id = candidate_id
+                    break
+            if node_id == physical_node_id:
+                return
+            logging.info("%d stealing work from %d", physical_node_id, node_id)
+        reducer_id = reduce_index[node_id]
+        reduce_index[node_id] += 1
+        task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
+            cfg, node_id, reducer_id, *reduce_args
         )
-        for w in range(cfg.num_workers)
-    ]
-    ret = flatten(ray.get(tasks))
-    logging.info("Mapper nodes usage: %s", node_usage_counter)
-    return ret
+        reduce_scheduler.register_task(task, physical_node_id)
+        all_reduce_out[node_id][reducer_id] = task
+
+    with tracing_utils.timeit("reduce_stage"):
+        while not all(completed):
+            reduce_scheduler.limit_concurrency(cfg.map_parallelism)
+            _submit_reduce()
+
+    # Return.
+    ret = ray.get(all_reduce_out.flatten().tolist())
+    logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
+    logging.info("Reducer nodes usage: %s", reduce_scheduler.node_usage_counter)
+    return flatten(ret)
 
 
 def sort_main(cfg: AppConfig):
