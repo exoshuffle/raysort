@@ -2,6 +2,7 @@ import csv
 import logging
 import os
 import subprocess
+import sys
 import tempfile
 import time
 from typing import Iterable, List, Optional, Tuple
@@ -162,13 +163,14 @@ def _get_part_path(
     return os.path.join(*parts)
 
 
-def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
+def _run_gensort(offset: int, size: int, path: str, buf: bool = False) -> str:
     # Add `,buf` to use buffered I/O instead of direct I/O (for tmpfs).
     if buf:
         path += ",buf"
-    subprocess.run(
-        f"{constants.GENSORT_PATH} -b{offset} {size} {path}", shell=True, check=True
+    proc = subprocess.run(
+        f"{constants.GENSORT_PATH} -c -b{offset} {size} {path}", shell=True, check=True, stderr=subprocess.PIPE, text=True
     )
+    return proc.stderr
 
 
 @ray.remote
@@ -186,7 +188,7 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        _run_gensort(offset, size, path, cfg.cloud_storage)
+        stderr = _run_gensort(offset, size, path, cfg.cloud_storage)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
@@ -195,8 +197,8 @@ def generate_part(
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
-        logging.info("Generated input %s", pinfo)
-        return pinfo
+        logging.info("Generated input %s, checksum: %s", pinfo, stderr)
+        return pinfo, stderr.strip("\n")
 
 
 @ray.remote
@@ -227,11 +229,15 @@ def generate_input(cfg: AppConfig):
                 )
                 offset += size
     logging.info("Generating %d partitions", len(tasks))
-    parts = ray.get(tasks)
+    
+    tasks = ray.get(tasks)
+    parts = [p[0] for p in tasks]
+    checksums = [p[1] for p in tasks]
+
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
-        for pinfo in parts:
-            writer.writerow(pinfo.to_csv_row())
+        for pinfo, checksum in zip(parts, checksums):
+            writer.writerow(pinfo.to_csv_row() + [checksum])
     if not cfg.cloud_storage:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
@@ -261,6 +267,7 @@ def _run_valsort(argstr: str):
     if proc.returncode != 0:
         logging.critical("\n%s", proc.stderr.decode("ascii"))
         raise RuntimeError(f"Validation failed: {argstr}")
+    return proc.stderr
 
 
 def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
@@ -290,6 +297,20 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     return ret
 
 
+def compare_checksums(input_checksums: List[str], output_summary: str):
+    input_checksum = sum(input_checksums)
+    input_checksum = str(hex(input_checksum))[-16:]
+    
+    output_attributes = output_summary.split("\\n")
+    assert len(output_attributes) == 5, f"Output summary does not match expected format: {output_summary}"
+    output_checksum = output_attributes[1]
+    assert "Checksum" in output_checksum, "Output checksum does not match expected format: {output_summary}"
+
+    output_checksum = output_checksum[-16:]
+    status = "[VALIDATED CHECKSUMS]" if input_checksum == output_checksum else "[CHECKSUMS FAILED]"
+    logging.info(f"{status}: Input checksum: {input_checksum}, Output checksum: {output_checksum}")
+
+
 def validate_output(cfg: AppConfig):
     if cfg.skip_sorting or cfg.skip_output:
         return
@@ -307,8 +328,13 @@ def validate_output(cfg: AppConfig):
     total = sum(sz for sz, _ in results)
     assert total == cfg.total_data_size, total - cfg.total_data_size
     all_checksum = b"".join(chksm for _, chksm in results)
+    with open(get_manifest_file(cfg), "r") as fin:
+        reader = csv.reader(fin)
+        input_checksums = [int(row[-1], 16) for row in reader]
+
     with tempfile.NamedTemporaryFile() as fout:
         fout.write(all_checksum)
         fout.flush()
-        _run_valsort(f"-s {fout.name}")
+        output_summary = _run_valsort(f"-s {fout.name}")
+        compare_checksums(input_checksums, str(output_summary))
     logging.info("All OK!")
