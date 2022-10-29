@@ -74,6 +74,7 @@ class SystemConfig:
     object_spilling_threshold: float = 0.8
     object_manager_max_bytes_in_flight_percent: float = 0.05
     object_manager_max_bytes_in_flight: int = field(init=False)
+    object_manager_num_rpc_threads: int = field(init=False)
     # How much system memory to allocate for the object store.
     object_store_memory_percent: float = 0.6
     object_store_memory_bytes: int = field(init=False)
@@ -84,6 +85,7 @@ class SystemConfig:
     s3_spill: int = 0
 
     def __post_init__(self, cluster: ClusterConfig):
+        self.object_manager_num_rpc_threads = max(8, cluster.instance_count)
         self.object_manager_max_bytes_in_flight = int(
             cluster.instance_type.memory_bytes
             * self.object_manager_max_bytes_in_flight_percent
