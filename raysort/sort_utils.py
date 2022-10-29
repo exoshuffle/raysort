@@ -33,7 +33,7 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None)
+            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None, None)
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
@@ -134,7 +134,7 @@ def part_info(
             bucket = cfg.azure_containers[shard % len(cfg.azure_containers)]
         else:
             raise ValueError("No cloud storage configured")
-        return PartInfo(part_id, None, bucket, path)
+        return PartInfo(part_id, None, bucket, path, None)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
@@ -143,7 +143,7 @@ def part_info(
         if cfg.is_local_cluster
         else ray.util.get_node_ip_address()
     )
-    return PartInfo(part_id, node, None, filepath)
+    return PartInfo(part_id, node, None, filepath, None)
 
 
 def _get_part_path(
