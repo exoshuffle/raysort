@@ -124,7 +124,6 @@ def part_info(
     *,
     kind: str = "input",
     cloud: bool = False,
-    checksum: str = ""
 ) -> PartInfo:
     if cloud:
         shard = hash(str(part_id)) & constants.S3_SHARD_MASK
@@ -135,7 +134,7 @@ def part_info(
             bucket = cfg.azure_containers[shard % len(cfg.azure_containers)]
         else:
             raise ValueError("No cloud storage configured")
-        return PartInfo(part_id, None, bucket, path, checksum)
+        return PartInfo(part_id, None, bucket, path, None)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
@@ -144,7 +143,7 @@ def part_info(
         if cfg.is_local_cluster
         else ray.util.get_node_ip_address()
     )
-    return PartInfo(part_id, node, None, filepath, checksum)
+    return PartInfo(part_id, node, None, filepath, None)
 
 
 def _get_part_path(
@@ -187,11 +186,13 @@ def generate_part(
     with tracing_utils.timeit("generate_part"):
         logging_utils.init()
         if cfg.cloud_storage:
+            pinfo = part_info(cfg, part_id, cloud=True)
             path = os.path.join(constants.TMPFS_PATH, f"{part_id:010x}")
         else:
+            pinfo = part_info(cfg, part_id)
             path = pinfo.path
         checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
-        pinfo = part_info(cfg, part_id, cloud=True, checksum=checksum)
+        pinfo = PartInfo(pinfo.part_id, pinfo.node, pinfo.path, checksum)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
