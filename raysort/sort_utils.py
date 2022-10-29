@@ -173,7 +173,7 @@ def _run_gensort(offset: int, size: int, path: str, buf: bool = False) -> str:
         stderr=subprocess.PIPE,
         text=True,
     )
-    return proc.stderr
+    return proc.stderr.strip()
 
 
 @ray.remote
@@ -191,7 +191,8 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        stderr = _run_gensort(offset, size, path, cfg.cloud_storage)
+        checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
+        pinfo.checksum = checksum
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
@@ -200,8 +201,8 @@ def generate_part(
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
-        logging.info("Generated input %s, checksum: %s", pinfo, stderr)
-        return pinfo, stderr.strip("\n")
+        logging.info("Generated input %s, checksum: %s", pinfo, checksum)
+        return pinfo
 
 
 @ray.remote
@@ -233,14 +234,12 @@ def generate_input(cfg: AppConfig):
                 offset += size
     logging.info("Generating %d partitions", len(tasks))
 
-    tasks = ray.get(tasks)
-    parts = [p[0] for p in tasks]
-    checksums = [p[1] for p in tasks]
+    parts = ray.get(tasks)
 
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
-        for pinfo, checksum in zip(parts, checksums):
-            writer.writerow(pinfo.to_csv_row() + [checksum])
+        for pinfo in parts:
+            writer.writerow(pinfo.to_csv_row())
     if not cfg.cloud_storage:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
@@ -260,12 +259,13 @@ def create_partition(part_size: int) -> np.ndarray:
 # ------------------------------------------------------------
 
 
-def _run_valsort(argstr: str):
+def _run_valsort(argstr: str) -> str:
     proc = subprocess.run(
         f"{constants.VALSORT_PATH} {argstr}",
         check=True,
         shell=True,
         capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         logging.critical("\n%s", proc.stderr.decode("ascii"))
@@ -300,28 +300,21 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     return ret
 
 
-def compare_checksums(input_checksums: List[str], output_summary: str):
+def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
     input_checksum = sum(input_checksums)
     input_checksum = str(hex(input_checksum))[-16:]
+    output_attrs = output_summary.split("\\n")
 
-    output_attributes = output_summary.split("\\n")
+    assert len(output_attrs) == 5, output_summary
     assert (
-        len(output_attributes) == 5
-    ), f"Output summary does not match expected format: {output_summary}"
-    output_checksum = output_attributes[1]
+        "Checksum: " in output_attrs[1] and len(output_attrs[1]) == 26
+    ), output_summary
+    output_checksum = output_attrs[1][-16:]
     assert (
-        "Checksum" in output_checksum
-    ), "Output checksum does not match expected format: {output_summary}"
-
-    output_checksum = output_checksum[-16:]
-    status = (
-        "[VALIDATED CHECKSUMS]"
-        if input_checksum == output_checksum
-        else "[CHECKSUMS FAILED]"
-    )
-    logging.info(
-        f"{status}: Input checksum: {input_checksum}, Output checksum: {output_checksum}"
-    )
+        input_checksum == output_checksum
+    ), f"Mismatched checksums: {input_checksum} {output_checksum}"
+    logging.info(output_attrs[1])
+    return input_checksum == output_checksum
 
 
 def validate_output(cfg: AppConfig):
@@ -349,5 +342,6 @@ def validate_output(cfg: AppConfig):
         fout.write(all_checksum)
         fout.flush()
         output_summary = _run_valsort(f"-s {fout.name}")
-        compare_checksums(input_checksums, str(output_summary))
-    logging.info("All OK!")
+        valid = compare_checksums(input_checksums, output_summary)
+
+    logging.info("All OK!" if valid else "Failed checksum")

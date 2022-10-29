@@ -20,6 +20,7 @@ class PartInfo(NamedTuple):
     node: Optional[str]
     bucket: Optional[str]
     path: Path
+    checksum: Optional[str]
 
     def __repr__(self):
         ret = ""
@@ -31,11 +32,17 @@ class PartInfo(NamedTuple):
         return ret
 
     def to_csv_row(self) -> List[str]:
-        return [f"{self.part_id:010x}", self.node, self.bucket, self.path]
+        return [
+            f"{self.part_id:010x}",
+            self.node,
+            self.bucket,
+            self.path,
+            self.checksum,
+        ]
 
     @classmethod
     def from_csv_row(cls, row: List[str]) -> "PartInfo":
-        return cls(int(row[0], 16), row[1], row[2], row[3])
+        return cls(int(row[0], 16), row[1], row[2], row[3], row[4])
 
 
 class SpillingMode(enum.Enum):
