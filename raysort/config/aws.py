@@ -435,7 +435,7 @@ configs = [
         # TODO
         name="1tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=5,
+            instance_count=10,
             instance_type=i4i_4xl,
         ),
         system=dict(),
@@ -444,7 +444,9 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
             reduce_parallelism_multiplier=1,
+            merge_factor=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -463,7 +465,9 @@ configs = [
             total_gb=2000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
             reduce_parallelism_multiplier=1,
+            merge_factor=1,
         ),
     ),
     JobConfig(
@@ -537,6 +541,24 @@ configs = [
             reduce_parallelism_multiplier=1,
         ),
     ),
+    JobConfig(
+        # running, testing reduce
+        name="12tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=20,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=12000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
+        ),
+    ),
     # ------------------------------------------------------------
     #     S3 + i4i.2xl 60 nodes
     # ------------------------------------------------------------
@@ -578,7 +600,7 @@ configs = [
         # 547s (making progress!), 543s
         name="6tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=32,
+            instance_count=36,
             instance_type=i4i_4xl,
         ),
         system=dict(),
@@ -593,7 +615,7 @@ configs = [
         ),
     ),
     JobConfig(
-        # running
+        # 5748s with a long tail.
         name="60tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=36,
