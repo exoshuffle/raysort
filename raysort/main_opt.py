@@ -317,6 +317,7 @@ class ReduceController:
         self.reduce_idx = 0
         self.reduce_args = reduce_args
         self.reduce_args_lock = threading.Lock()
+        logging_utils.init()
 
     def run(self) -> list:
         tasks = []
