@@ -192,7 +192,7 @@ def generate_part(
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
         checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
-        pinfo = PartInfo(pinfo.part_id, pinfo.node, pinfo.path, checksum)
+        pinfo = PartInfo(pinfo.part_id, pinfo.node, pinfo.bucket, pinfo.path, checksum)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
