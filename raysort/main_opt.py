@@ -1,4 +1,3 @@
-import collections
 import csv
 import functools
 import logging
@@ -123,7 +122,7 @@ def merge_blocks_yield(
 def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
-    reducer_id: PartId,
+    reduce_idx: PartId,
     *parts: list,
 ) -> list[PartInfo]:
     with tracing_utils.timeit("reduce"):
@@ -143,7 +142,7 @@ def final_merge(
                 return ret
             raise RuntimeError(f"{type(part)} {part}")
 
-        part_id = constants.merge_part_ids(worker_id, reducer_id)
+        part_id = constants.merge_part_ids(worker_id, reduce_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
@@ -180,44 +179,6 @@ def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list) -> list[Par
             )
             # TODO(@lsf) change this to yielding returns.
         return flatten(ray.get(tasks))
-
-
-@ray.remote(num_cpus=0, max_concurrency=2)
-class ReduceController:
-    def __init__(self, cfg: AppConfig, worker_id: int, reduce_args: list) -> None:
-        self.cfg = cfg
-        self.worker_id = worker_id
-        self.reduce_args = reduce_args
-        self.reduce_args_lock = threading.Lock()
-
-    def run(self) -> list:
-        tasks = []
-        reducer_id = 0
-        while True:
-            if reducer_id >= self.cfg.reduce_parallelism:
-                ray_utils.wait(
-                    tasks[: reducer_id - self.cfg.reduce_parallelism + 1], wait_all=True
-                )
-            with self.reduce_args_lock:
-                if reducer_id >= len(self.reduce_args):
-                    break
-                tasks.append(
-                    final_merge.options(
-                        **ray_utils.node_i(self.cfg, self.worker_id)
-                    ).remote(
-                        self.cfg,
-                        self.worker_id,
-                        reducer_id,
-                        *self.reduce_args[reducer_id],
-                    )
-                )
-        return flatten(ray.get(tasks))
-
-    def give_up_task(self) -> tuple:
-        """Give up a reduce task to another worker."""
-        with self.reduce_args_lock:
-            reducer_id = len(self.reduce_args)
-            return self.reduce_args.pop(), reducer_id
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
@@ -348,6 +309,48 @@ class NodeScheduler:
         self.tasks_in_flight[task] = node
 
 
+@ray.remote(num_cpus=0, max_concurrency=2)
+class ReduceController:
+    def __init__(self, cfg: AppConfig, node_id: int, reduce_args: list) -> None:
+        self.cfg = cfg
+        self.node_id = node_id
+        self.reduce_idx = 0
+        self.reduce_args = reduce_args
+        self.reduce_args_lock = threading.Lock()
+
+    def run(self) -> list:
+        tasks = []
+        with tracing_utils.timeit("reduce_master"):
+            while True:
+                if self.reduce_idx >= self.cfg.reduce_parallelism:
+                    ray_utils.wait(
+                        tasks[: self.reduce_idx - self.cfg.reduce_parallelism + 1],
+                        wait_all=True,
+                    )
+                with self.reduce_args_lock:
+                    if self.reduce_idx >= len(self.reduce_args):
+                        break
+                    reduce_args = self.reduce_args[self.reduce_idx]
+                tasks.append(
+                    final_merge.options(
+                        **ray_utils.node_i(self.cfg, self.node_id)
+                    ).remote(self.cfg, self.node_id, self.reduce_idx, *reduce_args)
+                )
+                self.reduce_idx += 1
+        return ray.get(tasks) + [None] * (self.cfg.num_reducers_per_worker - len(tasks))
+
+    def donate_task(self) -> tuple:
+        """Donate a reduce task to another worker."""
+        with self.reduce_args_lock:
+            reduce_idx = len(self.reduce_args)
+            logging.info(
+                "%d trying to donate %d %d", self.node_id, self.reduce_idx, reduce_idx
+            )
+            if self.reduce_idx >= reduce_idx:
+                return (None, self.node_id, None)
+            return self.reduce_args.pop(), self.node_id, reduce_idx
+
+
 def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     assert cfg.merge_factor == 1, cfg
     map_bounds, merge_bounds = get_boundaries(
@@ -409,9 +412,8 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
                 if tasks[w, 0] is None:
                     tasks[w, :] = _submit_merge(w, all_map_out[:, w])
                     num_submitted += 1
-                    # TODO(@lsf) What if we don't wait for this tail?
-                    # These are the stragglers that we have been hunting for.
                     if num_submitted >= cfg.shuffle_wait_percentile * cfg.num_workers:
+                        # Give up waiting for the stragglers. Just schedule the remaining tasks.
                         not_ready_nodes = [
                             w for w in range(cfg.num_workers) if tasks[w, 0] is None
                         ]
@@ -451,50 +453,61 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 
     # Reduce stage.
     # all_merge_out: (num_merge_rounds, num_workers, num_reducers_per_worker)
-    # transposed: (num_workers, num_reducers_per_worker, num_merge_rounds)
-    transposed = np.transpose(all_merge_out, axes=[1, 2, 0])
-    reduce_queues = [collections.deque(arr) for arr in transposed]
-    del all_merge_out, transposed
-    reduce_index = np.zeros(cfg.num_workers, dtype=np.int_)
-    all_reduce_out = np.empty(
-        (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
-    )
-    completed = [False] * cfg.num_workers
-    reduce_scheduler = NodeScheduler(cfg)
+    # merge_results: (num_workers, num_reducers_per_worker, num_merge_rounds)
+    merge_results = np.transpose(all_merge_out, axes=[1, 2, 0]).tolist()
+    del all_merge_out
 
-    def _submit_reduce():
-        node_id = reduce_scheduler.get_node()
-        physical_node_id = node_id
-        if len(reduce_queues[node_id]) > 0:
-            reduce_args = reduce_queues[node_id].popleft()
-        else:
-            completed[node_id] = True
-            for candidate_id in range(cfg.num_workers):
-                if len(reduce_queues[candidate_id]) > 0:
-                    reduce_args = reduce_queues[candidate_id].popleft()
-                    node_id = candidate_id
-                    break
-            if node_id == physical_node_id:
-                return
-            logging.info("%d stealing work from %d", physical_node_id, node_id)
-        reducer_id = reduce_index[node_id]
-        reduce_index[node_id] += 1
-        task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
-            cfg, node_id, reducer_id, *reduce_args
+    reduce_controllers = [
+        ReduceController.options(**ray_utils.node_i(cfg, w)).remote(
+            cfg, w, merge_results[w]
         )
-        reduce_scheduler.register_task(task, physical_node_id)
-        all_reduce_out[node_id][reducer_id] = task
+        for w in range(cfg.num_workers)
+    ]
+    tasks_in_flight = {
+        controller.run.remote(): (w, controller)
+        for w, controller in enumerate(reduce_controllers)
+    }
+    controller_tasks = list(tasks_in_flight.keys())
+    stolen_tasks = []
+    stolen_tasks_info = []
 
-    with tracing_utils.timeit("reduce_stage"):
-        while not all(completed):
-            reduce_scheduler.limit_concurrency(cfg.map_parallelism)
-            _submit_reduce()
+    def _steal_task(physical_node_id: int):
+        donating_controller = np.random.choice(reduce_controllers)
+        reduce_args, node_id, reduce_idx = ray.get(
+            donating_controller.donate_task.remote()
+        )
+        if reduce_args is None:
+            logging.info("No tasks to steal from %d", node_id)
+            return
+        task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
+            cfg, node_id, reduce_idx, *reduce_args
+        )
+        logging.info("%d steals task %d from %d", physical_node_id, reduce_idx, node_id)
+        stolen_tasks.append(task)
+        stolen_tasks_info.append((node_id, reduce_idx))
+        tasks_in_flight[task] = (physical_node_id, None)
 
-    # Return.
-    ret = ray.get(all_reduce_out.flatten().tolist())
+    while tasks_in_flight:
+        ready, _ = ray.wait(list(tasks_in_flight.keys()))
+        task = ready[0]
+        physical_node_id, controller = tasks_in_flight.pop(task)
+        if controller:
+            reduce_controllers.remove(controller)
+            if len(reduce_controllers) == 0:
+                break
+            for _ in range(cfg.reduce_parallelism):
+                _steal_task(physical_node_id)
+        else:
+            _steal_task(physical_node_id)
+
+    # Gather results.
+    ret = ray.get(controller_tasks)
+    stolen_task_results = ray.get(stolen_tasks)
+    for (node_id, reduce_idx), result in zip(stolen_tasks_info, stolen_task_results):
+        assert ret[node_id][reduce_idx] is None, (ret, node_id, reduce_idx)
+        ret[node_id][reduce_idx] = result
     logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
-    logging.info("Reducer nodes usage: %s", reduce_scheduler.node_usage_counter)
-    return flatten(ret)
+    return flatten(flatten(ret))
 
 
 def sort_main(cfg: AppConfig):
