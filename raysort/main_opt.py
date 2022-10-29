@@ -338,7 +338,7 @@ class ReduceController:
                     ).remote(self.cfg, self.node_id, self.reduce_idx, *reduce_args)
                 )
                 self.reduce_idx += 1
-        return ray.get(tasks) + [None] * (self.cfg.num_reducers_per_worker - len(tasks))
+            return ray.get(tasks) + [None] * (self.cfg.num_reducers_per_worker - len(tasks))
 
     def donate_task(self) -> tuple:
         """Donate a reduce task to another worker."""
@@ -478,7 +478,7 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
             donating_controller.donate_task.remote()
         )
         if reduce_args is None:
-            logging.info("No tasks to steal from %d", node_id)
+            logging.info("%d: Nothing to steal from %d", physical_node_id, node_id)
             return
         task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
             cfg, node_id, reduce_idx, *reduce_args

@@ -381,7 +381,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
         "memory_usage_threshold_fraction": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
         "object_manager_max_bytes_in_flight": cfg.system.object_manager_max_bytes_in_flight,
-        "object_manager_num_rpc_threads": cfg.system.object_manager_num_rpc_threads,
+        # "object_manager_num_rpc_threads": cfg.system.object_manager_num_rpc_threads,
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
         "verbose_spill_logs": 0,
     }
