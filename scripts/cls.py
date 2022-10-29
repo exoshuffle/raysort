@@ -377,8 +377,11 @@ def json_dump_no_space(data) -> str:
 
 def get_ray_start_cmd() -> Tuple[str, Dict]:
     system_config = {
+        "local_fs_capacity_threshold": 0.999,
         "memory_usage_threshold_fraction": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
+        "object_manager_max_bytes_in_flight": cfg.system.object_manager_max_bytes_in_flight,
+        # "object_manager_num_rpc_threads": cfg.cluster.instance_count,  # TODO: test this with https://github.com/ray-project/ray/pull/29834 build
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
         "verbose_spill_logs": 0,
     }
