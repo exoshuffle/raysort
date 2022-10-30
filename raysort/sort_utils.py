@@ -305,7 +305,8 @@ def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
     input_checksum = str(hex(input_checksum))[2:][-16:]
 
     assert "Checksum: " in output_summary, output_summary
-    output_checksum = output_summary.split("Checksum: ")[1][:16]
+    checksum_line = output_summary.split("Checksum: ")[1][:16]
+    output_checksum = checksum_line.split()[0]
     assert (
         input_checksum == output_checksum
     ), f"Mismatched checksums: {input_checksum} {output_checksum}"
