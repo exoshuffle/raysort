@@ -54,6 +54,7 @@ def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
         pass
     return np.concatenate([load_partition(cfg, pinfo) for pinfo in pinfolist])
 
+
 def load_sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.azure_containers:
         return azure_utils.download_sample(cfg, pinfo)
@@ -61,6 +62,7 @@ def load_sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         return s3_utils.download_sample(cfg, pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
         return np.fromfile(fin, dtype=np.uint8)
+
 
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     if cfg.skip_input:

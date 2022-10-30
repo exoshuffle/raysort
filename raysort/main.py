@@ -67,6 +67,7 @@ def mapper(
         # Return an extra object for tracking task progress.
         return ret + [None]
 
+
 @ray.remote
 def sampling_mapper(
     cfg: AppConfig,
@@ -77,6 +78,7 @@ def sampling_mapper(
     key_bytes = arr[:, :8].flatten()
     keys = key_bytes.view(np.uint64)
     return keys
+
 
 @ray.remote(num_cpus=0)
 def mapper_yield(
@@ -278,6 +280,7 @@ def final_merge(
         merger = merge_fn(M, get_block)
         return sort_utils.save_partition(cfg, pinfo, merger)
 
+
 def get_boundaries_by_sampling(cfg: AppConfig, parts: List[PartInfo], partitions: int):
     keys = np.concatenate(
         ray.get(
@@ -288,6 +291,7 @@ def get_boundaries_by_sampling(cfg: AppConfig, parts: List[PartInfo], partitions
         )
     )
     return sort_utils.calculate_boundaries(keys, partitions)
+
 
 def get_boundaries(
     cfg: AppConfig,
