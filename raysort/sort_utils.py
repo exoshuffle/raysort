@@ -302,7 +302,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
 
 def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
     input_checksum = sum(input_checksums)
-    input_checksum = str(hex(input_checksum))[-16:]
+    input_checksum = str(hex(input_checksum))[2:][-16:]
 
     assert "Checksum: " in output_summary, output_summary
     output_checksum = output_summary.split("Checksum: ")[1][:16]
