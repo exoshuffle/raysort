@@ -7,7 +7,12 @@ import time
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
+import pandas
 import ray
+
+from raysort.config.common import (
+    AZURE_CONTAINER,
+)
 
 from raysort import (
     azure_utils,
@@ -55,7 +60,12 @@ def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
 
 
 def load_sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
-    return s3_utils.download_sample(pinfo)
+    if cfg.azure_containers:
+        return azure_utils.download_sample(cfg, pinfo)
+    if cfg.s3_buckets:
+        return s3_utils.download_sample(cfg, pinfo)
+    with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
+        return np.fromfile(fin, dtype=np.uint8)
 
 
 def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:

@@ -63,6 +63,7 @@ configs = [
             reduce_parallelism_multiplier=1,
             sort_optimized=True,
             azure_containers=get_azure_containers(),
+            use_sampling=True,
         ),
     ),
 ]

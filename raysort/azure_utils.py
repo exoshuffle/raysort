@@ -59,6 +59,16 @@ def download(pinfo: PartInfo, filename: Optional[Path] = None) -> np.ndarray:
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
 
+def download_sample(
+    cfg: AppConfig,
+    pinfo: PartInfo,
+) -> np.ndarray:
+    blob_client = get_blob_client(pinfo.bucket, pinfo.path)
+    stream = blob_client.download_blob(offset=0, length=cfg.sample_size)
+    buf = stream.readall()
+    return np.array(np.frombuffer(buf, dtype=np.uint8))
+
+
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
 ) -> List[PartInfo]:

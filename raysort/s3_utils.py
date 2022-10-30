@@ -63,7 +63,7 @@ def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
     buf: Optional[io.BytesIO] = None,
-    **kwargs
+    **kwargs,
 ) -> np.ndarray:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if filename:
@@ -76,9 +76,12 @@ def download(
 
 
 def download_sample(
+    cfg: AppConfig,
     pinfo: PartInfo,
 ) -> np.ndarray:
-    obj = client().get_object(Bucket=pinfo.bucket, Range="bytes=0-9999")
+    obj = client().get_object(
+        Bucket=pinfo.bucket, Key=pinfo.path, Range=f"bytes=0-{cfg.sample_size}"
+    )
     return np.frombuffer(obj)
 
 

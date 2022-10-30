@@ -74,11 +74,9 @@ def sampling_mapper(
     pinfo: PartInfo,
 ) -> List[np.ndarray]:
     part = sort_utils.load_sample_partition(cfg, pinfo)
-
     arr = part.reshape((-1, 100))
     key_bytes = arr[:, :8].flatten()
     keys = key_bytes.view(np.uint64)
-    print(keys)
     return keys
 
 
@@ -283,6 +281,18 @@ def final_merge(
         return sort_utils.save_partition(cfg, pinfo, merger)
 
 
+def get_boundaries_by_sampling(cfg: AppConfig, parts: List[PartInfo], partitions: int):
+    keys = np.concatenate(
+        ray.get(
+            [
+                sampling_mapper.remote(cfg, parts[part_id])
+                for part_id in range(cfg.num_mappers)
+            ]
+        )
+    )
+    return sort_utils.calculate_boundaries(keys, partitions)
+
+
 def get_boundaries(
     cfg: AppConfig,
     parts: List[PartInfo],
@@ -290,20 +300,18 @@ def get_boundaries(
     num_merge_returns: int = -1,
 ) -> Tuple[List[int], List[List[int]]]:
     if num_merge_returns == -1:
-        return sortlib.get_boundaries(num_map_returns), []
+        if cfg.use_sampling:
+            return get_boundaries_by_sampling(cfg, parts)
+        else:
+            return sortlib.get_boundaries(num_map_returns), []
     if cfg.use_sampling:
-        keys = np.concatenate(
-            ray.get(
-                [
-                    sampling_mapper.remote(cfg, parts[part_id])
-                    for part_id in range(cfg.num_mappers)
-                ]
+        with tracing_utils.timeit("sampling"):
+            merge_bounds_flat = get_boundaries_by_sampling(
+                cfg, parts, num_map_returns * num_merge_returns
             )
-        )
-        print(keys)
-        print(len(keys))
-        # return sort_utils.calculate_boundaries(keys, len(keys)):
-    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
+    else:
+        merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
+    merge_bounds_flat.pop()
     merge_bounds = (
         np.array(merge_bounds_flat, dtype=np.uint64)
         .reshape(num_map_returns, num_merge_returns)

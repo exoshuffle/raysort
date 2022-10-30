@@ -178,7 +178,7 @@ def get_ssh_key() -> str:
     if cfg.cluster.instance_type.cloud == config.Cloud.AWS:
         return "/home/ubuntu/.aws/login-us-west-2.pem"
     if cfg.cluster.instance_type.cloud == config.Cloud.AZURE:
-        return "/home/azureuser/.ssh/lsf-azure-aa.pem"
+        return "/home/azureuser/.ssh/Tony_key.pem"
     return ""
 
 
