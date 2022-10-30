@@ -310,7 +310,6 @@ def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
         input_checksum == output_checksum
     ), f"Mismatched checksums: {input_checksum} {output_checksum}"
     logging.info(output_summary)
-    return input_checksum == output_checksum
 
 
 def validate_output(cfg: AppConfig):
@@ -338,6 +337,6 @@ def validate_output(cfg: AppConfig):
         fout.write(all_checksum)
         fout.flush()
         output_summary = _run_valsort(f"-s {fout.name}")
-        valid = compare_checksums(input_checksums, output_summary)
+        compare_checksums(input_checksums, output_summary)
 
-    logging.info("All OK!" if valid else "Failed checksum")
+    logging.info("All OK!")
