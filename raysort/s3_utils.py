@@ -63,7 +63,7 @@ def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
     buf: Optional[io.BytesIO] = None,
-    **kwargs
+    **kwargs,
 ) -> np.ndarray:
     config = transfer.TransferConfig(**kwargs) if kwargs else None
     if filename:
@@ -73,6 +73,16 @@ def download(
         buf = io.BytesIO()
     client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
+
+
+def download_sample(
+    cfg: AppConfig,
+    pinfo: PartInfo,
+) -> np.ndarray:
+    obj = client().get_object(
+        Bucket=pinfo.bucket, Key=pinfo.path, Range=f"bytes=0-{cfg.sample_size}"
+    )
+    return np.frombuffer(obj)
 
 
 def upload_s3_buffer(
