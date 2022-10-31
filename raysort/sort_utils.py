@@ -33,7 +33,7 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None)
+            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None, None)
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
@@ -134,7 +134,7 @@ def part_info(
             bucket = cfg.azure_containers[shard % len(cfg.azure_containers)]
         else:
             raise ValueError("No cloud storage configured")
-        return PartInfo(part_id, None, bucket, path)
+        return PartInfo(part_id, None, bucket, path, None)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
@@ -143,7 +143,7 @@ def part_info(
         if cfg.is_local_cluster
         else ray.util.get_node_ip_address()
     )
-    return PartInfo(part_id, node, None, filepath)
+    return PartInfo(part_id, node, None, filepath, None)
 
 
 def _get_part_path(
@@ -162,13 +162,18 @@ def _get_part_path(
     return os.path.join(*parts)
 
 
-def _run_gensort(offset: int, size: int, path: str, buf: bool = False):
+def _run_gensort(offset: int, size: int, path: str, buf: bool = False) -> str:
     # Add `,buf` to use buffered I/O instead of direct I/O (for tmpfs).
     if buf:
         path += ",buf"
-    subprocess.run(
-        f"{constants.GENSORT_PATH} -b{offset} {size} {path}", shell=True, check=True
+    proc = subprocess.run(
+        f"{constants.GENSORT_PATH} -c -b{offset} {size} {path}",
+        shell=True,
+        check=True,
+        stderr=subprocess.PIPE,
+        text=True,
     )
+    return proc.stderr.strip()
 
 
 @ray.remote
@@ -186,7 +191,8 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        _run_gensort(offset, size, path, cfg.cloud_storage)
+        checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
+        pinfo = PartInfo(pinfo.part_id, pinfo.node, pinfo.bucket, pinfo.path, checksum)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
@@ -195,7 +201,7 @@ def generate_part(
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
-        logging.info("Generated input %s", pinfo)
+        logging.info("Generated input %s, checksum: %s", pinfo, checksum)
         return pinfo
 
 
@@ -227,7 +233,9 @@ def generate_input(cfg: AppConfig):
                 )
                 offset += size
     logging.info("Generating %d partitions", len(tasks))
+
     parts = ray.get(tasks)
+
     with open(get_manifest_file(cfg), "w") as fout:
         writer = csv.writer(fout)
         for pinfo in parts:
@@ -251,16 +259,18 @@ def create_partition(part_size: int) -> np.ndarray:
 # ------------------------------------------------------------
 
 
-def _run_valsort(argstr: str):
+def _run_valsort(argstr: str) -> str:
     proc = subprocess.run(
         f"{constants.VALSORT_PATH} {argstr}",
         check=True,
         shell=True,
         capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         logging.critical("\n%s", proc.stderr.decode("ascii"))
         raise RuntimeError(f"Validation failed: {argstr}")
+    return proc.stderr
 
 
 def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
@@ -290,6 +300,19 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     return ret
 
 
+def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
+    input_checksum = sum(input_checksums)
+    input_checksum = str(hex(input_checksum))[2:][-16:]
+
+    assert "Checksum: " in output_summary, output_summary
+    checksum_line = output_summary.split("Checksum: ")[1][:16]
+    output_checksum = checksum_line.split()[0]
+    assert (
+        input_checksum == output_checksum
+    ), f"Mismatched checksums: {input_checksum} {output_checksum}"
+    logging.info(output_summary)
+
+
 def validate_output(cfg: AppConfig):
     if cfg.skip_sorting or cfg.skip_output:
         return
@@ -307,8 +330,14 @@ def validate_output(cfg: AppConfig):
     total = sum(sz for sz, _ in results)
     assert total == cfg.total_data_size, total - cfg.total_data_size
     all_checksum = b"".join(chksm for _, chksm in results)
+    with open(get_manifest_file(cfg), "r") as fin:
+        reader = csv.reader(fin)
+        input_checksums = [int(row[-1], 16) for row in reader]
+
     with tempfile.NamedTemporaryFile() as fout:
         fout.write(all_checksum)
         fout.flush()
-        _run_valsort(f"-s {fout.name}")
+        output_summary = _run_valsort(f"-s {fout.name}")
+        compare_checksums(input_checksums, output_summary)
+
     logging.info("All OK!")
