@@ -338,15 +338,15 @@ class ReduceController:
                     ).remote(self.cfg, self.node_id, self.reduce_idx, *reduce_args)
                 )
                 self.reduce_idx += 1
-            return ray.get(tasks) + [None] * (self.cfg.num_reducers_per_worker - len(tasks))
+            logging.info("%d submitted %d reduce tasks", self.node_id, self.reduce_idx)
+            return ray.get(tasks) + [None] * (
+                self.cfg.num_reducers_per_worker - len(tasks)
+            )
 
     def donate_task(self) -> tuple:
         """Donate a reduce task to another worker."""
         with self.reduce_args_lock:
-            reduce_idx = len(self.reduce_args)
-            logging.info(
-                "%d trying to donate %d %d", self.node_id, self.reduce_idx, reduce_idx
-            )
+            reduce_idx = len(self.reduce_args) - 1
             if self.reduce_idx >= reduce_idx:
                 return (None, self.node_id, None)
             return self.reduce_args.pop(), self.node_id, reduce_idx
@@ -419,9 +419,8 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
                             w for w in range(cfg.num_workers) if tasks[w, 0] is None
                         ]
                         logging.info(
-                            "Waited %.1f seconds; %d nodes ready; not ready: %s; %d merge tasks completed",
+                            "Waited %.1f seconds; nodes not ready: %s; %d merge tasks completed",
                             time.time() - start,
-                            num_submitted,
                             not_ready_nodes,
                             num_waited,
                         )
@@ -478,11 +477,11 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
             donating_controller.donate_task.remote()
         )
         if reduce_args is None:
-            logging.info("%d: Nothing to steal from %d", physical_node_id, node_id)
             return
         task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
             cfg, node_id, reduce_idx, *reduce_args
         )
+        # TODO(@lsf) not stealing aggressively enough.
         logging.info("%d steals task %d from %d", physical_node_id, reduce_idx, node_id)
         stolen_tasks.append(task)
         stolen_tasks_info.append((node_id, reduce_idx))
@@ -505,7 +504,7 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     ret = ray.get(controller_tasks)
     stolen_task_results = ray.get(stolen_tasks)
     for (node_id, reduce_idx), result in zip(stolen_tasks_info, stolen_task_results):
-        assert ret[node_id][reduce_idx] is None, (ret, node_id, reduce_idx)
+        assert ret[node_id][reduce_idx] is None, (node_id, reduce_idx)
         ret[node_id][reduce_idx] = result
     logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
     return flatten(flatten(ret))
