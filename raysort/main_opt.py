@@ -1,3 +1,4 @@
+import collections
 import csv
 import functools
 import logging
@@ -63,30 +64,10 @@ def _merge_blocks_prep(
     cfg: AppConfig,
     bounds: list[int],
     blocks: tuple[ray.ObjectRef],
-    allow_timeouts: bool,
 ) -> tuple[Iterable[np.ndarray], list[ray.ObjectRef]]:
     refs = list(blocks)
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
-        if allow_timeouts:
-            start = time.time()
-            ready, not_ready = ray.wait(
-                refs,
-                num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
-            )
-            # print("shuffle first half wait", len(ready), time.time() - start)
-            start = time.time()
-            late, timeout_refs = ray.wait(
-                not_ready,
-                num_returns=len(not_ready),
-                timeout=cfg.shuffle_wait_timeout,
-            )
-            refs = ready + late
-            # print("shuffle second half wait", len(refs), time.time() - start)
-            if timeout_refs:
-                logging.info(
-                    f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}"
-                )
         blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
@@ -107,9 +88,8 @@ def merge_blocks_yield(
     _merge_id: PartId,
     bounds: list[int],
     blocks: tuple[np.ndarray],
-    allow_timeouts: bool = False,
 ) -> Union[list[ray.ObjectRef], Iterable[PartInfo], Iterable[np.ndarray]]:
-    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
     yield timeouts
     with tracing_utils.timeit("merge"):
         for datachunk in merger:
@@ -202,7 +182,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         dtype=object,
     )
 
-    def submit_merge_tasks(m, get_map_blocks, allow_timeouts=True):
+    def submit_merge_tasks(m, get_map_blocks):
         nonlocal last_merge_submit_time
         ret = []
         for w in range(cfg.num_workers):
@@ -217,7 +197,6 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
                 merge_id,
                 merge_bounds[w],
                 map_blocks,
-                allow_timeouts=allow_timeouts,
             )
             ret.append(refs[0])
             merge_results[w, m, :] = refs[1:]
@@ -261,9 +240,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     # Handle the last few rounds' timeout map blocks.
     merge_task_returns = [ray.get(tasks) for tasks in merge_tasks_in_flight]
     timeout_map_blocks = [sum(reflists, []) for reflists in zip(*merge_task_returns)]
-    submit_merge_tasks(
-        num_rounds, lambda w: timeout_map_blocks[w], allow_timeouts=False
-    )
+    submit_merge_tasks(num_rounds, lambda w: timeout_map_blocks[w])
 
     # Reduce stage.
     get_reduce_master_args = lambda w: [
@@ -318,6 +295,9 @@ class ReduceController:
         self.reduce_args = reduce_args
         self.reduce_args_lock = threading.Lock()
         logging_utils.init()
+        logging.info(
+            "ReduceController %d started with %d tasks", node_id, len(reduce_args)
+        )
 
     def run(self) -> list:
         tasks = []
@@ -365,8 +345,10 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     wait_batch = 1
     merge_round = 0
     merges_in_flight = {}
+    node_to_merges = collections.defaultdict(set)
     all_merge_out = []
     map_scheduler = NodeScheduler(cfg)
+    merge_stragglers_count = np.zeros(cfg.num_workers, dtype=np.int_)
 
     def _submit_map(map_id: int):
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
@@ -385,9 +367,10 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
             constants.merge_part_ids(w, merge_round),
             merge_bounds[w],
             map_out,
-            allow_timeouts=False,
         )
-        merges_in_flight[refs[0]] = w
+        task = refs[0]
+        merges_in_flight[task] = w
+        node_to_merges[w].add(task)
         return refs
 
     def _submit_merge_round(all_map_out):
@@ -410,23 +393,41 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
             num_waited += len(ready)
             for task in ready:
                 w = merges_in_flight.pop(task)
-                if tasks[w, 0] is None:
-                    tasks[w, :] = _submit_merge(w, all_map_out[:, w])
-                    num_submitted += 1
-                    if num_submitted >= cfg.shuffle_wait_percentile * cfg.num_workers:
-                        # Give up waiting for the stragglers. Just schedule the remaining tasks.
-                        not_ready_nodes = [
-                            w for w in range(cfg.num_workers) if tasks[w, 0] is None
-                        ]
-                        logging.info(
-                            "Waited %.1f seconds; nodes not ready: %s; %d merge tasks completed",
-                            time.time() - start,
-                            not_ready_nodes,
-                            num_waited,
-                        )
-                        for w in not_ready_nodes:
-                            tasks[w, :] = _submit_merge(w, all_map_out[:, w])
-                            num_submitted += 1
+                node_to_merges[w].remove(task)
+                if tasks[w, 0] is not None:
+                    continue
+                tasks[w, :] = _submit_merge(w, all_map_out[:, w])
+                num_submitted += 1
+                if num_submitted >= cfg.shuffle_wait_percentile * cfg.num_workers:
+                    # Give up waiting for the stragglers. Just schedule the remaining tasks.
+                    not_ready_nodes = [
+                        w for w in range(cfg.num_workers) if tasks[w, 0] is None
+                    ]
+                    for w in not_ready_nodes:
+                        merge_stragglers_count[w] += 1
+                    logging.info(
+                        "Waited %.1f seconds; %d/%d merge tasks completed %s",
+                        time.time() - start,
+                        num_waited,
+                        num_submitted,
+                        merge_stragglers_count,
+                    )
+                    for w in not_ready_nodes:
+                        if len(node_to_merges[w]) > (
+                            cfg.merge_parallelism / cfg.shuffle_wait_percentile
+                        ):
+                            hard_wait_start = time.time()
+                            ray.wait(
+                                list(node_to_merges[w]),
+                                fetch_local=False,
+                            )
+                            logging.info(
+                                "Hard-waited %.1f seconds for %d to complete a merge",
+                                time.time() - hard_wait_start,
+                                w,
+                            )
+                        tasks[w, :] = _submit_merge(w, all_map_out[:, w])
+                        num_submitted += 1
         return tasks
 
     def _merge_map_out(all_map_out):
@@ -463,6 +464,7 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         )
         for w in range(cfg.num_workers)
     ]
+    del merge_results
     tasks_in_flight = {
         controller.run.remote(): (w, controller)
         for w, controller in enumerate(reduce_controllers)
