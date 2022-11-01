@@ -395,20 +395,19 @@ configs = [
     #     S3 + larger i4i nodes
     # ------------------------------------------------------------
     JobConfig(
-        name="2tb-2gb-i4i4x-s3",
+        # 691s, https://wandb.ai/raysort/raysort/runs/jd7mynet
+        name="6tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=10,
+            instance_count=30,
             instance_type=i4i_4xl,
         ),
         system=dict(),
         app=dict(
             **get_steps(),
-            total_gb=2000,
+            total_gb=6000,
             input_part_gb=2,
-            num_shards_per_mapper=4,
             s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
-            use_yield=True,
         ),
     ),
     # ------------------------------------------------------------
@@ -427,8 +426,25 @@ configs = [
             total_gb=1000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
             reduce_parallelism_multiplier=1,
-            use_yield=True,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        # TODO
+        name="1tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=5,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=1000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            reduce_parallelism_multiplier=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -446,9 +462,26 @@ configs = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(2),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
-            use_yield=True,
+        ),
+    ),
+    JobConfig(
+        # 459s
+        name="2tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=2000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -466,9 +499,8 @@ configs = [
             **get_steps(),
             total_gb=4000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(4),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
-            use_yield=True,
         ),
     ),
     JobConfig(
@@ -483,9 +515,63 @@ configs = [
             **get_steps(),
             total_gb=20000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(4),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
-            use_yield=True,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.2xl 60 nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # TODO: need to get this down to 500s?
+        # 575s, https://wandb.ai/raysort/raysort/runs/hfif924k
+        name="6tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=60,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=6000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            reduce_parallelism_multiplier=1,
+        ),
+    ),
+    JobConfig(
+        # 547s (making progress!)
+        name="6tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=32,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=6000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        # TODO: need to get this down to 4000s
+        # 4866s, https://wandb.ai/raysort/raysort/runs/3eaxbo33
+        name="48tb-2gb-i4i-native-s3",
+        cluster=dict(
+            instance_count=60,
+            instance_type=i4i_2xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=48000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            reduce_parallelism_multiplier=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -504,7 +590,7 @@ configs = [
             **get_steps(),
             total_gb=10000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(10),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
             use_yield=True,
         ),
@@ -523,7 +609,7 @@ configs = [
             **get_steps(),
             total_gb=50000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(10),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
         ),
     ),
@@ -539,8 +625,29 @@ configs = [
             **get_steps(),
             total_gb=100000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(10),
+            s3_buckets=get_s3_buckets(),
             reduce_parallelism_multiplier=1,
+        ),
+    ),
+    # ------------------------------------------------------------
+    #     S3 + i4i.4xl 50-ish nodes
+    # ------------------------------------------------------------
+    JobConfig(
+        # 707s, first run
+        name="10tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=52,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=10000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            merge_factor=1,
         ),
     ),
     # ------------------------------------------------------------
@@ -618,7 +725,7 @@ configs = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(10),
+            s3_buckets=get_s3_buckets(),
             io_parallelism_multiplier=4,
         ),
     ),

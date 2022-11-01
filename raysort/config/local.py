@@ -206,7 +206,7 @@ configs = [
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(1),
         ),
     ),
     JobConfig(
@@ -215,7 +215,7 @@ configs = [
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(1),
             num_shards_per_mapper=2,
         ),
     ),
@@ -227,7 +227,7 @@ configs = [
         ),
         app=dict(
             **local_mini_app_config,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(1),
         ),
     ),
     JobConfig(
@@ -236,7 +236,7 @@ configs = [
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(1),
             spilling=SpillingMode.S3,
         ),
     ),
@@ -246,7 +246,7 @@ configs = [
         system=dict(),
         app=dict(
             **local_mini_app_config,
-            s3_buckets=get_s3_buckets(),
+            s3_buckets=get_s3_buckets(1),
             spilling=SpillingMode.S3,
         ),
     ),
