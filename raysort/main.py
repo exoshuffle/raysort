@@ -343,7 +343,7 @@ def reduce_stage(
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
-    bounds, _ = get_boundaries(cfg.num_reducers)
+    bounds, _ = get_boundaries(cfg, parts, cfg.num_reducers)
 
     mapper_opt = {"num_returns": cfg.num_reducers + 1}
     map_results = np.empty((cfg.num_mappers, cfg.num_reducers), dtype=object)
@@ -379,8 +379,8 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     round_merge_factor = cfg.merge_factor // cfg.map_parallelism
 
     start_time = time.time()
-    map_bounds, _ = get_boundaries(1)
-    merge_bounds, _ = get_boundaries(cfg.num_reducers)
+    map_bounds, _ = get_boundaries(cfg, parts, 1)
+    merge_bounds, _ = get_boundaries(cfg, parts, cfg.num_reducers)
 
     mapper_opt = {"num_returns": 2}
     merger_opt = {"num_returns": cfg.num_reducers + 1}
@@ -458,7 +458,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     start_time = time.time()
     ref_recorder = tracing_utils.ObjectRefRecorder(cfg.record_object_refs)
     map_bounds, merge_bounds = get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
+        cfg, parts, cfg.num_workers, cfg.num_reducers_per_worker
     )
 
     map_fn = mapper_yield if cfg.use_yield else mapper
@@ -553,7 +553,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
 def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
     num_returns = cfg.num_reducers_per_worker
-    bounds, _ = get_boundaries(num_returns)
+    bounds, _ = get_boundaries(cfg, None, num_returns)
     merger_opt = {"num_returns": num_returns + 1}
     merge_results = np.empty(
         (cfg.num_workers, cfg.num_mergers_per_worker, num_returns),
