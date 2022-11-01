@@ -187,12 +187,14 @@ class ProgressTracker:
         logging.info(wandb.config)
 
     def inc(self, metric: str, value: int = 1, echo=False, log_to_wandb=False):
-        self.counts[metric] += value
-        self.gauges[metric].set(self.counts[metric])
-        if echo:
-            logging.info("%s %s", metric, self.counts[metric])
+        ECHO_EVERY: int = 10
+        new_value = self.counts[metric] + value
+        self.counts[metric] = new_value
+        self.gauges[metric].set(new_value)
+        if echo and new_value % ECHO_EVERY == 0:
+            logging.info("%s %s", metric, new_value)
         if log_to_wandb:
-            wandb.log({metric: self.counts[metric]})
+            wandb.log({metric: new_value})
 
     def dec(self, metric: str, value: int = 1, echo=False):
         return self.inc(metric, -value, echo)
