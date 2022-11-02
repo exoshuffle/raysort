@@ -23,6 +23,7 @@ Span = collections.namedtuple(
     ["time", "duration", "event", "address", "pid"],
 )
 SAVE_SPANS_EVERY = 1000
+ECHO_EVERY = 1
 
 
 class timeit:
@@ -187,7 +188,6 @@ class ProgressTracker:
         logging.info(wandb.config)
 
     def inc(self, metric: str, value: int = 1, echo=False, log_to_wandb=False):
-        ECHO_EVERY: int = 10
         new_value = self.counts[metric] + value
         self.counts[metric] = new_value
         self.gauges[metric].set(new_value)
