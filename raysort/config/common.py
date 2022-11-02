@@ -75,7 +75,7 @@ class SystemConfig:
     object_manager_num_rpc_threads_multiplier: float = 0.25
     object_manager_num_rpc_threads: int = field(init=False)
     # How much system memory to allocate for the object store.
-    object_store_memory_percent: float = 0.6
+    object_store_memory_percent: float = 0.50
     object_store_memory_bytes: int = field(init=False)
     # How much larger should /dev/shm be compared to the object store.
     shared_memory_multiplier: float = 1.001
