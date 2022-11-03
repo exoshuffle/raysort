@@ -74,8 +74,7 @@ class Merger:
         self.bounds = bounds
         self._blocks = []
 
-    def add_block(self, block_ref: list[ray.ObjectRef]) -> None:
-        block = ray.get(block_ref[0])
+    def add_block(self, block: np.ndarray) -> None:
         # TODO: try copy vs no copy
         self._blocks.append(np.copy(block))
 
@@ -114,7 +113,7 @@ class MergeController:
         self._init_merger()
 
     def add_block(self, block_ref: list[ray.ObjectRef]) -> None:
-        self._merger.add_block.remote(block_ref)
+        self._merger.add_block.remote(block_ref[0])
         self._merger_num_blocks += 1
         if self._merger_num_blocks >= self.merge_limit:
             if len(self._merge_tasks_in_flight) >= self.cfg.merge_parallelism:
@@ -123,10 +122,31 @@ class MergeController:
                 )
             self._close_merger()
 
-    def get_merge_results(self):
+    def finish_merge_results(self):
+        logging.info("#%d waiting for merge tasks to finish", self.worker_id)
         if self._merger_num_blocks > 0:
             self._close_merger()
+        ray_utils.wait(self._merge_tasks_in_flight, wait_all=True)
         return self._merge_results
+
+    def reduce(self) -> list[PartInfo]:
+        # transposed: (num_reducers_per_worker, num_merge_tasks)
+        merge_out = np.transpose(self.finish_merge_results())
+        self._merge_results = []
+        results = []
+        tasks_in_flight = []
+        logging.info("#%d starting reduce tasks", self.worker_id)
+        with tracing_utils.timeit("reduce_master"):
+            for r in range(self.cfg.num_reducers_per_worker):
+                if len(tasks_in_flight) >= self.cfg.reduce_parallelism:
+                    _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
+                ref = final_merge.options(**ray_utils.current_node_aff()).remote(
+                    self.cfg, self.worker_id, r, *merge_out[r]
+                )
+                merge_out[r, :] = None
+                tasks_in_flight.append(ref)
+                results.append(ref)
+        return ray.get(results)
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -135,32 +155,18 @@ class MergeController:
 def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
-    reducer_id: PartId,
-    *parts: list,
-) -> list[PartInfo]:
+    reduce_idx: PartId,
+    *parts: list[np.ndarray],
+) -> PartInfo:
     with tracing_utils.timeit("reduce"):
         M = len(parts)
-
-        def get_block(i: int, d: int) -> Optional[np.ndarray]:
-            if i >= M or d > 0:
-                return None
-            part = parts[i]
-            if part is None:
-                return None
-            if isinstance(part, np.ndarray):
-                return part
-            if isinstance(part, ray.ObjectRef):
-                ret = ray.get(part)
-                assert ret is None or isinstance(ret, np.ndarray), type(ret)
-                return ret
-            raise RuntimeError(f"{type(part)} {part}")
-
-        part_id = constants.merge_part_ids(worker_id, reducer_id)
+        get_block = lambda i, d: parts[i] if d == 0 else None
+        part_id = constants.merge_part_ids(worker_id, reduce_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
         merger = sortlib.merge_partitions(M, get_block)
-        return sort_utils.save_partition(cfg, pinfo, merger)
+        return sort_utils.save_partition(cfg, pinfo, merger)[0]
 
 
 def get_boundaries(
@@ -242,57 +248,10 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     # Wait for all map tasks to finish.
     logging.info("Waiting for %d map tasks to finish", len(all_map_out))
     ray_utils.wait(all_map_out, wait_all=True)
-    logging.info("All map tasks finished; waiting for all merge tasks to finish")
-    all_merge_out = ray.get(
-        [merger.get_merge_results.remote() for merger in merge_controllers]
-    )
-    logging.info("All merge tasks finished; starting reduce tasks")
+    logging.info("All map tasks finished; start reduce stage")
 
-    # Reduce stage.
-    # all_merge_out: (num_workers, num_merge_rounds, num_reducers_per_worker)
-    # transposed: (num_workers, num_reducers_per_worker, num_merge_rounds)
-    transposed = np.transpose(all_merge_out, axes=[0, 2, 1])
-    reduce_queues = [collections.deque(arr) for arr in transposed]
-    del all_merge_out, transposed
-    reduce_index = np.zeros(cfg.num_workers, dtype=np.int_)
-    all_reduce_out = np.empty(
-        (cfg.num_workers, cfg.num_reducers_per_worker), dtype=object
-    )
-    completed = [False] * cfg.num_workers
-    reduce_scheduler = NodeScheduler(cfg)
-
-    def _submit_reduce():
-        node_id = reduce_scheduler.get_node()
-        physical_node_id = node_id
-        if len(reduce_queues[node_id]) > 0:
-            reduce_args = reduce_queues[node_id].popleft()
-        else:
-            completed[node_id] = True
-            for candidate_id in range(cfg.num_workers):
-                if len(reduce_queues[candidate_id]) > 0:
-                    reduce_args = reduce_queues[candidate_id].popleft()
-                    node_id = candidate_id
-                    break
-            if node_id == physical_node_id:
-                return
-            logging.info("#%d stealing work from #%d", physical_node_id, node_id)
-        reducer_id = reduce_index[node_id]
-        reduce_index[node_id] += 1
-        task = final_merge.options(**ray_utils.node_i(cfg, physical_node_id)).remote(
-            cfg, node_id, reducer_id, *reduce_args
-        )
-        reduce_scheduler.register_task(task, physical_node_id)
-        all_reduce_out[node_id][reducer_id] = task
-
-    with tracing_utils.timeit("reduce_stage"):
-        while not all(completed):
-            reduce_scheduler.limit_concurrency(cfg.map_parallelism)
-            _submit_reduce()
-
-    # Return.
-    ret = ray.get(all_reduce_out.flatten().tolist())
+    ret = ray.get([controller.reduce.remote() for controller in merge_controllers])
     logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
-    logging.info("Reducer nodes usage: %s", reduce_scheduler.node_usage_counter)
     return flatten(ret)
 
 
