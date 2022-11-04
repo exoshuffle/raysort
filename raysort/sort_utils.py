@@ -301,15 +301,15 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
 
 
 def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
-    input_checksum = sum(input_checksums)
-    input_checksum = str(hex(input_checksum))[2:][-16:]
-
     assert "Checksum: " in output_summary, output_summary
-    checksum_line = output_summary.split("Checksum: ")[1][:16]
+    checksum_line = output_summary.split("Checksum: ")[1]
     output_checksum = checksum_line.split()[0]
+    input_checksum = sum(input_checksums)
+    input_checksum = str(hex(input_checksum))[2:]
+    input_checksum = input_checksum[-len(output_checksum) :]
     assert (
         input_checksum == output_checksum
-    ), f"Mismatched checksums: {input_checksum} {output_checksum}"
+    ), f"Mismatched checksums: {input_checksum} {output_checksum} ||| {str(hex(sum(input_checksums)))} ||| {output_summary}"
     logging.info(output_summary)
 
 
