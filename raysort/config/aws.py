@@ -452,7 +452,7 @@ configs = [
         ),
     ),
     JobConfig(
-        # 414s
+        # 433s
         name="2tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=10,
@@ -465,7 +465,25 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             map_parallelism_multiplier=0.75,
-            reduce_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=0.75,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        # 433s * 8
+        name="16tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=16000,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
             merge_factor=1,
         ),
     ),
@@ -502,7 +520,7 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             map_parallelism_multiplier=0.75,
-            reduce_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=0.75,
             merge_factor=1,
         ),
     ),
@@ -581,7 +599,7 @@ configs = [
         # 547s (making progress!), 543s
         name="6tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=36,
+            instance_count=30,
             instance_type=i4i_4xl,
         ),
         system=dict(),
@@ -590,8 +608,8 @@ configs = [
             total_gb=6000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(20),
-            map_parallelism_multiplier=1,
-            reduce_parallelism_multiplier=1,
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
             merge_factor=1,
         ),
     ),

@@ -75,7 +75,7 @@ class SystemConfig:
     object_manager_num_rpc_threads_multiplier: float = 0.25
     object_manager_num_rpc_threads: int = field(init=False)
     # How much system memory to allocate for the object store.
-    object_store_memory_percent: float = 0.50
+    object_store_memory_percent: float = 0.60
     object_store_memory_bytes: int = field(init=False)
     # How much larger should /dev/shm be compared to the object store.
     shared_memory_multiplier: float = 1.001
@@ -116,7 +116,7 @@ class AppConfig:
 
     num_concurrent_rounds: int = 2
     merge_factor: int = 2
-    io_parallelism_multiplier: InitVar[float] = 8.0
+    io_parallelism_multiplier: InitVar[float] = 10
     map_parallelism_multiplier: InitVar[float] = 0.5
     reduce_parallelism_multiplier: InitVar[float] = 0.5
     io_parallelism: int = field(init=False)
@@ -125,6 +125,7 @@ class AppConfig:
     reduce_parallelism: int = field(init=False)
 
     io_size: int = 256 * KiB
+    map_io_parallelism: int = field(init=False)
     merge_io_parallelism: int = field(init=False)
     reduce_io_parallelism: int = field(init=False)
 
@@ -217,6 +218,7 @@ class AppConfig:
         self.num_reducers_per_worker = self.num_mappers_per_worker
         self.num_reducers = self.num_reducers_per_worker * self.num_workers
 
+        self.map_io_parallelism = self.io_parallelism // self.map_parallelism * 2
         self.merge_io_parallelism = self.io_parallelism // self.merge_parallelism
         self.reduce_io_parallelism = self.io_parallelism // self.reduce_parallelism
 
