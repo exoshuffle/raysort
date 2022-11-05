@@ -60,15 +60,6 @@ configs = [
         ),
     ),
     JobConfig(
-        name="LocalManualSpillingDiskParallel",
-        cluster=local_cluster,
-        system=dict(),
-        app=dict(
-            **local_app_config,
-            spilling=SpillingMode.DISK,
-        ),
-    ),
-    JobConfig(
         name="LocalNative",
         cluster=local_cluster,
         system=dict(),
