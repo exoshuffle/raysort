@@ -44,7 +44,8 @@ def mapper_yield(
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         for offset, size in blocks:
-            yield part[offset : offset + size]
+            block = np.zeros(0, dtype=np.uint8) if cfg.skip_sorting else part[offset : offset + size]
+            yield block
         # Return an extra object for tracking task progress.
         yield None
 
@@ -75,6 +76,17 @@ def _merge_blocks_prep(
     total_bytes = sum(b.size for b in blocks)
     num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
     get_block = functools.partial(_get_block, blocks)
+
+    if cfg.skip_sorting:
+
+        def noop_merge():
+            chunksize = total_bytes // len(bounds)
+            if chunksize == 0:
+                chunksize = 20_000_000
+            for _ in bounds:
+                yield np.zeros(chunksize, dtype=np.uint8)
+
+        return noop_merge(), timeout_refs
 
     return (
         sortlib.merge_partitions(len(blocks), get_block, num_records, False, bounds),
@@ -334,6 +346,7 @@ class ReduceController:
 
 def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     assert cfg.merge_factor == 1, cfg
+    # cfg.skip_sorting = True
     map_bounds, merge_bounds = get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
     )
