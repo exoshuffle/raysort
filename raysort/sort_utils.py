@@ -59,7 +59,11 @@ def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
         return create_partition(size)
     if cfg.s3_buckets:
-        return s3_utils.download(pinfo, size=cfg.input_part_size)
+        return s3_utils.download(
+            pinfo,
+            size=cfg.input_part_size,
+            max_concurrency=cfg.map_io_parallelism,
+        )
     if cfg.azure_containers:
         return azure_utils.download(pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
