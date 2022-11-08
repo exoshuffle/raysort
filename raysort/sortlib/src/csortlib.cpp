@@ -38,7 +38,7 @@ struct SortItem {
 
 struct SortItemComparator {
   inline bool operator()(const SortItem &a, const SortItem &b) {
-    return std::memcmp(a.header, b.header, HEADER_SIZE) < 0;
+    return memcmp(a.header, b.header, HEADER_SIZE) < 0;
   }
 };
 
@@ -183,13 +183,13 @@ std::vector<Key> GetBoundaries(size_t num_partitions) {
 
 struct SortData {
   const Record *record;
-  int partition;
+  PartitionId part_id;
   size_t index;
 };
 
 struct SortDataComparator {
   inline bool operator()(const SortData &a, const SortData &b) {
-    return !HeaderComparator<Record>()(*a.record, *b.record);
+    return memcmp(a.record->header, b.record->header, HEADER_SIZE) > 0;
   }
 };
 
@@ -208,7 +208,7 @@ public:
        const std::vector<Key> &boundaries)
       : parts_(parts), ask_for_refills_(ask_for_refills),
         boundaries_(boundaries) {
-    for (int i = 0; i < (int)parts_.size(); ++i) {
+    for (size_t i = 0; i < parts_.size(); ++i) {
       _PushFirstItem(parts_[i], i);
     }
     _IncBound();
@@ -219,14 +219,15 @@ public:
     past_last_bound_ = bound_i_ >= boundaries_.size();
   }
 
-  inline void _PushFirstItem(const ConstArray<Record> &part, int part_id) {
+  inline void _PushFirstItem(const ConstArray<Record> &part,
+                             PartitionId part_id) {
     if (part.size > 0) {
       heap_.push({part.ptr, part_id, 0});
     }
   }
 
-  void Refill(const ConstArray<Record> &part, int part_id) {
-    assert(part_id < (int)parts_.size());
+  void Refill(const ConstArray<Record> &part, PartitionId part_id) {
+    assert(part_id < parts_.size());
     parts_[part_id] = part;
     _PushFirstItem(part, part_id);
   }
@@ -245,7 +246,7 @@ public:
         return std::make_pair(cnt, -1);
       }
       heap_.pop();
-      const int i = top.partition;
+      const PartitionId i = top.part_id;
       const size_t j = top.index;
       // Copy record to output array
       *cur++ = *top.record;
@@ -268,7 +269,7 @@ GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records) {
   return impl_->GetBatch(ret, max_num_records);
 }
 
-void Merger::Refill(const ConstArray<Record> &part, int part_id) {
+void Merger::Refill(const ConstArray<Record> &part, PartitionId part_id) {
   return impl_->Refill(part, part_id);
 }
 
