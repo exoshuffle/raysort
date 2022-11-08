@@ -44,7 +44,11 @@ def mapper_yield(
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         for offset, size in blocks:
-            block = np.zeros(0, dtype=np.uint8) if cfg.skip_sorting else part[offset : offset + size]
+            block = (
+                np.zeros(0, dtype=np.uint8)
+                if cfg.skip_sorting
+                else part[offset : offset + size]
+            )
             yield block
         # Return an extra object for tracking task progress.
         yield None

@@ -157,7 +157,10 @@ class MergeController:
         self._current_num_blocks = 0
 
     def _finish_merge_results(self) -> list[list[ray.ObjectRef]]:
-        assert np.all(self._mapper_received), (self.worker_id, np.where(~self._mapper_received))
+        assert np.all(self._mapper_received), (
+            self.worker_id,
+            np.where(~self._mapper_received),
+        )
         if self._current_num_blocks > 0:
             self._close_current_merger()
         start = time.perf_counter()

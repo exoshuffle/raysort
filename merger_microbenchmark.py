@@ -46,7 +46,9 @@ def _merge_blocks(blocks: list[np.ndarray], bounds: list[int]) -> pd.Series:
 def _make_block(size: int, lower_limit: int, upper_limit: int) -> np.ndarray:
     num_records = size // constants.RECORD_SIZE
     keys = np.sort(
-        np.random.randint(lower_limit, upper_limit, size=num_records, dtype=sortlib.KeyT)
+        np.random.randint(
+            lower_limit, upper_limit, size=num_records, dtype=sortlib.KeyT
+        )
     )
     ret = np.empty((num_records, 100), dtype=np.uint8)
     ret[:, :8] = keys.byteswap().view(np.uint8).reshape(-1, 8)
