@@ -149,7 +149,7 @@ def get_boundaries(
         return sortlib.get_boundaries(num_map_returns), []
     merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
     merge_bounds = (
-        np.array(merge_bounds_flat, dtype=np.uint64)
+        np.array(merge_bounds_flat, dtype=sortlib.KeyT)
         .reshape(num_map_returns, num_merge_returns)
         .tolist()
     )
