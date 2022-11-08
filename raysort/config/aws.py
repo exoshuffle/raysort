@@ -452,7 +452,7 @@ configs = [
         ),
     ),
     JobConfig(
-        # 433s
+        # 402s, https://wandb.ai/raysort/raysort/runs/jpegf7l2
         name="2tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=10,
@@ -463,6 +463,26 @@ configs = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
+            # output_part_gb=4,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        # 1550s
+        name="8tb-2gb-10-i4i4x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=8000,
+            input_part_gb=2,
+            output_part_gb=4,
             s3_buckets=get_s3_buckets(),
             map_parallelism_multiplier=0.75,
             reduce_parallelism_multiplier=0.75,
@@ -522,6 +542,7 @@ configs = [
             map_parallelism_multiplier=0.75,
             reduce_parallelism_multiplier=0.75,
             merge_factor=1,
+            num_shards_per_mapper=2,
         ),
     ),
     JobConfig(
@@ -562,41 +583,7 @@ configs = [
     #     S3 + i4i.2xl 60 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # TODO: need to get this down to 500s?
-        # 575s, https://wandb.ai/raysort/raysort/runs/hfif924k
-        name="6tb-2gb-i4i-native-s3",
-        cluster=dict(
-            instance_count=60,
-            instance_type=i4i_2xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=6000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            reduce_parallelism_multiplier=1,
-        ),
-    ),
-    JobConfig(
-        # TODO: need to get this down to 4000s
-        # 4866s, https://wandb.ai/raysort/raysort/runs/3eaxbo33
-        name="48tb-2gb-i4i-native-s3",
-        cluster=dict(
-            instance_count=60,
-            instance_type=i4i_2xl,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=48000,
-            input_part_gb=2,
-            s3_buckets=get_s3_buckets(),
-            reduce_parallelism_multiplier=1,
-        ),
-    ),
-    JobConfig(
-        # 547s (making progress!), 543s
+        # 454s, https://wandb.ai/raysort/raysort/runs/3jpwrmic
         name="6tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=30,
@@ -607,7 +594,7 @@ configs = [
             **get_steps(),
             total_gb=6000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(20),
+            s3_buckets=get_s3_buckets(30),
             map_parallelism_multiplier=0.75,
             reduce_parallelism_multiplier=0.75,
             merge_factor=1,
@@ -671,31 +658,53 @@ configs = [
         ),
     ),
     # ------------------------------------------------------------
-    #     S3 + i4i.4xl 50-ish nodes
+    #     S3 + i4i.4xl 40 nodes
     # ------------------------------------------------------------
     JobConfig(
-        # 707s => 496s, https://wandb.ai/raysort/raysort/runs/1kaz2k0i
-        name="10tb-2gb-i4i4x-s3",
+        # 460s, https://wandb.ai/raysort/raysort/runs/17mqvhde
+        # 503s, https://wandb.ai/raysort/raysort/runs/1w5baxqa
+        name="8tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=66,
+            instance_count=40,
             instance_type=i4i_4xl,
         ),
         system=dict(),
         app=dict(
             **get_steps(),
-            total_gb=10000,
+            total_gb=8000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(30),
-            map_parallelism_multiplier=1,
-            reduce_parallelism_multiplier=1,
+            output_part_gb=4,
+            s3_buckets=get_s3_buckets(40),
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
             merge_factor=1,
         ),
     ),
     JobConfig(
-        # TODO running
+        # 2243s, https://wandb.ai/raysort/raysort/runs/3i916jv3
+        # 2276s
+        name="40tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=40,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=40000,
+            input_part_gb=2,
+            output_part_gb=4,
+            s3_buckets=get_s3_buckets(40),
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
+            merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        # 6499s, https://wandb.ai/raysort/raysort/runs/1qsanl8o
         name="100tb-2gb-i4i4x-s3",
         cluster=dict(
-            instance_count=66,
+            instance_count=40,
             instance_type=i4i_4xl,
         ),
         system=dict(),
@@ -703,9 +712,10 @@ configs = [
             **get_steps(),
             total_gb=100000,
             input_part_gb=2,
-            s3_buckets=get_s3_buckets(30),
-            map_parallelism_multiplier=1,
-            reduce_parallelism_multiplier=1,
+            output_part_gb=4,
+            s3_buckets=get_s3_buckets(40),
+            map_parallelism_multiplier=0.75,
+            reduce_parallelism_multiplier=0.75,
             merge_factor=1,
         ),
     ),

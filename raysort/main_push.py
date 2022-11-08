@@ -34,11 +34,10 @@ def mapper_sort_blocks(
     return part, blocks
 
 
-# TODO(@lsf): retries would require deduplication on the merge side.
-@ray.remote(num_cpus=0, max_retries=0)
+@ray.remote(num_cpus=0)
 def mapper(
     cfg: AppConfig,
-    _mapper_id: PartId,
+    mapper_id: PartId,
     bounds: list[int],
     pinfolist: list[PartInfo],
     merge_controllers: list[ray.actor.ActorHandle],
@@ -50,7 +49,7 @@ def mapper(
         tasks = []
         for merger, (offset, size) in zip(merge_controllers, blocks):
             block = None if cfg.skip_sorting else part[offset : offset + size]
-            task = merger.add_block.remote([ray.put(block)])
+            task = merger.add_block.remote(mapper_id, [ray.put(block)])
             tasks.append(task)
         ray.get(tasks)
 
@@ -87,7 +86,7 @@ class Merger:
         # self._blocks.append(np.copy(block))
         self._blocks.append(block)
 
-    def close(self, noop_merge: bool = False) -> Iterable[np.ndarray]:
+    def merge(self, noop_merge: bool = False) -> Iterable[np.ndarray]:
         with tracing_utils.timeit("merge"):
             merge_fn = _noop_merge if noop_merge else _merge_blocks
             for datachunk in merge_fn(self._blocks, self.bounds):
@@ -98,49 +97,6 @@ class Merger:
         self._blocks = []
 
 
-class MergerPool:
-    def __init__(self, cfg: AppConfig, worker_id: PartId, bounds: list[int]):
-        self.cfg = cfg
-        self.worker_id = worker_id
-        self.bounds = bounds
-        self._mergers = [
-            Merger.options(**ray_utils.current_node_aff()).remote(
-                self.worker_id, self.bounds
-            )
-            for _ in range(self.cfg.merge_parallelism)
-        ]
-        self._closing_tasks = {}
-        self._available_mergers = set(self._mergers)
-
-    def get(self) -> ray.actor.ActorHandle:
-        for merger in self._available_mergers:
-            self._available_mergers.remove(merger)
-            return merger
-        start = time.perf_counter()
-        ready, _ = ray.wait(list(self._closing_tasks.keys()))
-        for task in ready:
-            merger = self._closing_tasks.pop(task)
-            elapsed = time.perf_counter() - start
-            if elapsed >= 1:
-                logging.info(
-                    "#%d waited %.1f seconds for a merger to finish",
-                    self.worker_id,
-                    elapsed,
-                )
-            return merger
-
-    def close(self, merger: ray.actor.ActorHandle) -> list[ray.ObjectRef]:
-        refs = merger.close.options(
-            num_returns=self.cfg.num_reducers_per_worker
-        ).remote(noop_merge=self.cfg.skip_sorting)
-        self._closing_tasks[refs[-1]] = merger
-        return refs
-
-    def wait_for_closing_tasks(self) -> None:
-        logging.info("#%d waiting for merge tasks to finish", self.worker_id)
-        ray_utils.wait(list(self._closing_tasks.keys()), wait_all=True)
-
-
 @ray.remote(num_cpus=0)
 class MergeController:
     def __init__(self, cfg: AppConfig, worker_id: PartId, bounds: list[int]):
@@ -148,38 +104,79 @@ class MergeController:
         self.bounds = bounds
         self.worker_id = worker_id
         self.merge_limit = cfg.merge_factor * cfg.num_workers
-        self._merger_pool = MergerPool(cfg, worker_id, bounds)
-        self._merger = self._merger_pool.get()
-        self._merger_num_blocks = 0
+        self._idle_mergers = [
+            Merger.options(**ray_utils.current_node_aff()).remote(
+                self.worker_id, self.bounds
+            )
+            for _ in range(self.cfg.merge_parallelism)
+        ]
+        self._merges_in_flight = {}
+        self._current_merger = self._get_merger()
+        self._current_num_blocks = 0
         self._merge_results = []
+        self._mapper_received = np.zeros(self.cfg.num_mappers, dtype=np.bool_)
         logging_utils.init()
 
-    def add_block(self, block_ref: list[ray.ObjectRef]) -> None:
-        self._merger.add_block.remote(block_ref[0])
-        self._merger_num_blocks += 1
-        if self._merger_num_blocks >= self.merge_limit:
-            self._close_merger()
+    def _get_merger(self) -> ray.actor.ActorHandle:
+        if self._idle_mergers:
+            return self._idle_mergers.pop()
+        start = time.perf_counter()
+        ready, _ = ray.wait(list(self._merges_in_flight.keys()))
+        for task in ready:
+            merger = self._merges_in_flight.pop(task)
+            duration = time.perf_counter() - start
+            if duration >= 1:
+                logging.info(
+                    "#%d waited %.1f seconds for a merger to finish",
+                    self.worker_id,
+                    duration,
+                )
+            return merger
 
-    def _close_merger(self):
-        refs = self._merger_pool.close(self._merger)
+    def add_block(self, mapper_id: int, block_ref: list[ray.ObjectRef]) -> None:
+        if self._mapper_received[mapper_id]:
+            logging.info(
+                "#%d discarded duplicate block from mapper #%d",
+                self.worker_id,
+                mapper_id,
+            )
+            return
+        self._mapper_received[mapper_id] = True
+        self._current_merger.add_block.remote(block_ref[0])
+        self._current_num_blocks += 1
+        if self._current_num_blocks >= self.merge_limit:
+            self._close_current_merger()
+
+    def _close_current_merger(self):
+        refs = self._current_merger.merge.options(
+            num_returns=self.cfg.num_reducers_per_worker
+        ).remote(noop_merge=self.cfg.skip_sorting)
+        self._merges_in_flight[refs[-1]] = self._current_merger
         self._merge_results.append(refs)
-        self._merger = self._merger_pool.get()
-        self._merger_num_blocks = 0
+        self._current_merger = self._get_merger()
+        self._current_num_blocks = 0
 
-    def finish_merge_results(self):
-        if self._merger_num_blocks > 0:
-            self._close_merger()
-        self._merger_pool.wait_for_closing_tasks()
-        self._merger_pool = None
-        self._merger = None
+    def _finish_merge_results(self) -> list[list[ray.ObjectRef]]:
+        assert np.all(self._mapper_received), (self.worker_id, np.where(~self._mapper_received))
+        if self._current_num_blocks > 0:
+            self._close_current_merger()
+        start = time.perf_counter()
+        ray_utils.wait(list(self._merges_in_flight.keys()), wait_all=True)
+        logging.info(
+            "#%d waited %.1f seconds for all merges to finish",
+            self.worker_id,
+            time.perf_counter() - start,
+        )
+        self._idle_mergers = []
+        self._merges_in_flight = {}
+        self._current_merger = None
         ret = self._merge_results
         self._merge_results = []
         return ret
 
     def reduce(self) -> list[PartInfo]:
-        # transposed: (num_reducers_per_worker, num_merge_tasks)
-        merge_results = np.transpose(self.finish_merge_results())
-        logging.info("#%d starting reduce tasks", self.worker_id)
+        # merge_results: (num_reducers_per_worker, num_merge_tasks)
+        merge_results = np.transpose(self._finish_merge_results())
         with tracing_utils.timeit("reduce_master"):
             results = []
             tasks_in_flight = []
@@ -223,7 +220,7 @@ def get_boundaries(
         return sortlib.get_boundaries(num_map_returns), []
     merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
     merge_bounds = (
-        np.array(merge_bounds_flat, dtype=np.uint64)
+        np.array(merge_bounds_flat, dtype=sortlib.KeyT)
         .reshape(num_map_returns, num_merge_returns)
         .tolist()
     )
@@ -263,7 +260,7 @@ class NodeScheduler:
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    assert cfg.merge_factor == 1, cfg
+    # assert cfg.merge_factor == 1, cfg
     # cfg.skip_sorting = True
     map_bounds, merge_bounds = get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
@@ -296,7 +293,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     # Wait for all map tasks to finish.
     logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
     logging.info("Waiting for %d map tasks to finish", len(all_map_out))
-    ray_utils.wait(all_map_out, wait_all=True)
+    ray.get(all_map_out)
     logging.info("All map tasks finished; start reduce stage")
 
     # Reduce stage.
@@ -330,8 +327,9 @@ def main():
         if cfg.generate_input:
             sort_utils.generate_input(cfg)
 
-        with tracing_utils.timeit("sort", log_to_wandb=True):
-            sort_main(cfg)
+        if cfg.sort:
+            with tracing_utils.timeit("sort", log_to_wandb=True):
+                sort_main(cfg)
 
         if cfg.validate_output:
             sort_utils.validate_output(cfg)
