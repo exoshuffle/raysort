@@ -2,6 +2,7 @@ import io
 import os
 import queue
 import threading
+import time
 from typing import Iterable, List, Optional
 
 import boto3
@@ -13,7 +14,7 @@ from raysort import constants, s3_custom, sort_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
-CHUNK_SIZE = 10_000_000
+MULTIPART_CHUNKSIZE = 16 * 1024 * 1024
 
 
 def client() -> botocore.client.BaseClient:
@@ -32,7 +33,7 @@ def client() -> botocore.client.BaseClient:
 
 def get_transfer_config(**kwargs) -> transfer.TransferConfig:
     if "multipart_chunksize" not in kwargs:
-        kwargs["multipart_chunksize"] = CHUNK_SIZE
+        kwargs["multipart_chunksize"] = MULTIPART_CHUNKSIZE
     return transfer.TransferConfig(**kwargs)
 
 
@@ -45,13 +46,19 @@ def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> 
             os.remove(src)
 
 
-def download_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
+def download_parallel(
+    pinfolist: List[PartInfo], shard_size: int, concurrency: int
+) -> np.ndarray:
     io_buffers = [io.BytesIO() for _ in pinfolist]
     threads = [
         threading.Thread(
             target=download,
             args=(pinfo,),
-            kwargs={"buf": buf, "max_concurrency": 2},
+            kwargs={
+                "buf": buf,
+                "size": shard_size,
+                "max_concurrency": concurrency // len(pinfolist),
+            },
         )
         for pinfo, buf in zip(pinfolist, io_buffers)
     ]
@@ -59,10 +66,12 @@ def download_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
         thd.start()
     for thd in threads:
         thd.join()
+    start = time.perf_counter()
     ret = bytearray()
-    # TODO(@lsf): preallocate the download buffers
+    # TODO(@lsf): this takes 1-2 seconds. Can we preallocate to avoid this?
     for buf in io_buffers:
         ret += buf.getbuffer()
+    print("combining took {:.2f}s".format(time.perf_counter() - start))
     return np.frombuffer(ret, dtype=np.uint8)
 
 

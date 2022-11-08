@@ -47,7 +47,9 @@ def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
     if len(pinfolist) == 1:
         return load_partition(cfg, pinfolist[0])
     if cfg.s3_buckets:
-        return s3_utils.download_parallel(pinfolist)
+        return s3_utils.download_parallel(
+            pinfolist, cfg.input_shard_size, cfg.map_io_parallelism
+        )
     if cfg.azure_containers:
         # TODO(@lsf): not necessary to implement for now.
         pass
@@ -290,18 +292,19 @@ def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
 @ray.remote
 def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
     logging_utils.init()
-    if cfg.cloud_storage:
-        tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        if cfg.s3_buckets:
-            s3_utils.download(pinfo, filename=tmp_path)
-        elif cfg.azure_containers:
-            azure_utils.download(pinfo, filename=tmp_path)
-        ret = _validate_part_impl(tmp_path, buf=True)
-        os.remove(tmp_path)
-    else:
-        ret = _validate_part_impl(pinfo.path)
-    logging.info("Validated output %s", pinfo)
-    return ret
+    with tracing_utils.timeit("validate_part"):
+        if cfg.cloud_storage:
+            tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
+            if cfg.s3_buckets:
+                s3_utils.download(pinfo, filename=tmp_path)
+            elif cfg.azure_containers:
+                azure_utils.download(pinfo, filename=tmp_path)
+            ret = _validate_part_impl(tmp_path, buf=True)
+            os.remove(tmp_path)
+        else:
+            ret = _validate_part_impl(pinfo.path)
+        logging.info("Validated output %s", pinfo)
+        return ret
 
 
 def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
@@ -328,6 +331,7 @@ def validate_output(cfg: AppConfig):
             if pinfo.node
             else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
+        opt["num_cpus"] = cfg.output_part_size // 2_000_000_000
         results.append(validate_part.options(**opt).remote(cfg, pinfo))
     logging.info("Validating %d partitions", len(results))
     results = ray.get(results)
