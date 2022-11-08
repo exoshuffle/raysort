@@ -322,7 +322,7 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
-    cmd += " --storage.tsdb.retention.size=1GB"
+    cmd += " --storage.tsdb.retention.size=4GB"
     subprocess.Popen(cmd, shell=True)  # pylint: disable=consider-using-with
 
 
@@ -441,7 +441,6 @@ def get_ray_start_cmd() -> Tuple[str, Dict, Dict]:
     cmd += f" --resources='{resources}'"
     env = {
         "RAY_STORAGE": cfg.system.ray_storage,
-        "RAY_object_manager_num_rpc_threads": cfg.system.object_manager_num_rpc_threads,
     }
     env = {k: str(v) for k, v in env.items()}
     return cmd, env, system_config
