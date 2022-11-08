@@ -123,22 +123,22 @@ def multi_upload(
     mpu_queue = queue.PriorityQueue()
     chunk_id = 0
 
-    def upload(data, chunk_id):
+    def _upload(data, chunk_id):
         sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
         sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", cloud=True)
         upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
         mpu_queue.put(sub_pinfo)
 
-    def upload_part(data):
+    def _upload_part(data):
         nonlocal chunk_id
         if len(upload_threads) >= parallelism > 0:
             upload_threads.pop(0).join()
         if parallelism > 0:
-            thd = threading.Thread(target=upload, args=(data, chunk_id))
+            thd = threading.Thread(target=_upload, args=(data, chunk_id))
             thd.start()
             upload_threads.append(thd)
         else:
-            upload(data, chunk_id)
+            _upload(data, chunk_id)
         chunk_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
@@ -149,13 +149,13 @@ def multi_upload(
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
             assert tail.getbuffer().nbytes == 0
-            upload_part(datachunk.tobytes())
+            _upload_part(datachunk.tobytes())
         else:
             tail.write(datachunk)
 
     if tail.getbuffer().nbytes > 0:
         tail.seek(0)
-        upload_part(tail.getbuffer())
+        _upload_part(tail.getbuffer())
 
     # Wait for all upload tasks to complete.
     for thd in upload_threads:
@@ -176,13 +176,14 @@ def multipart_upload(
     upload_threads = []
     mpu_queue = queue.PriorityQueue()
     mpu_part_id = 1
+    bytes_count = 0
 
-    def upload(**kwargs):
+    def _upload(**kwargs):
         resp = s3_client.upload_part(**kwargs)
         mpu_queue.put((kwargs["PartNumber"], resp))
 
-    def upload_part(data):
-        nonlocal mpu_part_id
+    def _upload_part(data):
+        nonlocal mpu_part_id, bytes_count
         if len(upload_threads) >= parallelism > 0:
             upload_threads.pop(0).join()
         kwargs = dict(
@@ -193,12 +194,13 @@ def multipart_upload(
             UploadId=mpu["UploadId"],
         )
         if parallelism > 0:
-            thd = threading.Thread(target=upload, kwargs=kwargs)
+            thd = threading.Thread(target=_upload, kwargs=kwargs)
             thd.start()
             upload_threads.append(thd)
         else:
-            upload(**kwargs)
+            _upload(**kwargs)
         mpu_part_id += 1
+        bytes_count += len(data)
 
     # The merger produces a bunch of small chunks towards the end, which
     # we need to fuse into one chunk before uploading to S3.
@@ -208,13 +210,13 @@ def multipart_upload(
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
             assert tail.getbuffer().nbytes == 0
-            upload_part(datachunk.tobytes())
+            _upload_part(datachunk.tobytes())
         else:
             tail.write(datachunk)
 
     if tail.getbuffer().nbytes > 0:
         tail.seek(0)
-        upload_part(tail)
+        _upload_part(tail)
 
     # Wait for all upload tasks to complete.
     for thd in upload_threads:
@@ -231,4 +233,5 @@ def multipart_upload(
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],
     )
+    pinfo.size = bytes_count
     return [pinfo]
