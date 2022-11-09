@@ -210,13 +210,12 @@ def multipart_upload(
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
             assert tail.getbuffer().nbytes == 0
-            _upload_part(datachunk.tobytes())
+            _upload_part(datachunk.tobytes())  # copying is necessary
         else:
             tail.write(datachunk)
 
     if tail.getbuffer().nbytes > 0:
-        tail.seek(0)
-        _upload_part(tail)
+        _upload_part(tail.getvalue())
 
     # Wait for all upload tasks to complete.
     for thd in upload_threads:
