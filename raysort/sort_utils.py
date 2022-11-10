@@ -4,7 +4,7 @@ import os
 import subprocess
 import tempfile
 import time
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional
 
 import numpy as np
 import ray
@@ -46,8 +46,7 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [PartInfo.from_csv_row(row) for row in reader]
-        return ret
+        return [PartInfo.from_csv_row(row) for row in reader]
 
 
 def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
@@ -213,7 +212,7 @@ def generate_part(
             s3_utils.upload(
                 path,
                 pinfo,
-                max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
+                max_concurrency=cfg.map_io_parallelism,
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
@@ -308,7 +307,11 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> bytes:
         if cfg.cloud_storage:
             tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
             if cfg.s3_buckets:
-                s3_utils.download(pinfo, filename=tmp_path)
+                s3_utils.download(
+                    pinfo,
+                    filename=tmp_path,
+                    max_concurrency=cfg.reduce_io_parallelism,
+                )
             elif cfg.azure_containers:
                 azure_utils.download(pinfo, filename=tmp_path)
             ret = _validate_part_impl(pinfo, tmp_path, buf=True)
@@ -329,7 +332,6 @@ def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
     assert (
         input_checksum == output_checksum
     ), f"Mismatched checksums: {input_checksum} {output_checksum} ||| {str(hex(sum(input_checksums)))} ||| {output_summary}"
-    logging.info(output_summary)
 
 
 def validate_output(cfg: AppConfig):
