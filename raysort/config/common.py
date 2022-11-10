@@ -73,7 +73,7 @@ class SystemConfig:
     max_fused_object_count: int = 2000
     object_spilling_threshold: float = 0.8
     # How much system memory to allocate for the object store.
-    object_store_memory_percent: float = 0.60
+    object_store_memory_percent: float = 0.6
     object_store_memory_bytes: int = field(init=False)
     # How much larger should /dev/shm be compared to the object store.
     shared_memory_multiplier: float = 1.001
