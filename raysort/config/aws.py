@@ -465,8 +465,8 @@ configs = [
             input_part_gb=2,
             # output_part_gb=4,
             s3_buckets=get_s3_buckets(),
-            map_parallelism_multiplier=0.75,
-            reduce_parallelism_multiplier=0.75,
+            map_parallelism_multiplier=12 / 16,
+            reduce_parallelism_multiplier=12 / 16,
             merge_factor=1,
         ),
     ),
@@ -662,7 +662,7 @@ configs = [
     # ------------------------------------------------------------
     JobConfig(
         # 460s, https://wandb.ai/raysort/raysort/runs/17mqvhde
-        # 503s, https://wandb.ai/raysort/raysort/runs/1w5baxqa
+        # 456s, https://wandb.ai/raysort/raysort/runs/6emlt2u1
         name="8tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=40,
@@ -682,7 +682,7 @@ configs = [
     ),
     JobConfig(
         # 2243s, https://wandb.ai/raysort/raysort/runs/3i916jv3
-        # 2276s
+        # 2187s, https://wandb.ai/raysort/raysort/runs/grm4o1p7
         name="40tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=40,
@@ -701,7 +701,7 @@ configs = [
         ),
     ),
     JobConfig(
-        # 6499s, https://wandb.ai/raysort/raysort/runs/1qsanl8o
+        # 5361s, https://wandb.ai/raysort/raysort/runs/sfycimry
         name="100tb-2gb-i4i4x-s3",
         cluster=dict(
             instance_count=40,
@@ -772,7 +772,6 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -795,7 +794,6 @@ configs = [
             total_gb=2000,
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
-            io_parallelism_multiplier=4,
         ),
     ),
     JobConfig(
@@ -832,7 +830,6 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------
@@ -854,7 +851,6 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism_multiplier=4,
         ),
     ),
     JobConfig(
@@ -873,7 +869,6 @@ configs = [
             input_part_gb=2,
             s3_buckets=get_s3_buckets(),
             spilling=SpillingMode.S3,
-            io_parallelism_multiplier=4,
         ),
     ),
     # ------------------------------------------------------------

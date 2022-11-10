@@ -113,18 +113,16 @@ class AppConfig:
 
     num_concurrent_rounds: int = 2
     merge_factor: int = 2
-    io_parallelism_multiplier: InitVar[float] = 8
     map_parallelism_multiplier: InitVar[float] = 0.5
     reduce_parallelism_multiplier: InitVar[float] = 0.5
-    io_parallelism: int = field(init=False)
     map_parallelism: int = field(init=False)
     merge_parallelism: int = field(init=False)
     reduce_parallelism: int = field(init=False)
 
     io_size: int = 256 * KiB
-    map_io_parallelism: int = field(init=False)
+    map_io_parallelism: int = 10
+    reduce_io_parallelism: int = 20
     merge_io_parallelism: int = field(init=False)
-    reduce_io_parallelism: int = field(init=False)
 
     shuffle_wait_percentile: float = 0.75
     shuffle_wait_timeout: float = 5.0
@@ -173,7 +171,6 @@ class AppConfig:
         total_gb: float,
         input_part_gb: float,
         output_part_gb: Optional[float],
-        io_parallelism_multiplier: float,
         map_parallelism_multiplier: float,
         reduce_parallelism_multiplier: float,
     ):
@@ -181,7 +178,6 @@ class AppConfig:
         self.total_data_size = int(total_gb * GB)
         self.input_part_size = int(input_part_gb * GB)
         self.output_part_size = int((output_part_gb or input_part_gb) * GB)
-        self.io_parallelism = int(io_parallelism_multiplier * cluster.instance_type.cpu)
         self.map_parallelism = int(
             map_parallelism_multiplier * cluster.instance_type.cpu
         )
@@ -216,15 +212,12 @@ class AppConfig:
             math.ceil(self.num_mappers / self.num_workers / self.map_parallelism)
         )
         self.num_mergers_per_worker = self.num_rounds * self.merge_parallelism
+        self.merge_io_parallelism = self.map_io_parallelism
 
         self.num_reducers = int(math.ceil(self.total_data_size / self.output_part_size))
         self.num_reducers_per_worker = int(
             math.ceil(self.num_reducers / self.num_workers)
         )
-
-        self.map_io_parallelism = self.io_parallelism // self.map_parallelism * 2
-        self.merge_io_parallelism = self.io_parallelism // self.merge_parallelism
-        self.reduce_io_parallelism = self.io_parallelism // self.reduce_parallelism
 
         self.cloud_storage = bool(self.s3_buckets or self.azure_containers)
 
