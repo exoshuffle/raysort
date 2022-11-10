@@ -99,7 +99,7 @@ def test_config(config_name, merger_id: int = 0):
     ss = _merge_blocks(blocks, bounds)
     duration = time.perf_counter() - start
     print(f"Merged {len(blocks)} blocks in {duration:.2f} seconds")
-    # print(ss.describe())
+    print(ss.describe())
 
 
 def main():
