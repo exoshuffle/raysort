@@ -69,10 +69,30 @@ def _merge_blocks_prep(
     cfg: AppConfig,
     bounds: list[int],
     blocks: tuple[ray.ObjectRef],
+    allow_timeouts: bool,
 ) -> tuple[Iterable[np.ndarray], list[ray.ObjectRef]]:
     refs = list(blocks)
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
+        if allow_timeouts:
+            start = time.time()
+            ready, not_ready = ray.wait(
+                refs,
+                num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
+            )
+            # print("shuffle first half wait", len(ready), time.time() - start)
+            start = time.time()
+            late, timeout_refs = ray.wait(
+                not_ready,
+                num_returns=len(not_ready),
+                timeout=cfg.shuffle_wait_timeout,
+            )
+            refs = ready + late
+            # print("shuffle second half wait", len(refs), time.time() - start)
+            if timeout_refs:
+                logging.info(
+                    f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}"
+                )
         blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):
             blocks = ray.get(blocks)
@@ -104,8 +124,9 @@ def merge_blocks_yield(
     _merge_id: PartId,
     bounds: list[int],
     blocks: tuple[np.ndarray],
+    allow_timeouts: bool = False,
 ) -> Union[list[ray.ObjectRef], Iterable[PartInfo], Iterable[np.ndarray]]:
-    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
+    merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks, allow_timeouts)
     yield timeouts
     with tracing_utils.timeit("merge"):
         for datachunk in merger:
@@ -198,7 +219,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         dtype=object,
     )
 
-    def submit_merge_tasks(m, get_map_blocks):
+    def submit_merge_tasks(m, get_map_blocks, allow_timeouts=False):
         nonlocal last_merge_submit_time
         ret = []
         for w in range(cfg.num_workers):
@@ -213,6 +234,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
                 merge_id,
                 merge_bounds[w],
                 map_blocks,
+                allow_timeouts=allow_timeouts,
             )
             ret.append(refs[0])
             merge_results[w, m, :] = refs[1:]
