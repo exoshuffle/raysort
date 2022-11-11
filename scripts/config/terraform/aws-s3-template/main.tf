@@ -27,6 +27,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "app" {
     expiration {
       days = 1
     }
+    filter {}
     status = "Enabled"
   }
 }
