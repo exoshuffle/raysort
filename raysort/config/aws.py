@@ -927,26 +927,4 @@ configs = [
             input_part_gb=1,
         ),
     ),
-    # ------------------------------------------------------------
-    #     Ad Hoc Experiments
-    # ------------------------------------------------------------
-    JobConfig(
-        name="i3-simple",
-        cluster=dict(
-            instance_count=10,
-            instance_type=i3_2xl,
-            local=False,
-        ),
-        system=dict(),
-        app=dict(
-            **get_steps(),
-            total_gb=100,
-            input_part_gb=1.25,
-            use_yield=True,
-            reduce_parallelism_multiplier=1,
-            # simple
-            simple_shuffle=True,
-            map_parallelism_multiplier=1,
-        ),
-    ),
 ]
