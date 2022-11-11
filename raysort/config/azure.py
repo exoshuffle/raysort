@@ -61,6 +61,7 @@ configs = [
             input_part_gb=2,
             reduce_parallelism_multiplier=1,
             azure_containers=get_azure_containers(),
+            use_sampling=True,
         ),
     ),
 ]

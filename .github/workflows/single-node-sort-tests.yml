@@ -52,11 +52,6 @@ jobs:
           CONFIG: LocalManualSpillingDisk
         run: python raysort/main.py
 
-      - name: 1GB two stage shuffle with manual spilling, parallelized
-        env:
-          CONFIG: LocalManualSpillingDiskParallel
-        run: python raysort/main.py
-
       - name: 1GB Ray native shuffle
         env:
           CONFIG: LocalNative

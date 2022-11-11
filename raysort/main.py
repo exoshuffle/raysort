@@ -68,6 +68,18 @@ def mapper(
         return ret + [None]
 
 
+@ray.remote
+def sampling_mapper(
+    cfg: AppConfig,
+    pinfo: PartInfo,
+) -> List[np.ndarray]:
+    part = sort_utils.load_sample_partition(cfg, pinfo)
+    arr = part.reshape((-1, 100))
+    key_bytes = arr[:, :8].flatten()
+    keys = key_bytes.view(np.uint64)
+    return keys
+
+
 @ray.remote(num_cpus=0)
 def mapper_yield(
     cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
@@ -253,12 +265,36 @@ def final_merge(
         return sort_utils.save_partition(cfg, pinfo, merger)
 
 
+def get_boundaries_by_sampling(cfg: AppConfig, parts: List[PartInfo], partitions: int):
+    keys = np.concatenate(
+        ray.get(
+            [
+                sampling_mapper.remote(cfg, parts[part_id])
+                for part_id in range(cfg.num_mappers)
+            ]
+        )
+    )
+    return sort_utils.calculate_boundaries(keys, partitions)
+
+
 def get_boundaries(
-    num_map_returns: int, num_merge_returns: int = -1
+    cfg: AppConfig,
+    parts: List[PartInfo],
+    num_map_returns: int,
+    num_merge_returns: int = -1,
 ) -> Tuple[List[int], List[List[int]]]:
     if num_merge_returns == -1:
-        return sortlib.get_boundaries(num_map_returns), []
-    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
+        if cfg.use_sampling:
+            return get_boundaries_by_sampling(cfg, parts)
+        else:
+            return sortlib.get_boundaries(num_map_returns), []
+    if cfg.use_sampling:
+        with tracing_utils.timeit("sampling"):
+            merge_bounds_flat = get_boundaries_by_sampling(
+                cfg, parts, num_map_returns * num_merge_returns
+            )
+    else:
+        merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
     merge_bounds = (
         np.array(merge_bounds_flat, dtype=sortlib.KeyT)
         .reshape(num_map_returns, num_merge_returns)
@@ -307,7 +343,7 @@ def reduce_stage(
 
 
 def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
-    bounds, _ = get_boundaries(cfg.num_reducers)
+    bounds, _ = get_boundaries(cfg, parts, cfg.num_reducers)
 
     mapper_opt = {"num_returns": cfg.num_reducers + 1}
     map_results = np.empty((cfg.num_mappers, cfg.num_reducers), dtype=object)
@@ -343,8 +379,8 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     round_merge_factor = cfg.merge_factor // cfg.map_parallelism
 
     start_time = time.time()
-    map_bounds, _ = get_boundaries(1)
-    merge_bounds, _ = get_boundaries(cfg.num_reducers)
+    map_bounds, _ = get_boundaries(cfg, parts, 1)
+    merge_bounds, _ = get_boundaries(cfg, parts, cfg.num_reducers)
 
     mapper_opt = {"num_returns": 2}
     merger_opt = {"num_returns": cfg.num_reducers + 1}
@@ -422,7 +458,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     start_time = time.time()
     ref_recorder = tracing_utils.ObjectRefRecorder(cfg.record_object_refs)
     map_bounds, merge_bounds = get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
+        cfg, parts, cfg.num_workers, cfg.num_reducers_per_worker
     )
 
     map_fn = mapper_yield if cfg.use_yield else mapper
@@ -517,7 +553,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
 
 def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
     num_returns = cfg.num_reducers_per_worker
-    bounds, _ = get_boundaries(num_returns)
+    bounds, _ = get_boundaries(cfg, None, num_returns)
     merger_opt = {"num_returns": num_returns + 1}
     merge_results = np.empty(
         (cfg.num_workers, cfg.num_mergers_per_worker, num_returns),

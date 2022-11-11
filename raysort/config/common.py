@@ -139,6 +139,9 @@ class AppConfig:
 
     record_object_refs: bool = False
 
+    use_sampling: bool = False
+    sample_size: int = 10000
+
     native_scheduling: bool = False
     use_put: bool = False
     use_yield: bool = False
