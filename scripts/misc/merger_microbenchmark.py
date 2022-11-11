@@ -105,7 +105,7 @@ def test_config(config_name, merger_id: int = 0):
 def main():
     test_config("2tb-2gb-i4i4x-s3")
     test_config("6tb-2gb-i4i4x-s3")
-    test_config("10tb-2gb-i4i4x-s3")
+    test_config("8tb-2gb-i4i4x-s3")
     test_config("100tb-2gb-i4i4x-s3")
 
 
