@@ -1,5 +1,6 @@
+import dataclasses
 import enum
-from typing import List, NamedTuple, Optional, Tuple  # pylint: disable=import-self
+from typing import List, Optional, Tuple  # pylint: disable=import-self
 
 ByteCount = int
 PartId = int
@@ -15,11 +16,13 @@ class AppStep(enum.Enum):
     VALIDATE_OUTPUT = "validate_output"
 
 
-class PartInfo(NamedTuple):
+@dataclasses.dataclass
+class PartInfo:
     part_id: int
     node: Optional[str]
     bucket: Optional[str]
     path: Path
+    size: ByteCount
     checksum: Optional[str]
 
     def __repr__(self):
@@ -29,20 +32,22 @@ class PartInfo(NamedTuple):
         if self.bucket:
             ret += f"{self.bucket}:"
         ret += self.path
+        ret += f"(size={self.size},checksum={self.checksum})"
         return ret
 
     def to_csv_row(self) -> List[str]:
         return [
             f"{self.part_id:010x}",
-            self.node,
-            self.bucket,
+            self.node or "",
+            self.bucket or "",
             self.path,
-            self.checksum,
+            str(self.size),
+            self.checksum or "",
         ]
 
     @classmethod
     def from_csv_row(cls, row: List[str]) -> "PartInfo":
-        return cls(int(row[0], 16), row[1], row[2], row[3], row[4])
+        return cls(int(row[0], 16), row[1], row[2], row[3], int(row[4]), row[5])
 
 
 class SpillingMode(enum.Enum):

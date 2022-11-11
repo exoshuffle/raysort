@@ -2,6 +2,7 @@ import io
 import os
 import queue
 import threading
+import time
 from typing import Iterable, List, Optional
 
 import boto3
@@ -13,7 +14,7 @@ from raysort import constants, s3_custom, sort_utils
 from raysort.config import AppConfig
 from raysort.typing import PartInfo, Path
 
-CHUNK_SIZE = 10_000_000
+MULTIPART_CHUNKSIZE = 16 * 1024 * 1024
 
 
 def client() -> botocore.client.BaseClient:
@@ -32,7 +33,7 @@ def client() -> botocore.client.BaseClient:
 
 def get_transfer_config(**kwargs) -> transfer.TransferConfig:
     if "multipart_chunksize" not in kwargs:
-        kwargs["multipart_chunksize"] = CHUNK_SIZE
+        kwargs["multipart_chunksize"] = MULTIPART_CHUNKSIZE
     return transfer.TransferConfig(**kwargs)
 
 
@@ -45,13 +46,19 @@ def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> 
             os.remove(src)
 
 
-def download_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
+def download_parallel(
+    pinfolist: List[PartInfo], shard_size: int, concurrency: int
+) -> np.ndarray:
     io_buffers = [io.BytesIO() for _ in pinfolist]
     threads = [
         threading.Thread(
             target=download,
             args=(pinfo,),
-            kwargs={"buf": buf, "max_concurrency": 2},
+            kwargs={
+                "buf": buf,
+                "size": shard_size,
+                "max_concurrency": concurrency // len(pinfolist),
+            },
         )
         for pinfo, buf in zip(pinfolist, io_buffers)
     ]
@@ -59,10 +66,12 @@ def download_parallel(pinfolist: List[PartInfo]) -> np.ndarray:
         thd.start()
     for thd in threads:
         thd.join()
+    start = time.perf_counter()
     ret = bytearray()
-    # TODO(@lsf): preallocate the download buffers
+    # TODO(@lsf): this takes 1-2 seconds. Can we preallocate to avoid this?
     for buf in io_buffers:
         ret += buf.getbuffer()
+    print("combining took {:.2f}s".format(time.perf_counter() - start))
     return np.frombuffer(ret, dtype=np.uint8)
 
 
@@ -114,22 +123,22 @@ def multi_upload(
     mpu_queue = queue.PriorityQueue()
     chunk_id = 0
 
-    def upload(data, chunk_id):
+    def _upload(data, chunk_id):
         sub_part_id = constants.merge_part_ids(pinfo.part_id, chunk_id, skip_places=2)
         sub_pinfo = sort_utils.part_info(cfg, sub_part_id, kind="output", cloud=True)
         upload_s3_buffer(cfg, data, sub_pinfo, use_threads=False)
         mpu_queue.put(sub_pinfo)
 
-    def upload_part(data):
+    def _upload_part(data):
         nonlocal chunk_id
         if len(upload_threads) >= parallelism > 0:
             upload_threads.pop(0).join()
         if parallelism > 0:
-            thd = threading.Thread(target=upload, args=(data, chunk_id))
+            thd = threading.Thread(target=_upload, args=(data, chunk_id))
             thd.start()
             upload_threads.append(thd)
         else:
-            upload(data, chunk_id)
+            _upload(data, chunk_id)
         chunk_id += 1
 
     # The merger produces a bunch of small chunks towards the end, which
@@ -140,13 +149,13 @@ def multi_upload(
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
             assert tail.getbuffer().nbytes == 0
-            upload_part(datachunk.tobytes())
+            _upload_part(datachunk.tobytes())
         else:
             tail.write(datachunk)
 
     if tail.getbuffer().nbytes > 0:
         tail.seek(0)
-        upload_part(tail.getbuffer())
+        _upload_part(tail.getbuffer())
 
     # Wait for all upload tasks to complete.
     for thd in upload_threads:
@@ -167,13 +176,14 @@ def multipart_upload(
     upload_threads = []
     mpu_queue = queue.PriorityQueue()
     mpu_part_id = 1
+    bytes_count = 0
 
-    def upload(**kwargs):
+    def _upload(**kwargs):
         resp = s3_client.upload_part(**kwargs)
         mpu_queue.put((kwargs["PartNumber"], resp))
 
-    def upload_part(data):
-        nonlocal mpu_part_id
+    def _upload_part(data):
+        nonlocal mpu_part_id, bytes_count
         if len(upload_threads) >= parallelism > 0:
             upload_threads.pop(0).join()
         kwargs = dict(
@@ -184,12 +194,13 @@ def multipart_upload(
             UploadId=mpu["UploadId"],
         )
         if parallelism > 0:
-            thd = threading.Thread(target=upload, kwargs=kwargs)
+            thd = threading.Thread(target=_upload, kwargs=kwargs)
             thd.start()
             upload_threads.append(thd)
         else:
-            upload(**kwargs)
+            _upload(**kwargs)
         mpu_part_id += 1
+        bytes_count += len(data)
 
     # The merger produces a bunch of small chunks towards the end, which
     # we need to fuse into one chunk before uploading to S3.
@@ -199,13 +210,12 @@ def multipart_upload(
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
             assert tail.getbuffer().nbytes == 0
-            upload_part(datachunk.tobytes())
+            _upload_part(datachunk.tobytes())  # copying is necessary
         else:
             tail.write(datachunk)
 
     if tail.getbuffer().nbytes > 0:
-        tail.seek(0)
-        upload_part(tail)
+        _upload_part(tail.getvalue())
 
     # Wait for all upload tasks to complete.
     for thd in upload_threads:
@@ -222,4 +232,5 @@ def multipart_upload(
         MultipartUpload={"Parts": mpu_parts},
         UploadId=mpu["UploadId"],
     )
+    pinfo.size = bytes_count
     return [pinfo]

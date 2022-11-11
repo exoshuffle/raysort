@@ -36,6 +36,7 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
         void Refill(const ConstArray[Record]& part, int part_id) nogil
 
 
+KeyT = np.uint64
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
 PayloadT = np.dtype((np.uint8, RECORD_SIZE - HEADER_SIZE))
 RecordT = np.dtype([("header", HeaderT), ("body", PayloadT)])
@@ -76,7 +77,7 @@ def merge_partitions(
     num_blocks: int,
     get_block: Callable[[int, int], np.ndarray],
     batch_num_records: int = 1_000_000,
-    ask_for_refills: bool = True,
+    ask_for_refills: bool = False,
     boundaries: List[int] = [],
 ) -> Iterable[np.ndarray]:
     """

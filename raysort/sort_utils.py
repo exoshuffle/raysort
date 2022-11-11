@@ -4,7 +4,7 @@ import os
 import subprocess
 import tempfile
 import time
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional
 
 import numpy as np
 import ray
@@ -33,21 +33,29 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
 def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
-            PartInfo(i, cfg.worker_ips[i % cfg.num_workers], None, None, None)
+            PartInfo(
+                i,
+                cfg.worker_ips[i % cfg.num_workers],
+                None,
+                "",
+                cfg.input_part_size,
+                None,
+            )
             for i in range(cfg.num_mappers)
         ]
     path = get_manifest_file(cfg, kind=kind)
     with open(path) as fin:
         reader = csv.reader(fin)
-        ret = [PartInfo.from_csv_row(row) for row in reader]
-        return ret
+        return [PartInfo.from_csv_row(row) for row in reader]
 
 
 def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
     if len(pinfolist) == 1:
         return load_partition(cfg, pinfolist[0])
     if cfg.s3_buckets:
-        return s3_utils.download_parallel(pinfolist)
+        return s3_utils.download_parallel(
+            pinfolist, cfg.input_shard_size, cfg.map_io_parallelism
+        )
     if cfg.azure_containers:
         # TODO(@lsf): not necessary to implement for now.
         pass
@@ -59,7 +67,11 @@ def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         size = cfg.input_part_size * (cfg.merge_factor if cfg.skip_first_stage else 1)
         return create_partition(size)
     if cfg.s3_buckets:
-        return s3_utils.download(pinfo, size=cfg.input_part_size)
+        return s3_utils.download(
+            pinfo,
+            size=cfg.input_part_size,
+            max_concurrency=cfg.map_io_parallelism,
+        )
     if cfg.azure_containers:
         return azure_utils.download(pinfo)
     with open(pinfo.path, "rb", buffering=cfg.io_size) as fin:
@@ -87,9 +99,12 @@ def save_partition(
         return s3_utils.multipart_upload(cfg, pinfo, merger)
     if cfg.azure_containers:
         return azure_utils.multipart_upload(cfg, pinfo, merger)
+    bytes_count = 0
     with open(pinfo.path, "wb", buffering=cfg.io_size) as fout:
         for datachunk in merger:
             fout.write(datachunk)
+            bytes_count += datachunk.size
+    pinfo.size = bytes_count
     return [pinfo]
 
 
@@ -134,7 +149,7 @@ def part_info(
             bucket = cfg.azure_containers[shard % len(cfg.azure_containers)]
         else:
             raise ValueError("No cloud storage configured")
-        return PartInfo(part_id, None, bucket, path, None)
+        return PartInfo(part_id, None, bucket, path, 0, None)
     data_dir_idx = part_id % len(cfg.data_dirs)
     prefix = cfg.data_dirs[data_dir_idx]
     filepath = _get_part_path(part_id, prefix=prefix, kind=kind)
@@ -143,7 +158,7 @@ def part_info(
         if cfg.is_local_cluster
         else ray.util.get_node_ip_address()
     )
-    return PartInfo(part_id, node, None, filepath, None)
+    return PartInfo(part_id, node, None, filepath, 0, None)
 
 
 def _get_part_path(
@@ -191,8 +206,8 @@ def generate_part(
         else:
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
-        checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
-        pinfo = PartInfo(pinfo.part_id, pinfo.node, pinfo.bucket, pinfo.path, checksum)
+        pinfo.size = size * constants.RECORD_SIZE
+        pinfo.checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
@@ -201,7 +216,7 @@ def generate_part(
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
-        logging.info("Generated input %s, checksum: %s", pinfo, checksum)
+        logging.info("Generated input %s", pinfo)
         return pinfo
 
 
@@ -273,31 +288,38 @@ def _run_valsort(argstr: str) -> str:
     return proc.stderr
 
 
-def _validate_part_impl(path: Path, buf: bool = False) -> Tuple[int, bytes]:
+def _validate_part_impl(pinfo: PartInfo, path: Path, buf: bool = False) -> bytes:
+    filesize = os.path.getsize(path)
+    assert filesize == pinfo.size, (pinfo, filesize)
     sum_path = path + ".sum"
     argstr = f"-o {sum_path} {path}"
     if buf:
         argstr += ",buf"
     _run_valsort(argstr)
     with open(sum_path, "rb") as fin:
-        return os.path.getsize(path), fin.read()
+        return fin.read()
 
 
 @ray.remote
-def validate_part(cfg: AppConfig, pinfo: PartInfo) -> Tuple[int, bytes]:
+def validate_part(cfg: AppConfig, pinfo: PartInfo) -> bytes:
     logging_utils.init()
-    if cfg.cloud_storage:
-        tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
-        if cfg.s3_buckets:
-            s3_utils.download(pinfo, filename=tmp_path)
-        elif cfg.azure_containers:
-            azure_utils.download(pinfo, filename=tmp_path)
-        ret = _validate_part_impl(tmp_path, buf=True)
-        os.remove(tmp_path)
-    else:
-        ret = _validate_part_impl(pinfo.path)
-    logging.info("Validated output %s", pinfo)
-    return ret
+    with tracing_utils.timeit("validate_part"):
+        if cfg.cloud_storage:
+            tmp_path = os.path.join(constants.TMPFS_PATH, os.path.basename(pinfo.path))
+            if cfg.s3_buckets:
+                s3_utils.download(
+                    pinfo,
+                    filename=tmp_path,
+                    max_concurrency=cfg.reduce_io_parallelism,
+                )
+            elif cfg.azure_containers:
+                azure_utils.download(pinfo, filename=tmp_path)
+            ret = _validate_part_impl(pinfo, tmp_path, buf=True)
+            os.remove(tmp_path)
+        else:
+            ret = _validate_part_impl(pinfo, pinfo.path)
+        logging.info("Validated output %s", pinfo)
+        return ret
 
 
 def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
@@ -310,13 +332,15 @@ def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
     assert (
         input_checksum == output_checksum
     ), f"Mismatched checksums: {input_checksum} {output_checksum} ||| {str(hex(sum(input_checksums)))} ||| {output_summary}"
-    logging.info(output_summary)
 
 
 def validate_output(cfg: AppConfig):
     if cfg.skip_sorting or cfg.skip_output:
         return
     parts = load_manifest(cfg, kind="output")
+    total_bytes = sum(p.size for p in parts)
+    assert total_bytes == cfg.total_data_size, total_bytes - cfg.total_data_size
+
     results = []
     for pinfo in parts:
         opt = (
@@ -324,12 +348,12 @@ def validate_output(cfg: AppConfig):
             if pinfo.node
             else {"resources": {constants.WORKER_RESOURCE: 1e-3}}
         )
+        opt["num_cpus"] = int(np.ceil(cfg.output_part_size / 2_000_000_000))
         results.append(validate_part.options(**opt).remote(cfg, pinfo))
     logging.info("Validating %d partitions", len(results))
     results = ray.get(results)
-    total = sum(sz for sz, _ in results)
-    assert total == cfg.total_data_size, total - cfg.total_data_size
-    all_checksum = b"".join(chksm for _, chksm in results)
+
+    all_checksum = b"".join(results)
     with open(get_manifest_file(cfg), "r") as fin:
         reader = csv.reader(fin)
         input_checksums = [int(row[-1], 16) for row in reader]
