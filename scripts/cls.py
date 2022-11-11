@@ -74,11 +74,9 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     instances = get_instances(
         {
             "tag:ClusterName": [cluster_name],
-            # Excluding the "Terminated" state (0x30).
+            # Excluding "shutting-down" (0x20) and "terminated" (0x30).
             # https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html
-            "instance-state-code": [
-                str(code) for code in [0x00, 0x10, 0x20, 0x40, 0x50]
-            ],
+            "instance-state-code": [str(code) for code in [0x00, 0x10, 0x40, 0x50]],
         }
     )
     cnt = len(instances)
@@ -324,6 +322,7 @@ def setup_prometheus(head_ip: str, ips: List[str]) -> None:
     cmd += " --web.enable-admin-api"
     cmd += " --config.file=" + str(SCRIPT_DIR / "config/prometheus/prometheus.yml")
     cmd += f" --storage.tsdb.path={prometheus_data_path}"
+    cmd += " --storage.tsdb.retention.size=4GB"
     subprocess.Popen(cmd, shell=True)  # pylint: disable=consider-using-with
 
 
@@ -375,8 +374,9 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd() -> Tuple[str, Dict]:
+def get_ray_start_cmd() -> Tuple[str, Dict, Dict]:
     system_config = {
+        "local_fs_capacity_threshold": 0.999,
         "memory_usage_threshold_fraction": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
@@ -418,9 +418,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
             mnt_paths = ["/tmp"]
         system_config.update(
             **{
-                "max_io_workers": max(
-                    cfg.cluster.instance_type.cpu, len(mnt_paths) * 2
-                ),
+                "max_io_workers": max(4, len(mnt_paths) * 2),
                 "object_spilling_config": json_dump_no_space(
                     {
                         "type": "filesystem",
@@ -441,7 +439,11 @@ def get_ray_start_cmd() -> Tuple[str, Dict]:
     cmd += f" --object-manager-port={RAY_OBJECT_MANAGER_PORT}"
     cmd += f" --system-config='{system_config_str}'"
     cmd += f" --resources='{resources}'"
-    return cmd, system_config
+    env = {
+        "RAY_STORAGE": cfg.system.ray_storage,
+    }
+    env = {k: str(v) for k, v in env.items()}
+    return cmd, env, system_config
 
 
 def write_ray_system_config(conf: Dict, path: pathlib.Path) -> None:
@@ -459,9 +461,10 @@ def restart_ray(
         shell_utils.run(f"sudo mkdir -m 777 -p {mnt}")
     shell_utils.run(f"rsync -a {SCRIPT_DIR.parent}/ray-patch/ {ray.__path__[0]}")
     shell_utils.run("ray stop -f")
-    ray_cmd, ray_system_config = get_ray_start_cmd()
-    shell_utils.run(ray_cmd, env=dict(os.environ, RAY_STORAGE=cfg.system.ray_storage))
+    ray_cmd, ray_env, ray_system_config = get_ray_start_cmd()
+    shell_utils.run(ray_cmd, env=dict(os.environ, **ray_env))
     head_ip = get_current_ip()
+    # TODO(@lsf): pass ray_env to ansible
     ev = {
         "head_ip": head_ip,
         "clear_data_dir": clear_data_dir,
