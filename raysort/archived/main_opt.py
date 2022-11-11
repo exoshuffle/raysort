@@ -1,3 +1,4 @@
+# pylint: disable=too-many-locals,too-many-statements,cell-var-from-loop
 import collections
 import csv
 import functools
@@ -75,13 +76,13 @@ def _merge_blocks_prep(
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
         if allow_timeouts:
-            start = time.time()
+            # start = time.time()
             ready, not_ready = ray.wait(
                 refs,
                 num_returns=int(len(refs) * cfg.shuffle_wait_percentile),
             )
             # print("shuffle first half wait", len(ready), time.time() - start)
-            start = time.time()
+            # start = time.time()
             late, timeout_refs = ray.wait(
                 not_ready,
                 num_returns=len(not_ready),
@@ -91,7 +92,7 @@ def _merge_blocks_prep(
             # print("shuffle second half wait", len(refs), time.time() - start)
             if timeout_refs:
                 logging.info(
-                    f"got {len(refs)}/{len(blocks)}, timeout {len(timeout_refs)}"
+                    "got %d/%d, timeout %d", len(refs), len(blocks), len(timeout_refs)
                 )
         blocks = ray.get(refs)
         if isinstance(blocks[0], ray.ObjectRef):

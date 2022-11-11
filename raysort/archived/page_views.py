@@ -97,7 +97,7 @@ def top_languages_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
     return pd.concat(most_commons).sort_values(ascending=False)[: cfg.top_k]
 
 
-def top_languages_proportions_reduce(cfg: AppConfig, most_commons: list[S]) -> S:
+def top_languages_proportions_reduce(_cfg: AppConfig, most_commons: list[S]) -> S:
     return pd.concat(most_commons).sort_values(ascending=False)[:]
 
 
