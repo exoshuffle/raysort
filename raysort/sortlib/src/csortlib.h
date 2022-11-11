@@ -30,7 +30,7 @@ struct Record {
 
 template <typename T> struct HeaderComparator {
   inline bool operator()(const T &a, const T &b) {
-    return __builtin_memcmp(a.header, b.header, HEADER_SIZE) < 0;
+    return memcmp(a.header, b.header, HEADER_SIZE) < 0;
   }
 };
 
@@ -75,7 +75,8 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
 // TODO: this will be more complicated for skewed distribution.
 std::vector<Key> GetBoundaries(size_t num_partitions);
 
-using GetBatchRetVal = std::pair<size_t, int>;
+using PartitionId = int16_t;
+using GetBatchRetVal = std::pair<size_t, PartitionId>;
 
 // Responsible for merging M sorted partitions and producing the output
 // in blocks.
@@ -92,7 +93,7 @@ public:
   // - part_id is the partition that has been depleted (-1 if none).
   GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records);
 
-  void Refill(const ConstArray<Record> &part, int part_id);
+  void Refill(const ConstArray<Record> &part, PartitionId part_id);
 
 private:
   class Impl;
