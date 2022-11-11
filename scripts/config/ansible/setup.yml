@@ -5,6 +5,7 @@
   vars:
     data_disks:
       - /dev/nvme1n1
+    fstype: xfs
     mnt_prefix: /mnt/data
     tmpfs_path: /mnt/tmpfs
     awsdir: ~/.aws
@@ -21,7 +22,7 @@
     - name: Create a filesystem on each of the data disks
       become: true
       community.general.filesystem:
-        fstype: ext4
+        fstype: "{{ fstype }}"
         dev: "{{ item }}"
       loop: "{{ data_disks }}"
 
@@ -38,7 +39,7 @@
       ansible.posix.mount:
         path: "{{ mnt_prefix }}{{ idx }}"
         src: "{{ item }}"
-        fstype: ext4
+        fstype: "{{ fstype }}"
         state: mounted
       when: mnt_prefix and data_disks
       loop: "{{ data_disks }}"
