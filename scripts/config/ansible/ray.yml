@@ -10,9 +10,8 @@
     workdir: ~/raysort
     pythondir: ~/miniconda3/envs/raysort/bin
     clear_data_dir: false
-    ray_env: {}
-    ray_merics_export_port: 8090
     ray_object_manager_port: 8076
+    ray_merics_export_port: 8090
     ray_object_store_memory: "{{ 28 * 1024 * 1024 * 1024 }}"
     shared_memory_bytes: "{{ (28 * 1024 + 1) * 1024 * 1024 }}"
   environment:
