@@ -187,12 +187,13 @@ class ProgressTracker:
         logging.info(wandb.config)
 
     def inc(self, metric: str, value: int = 1, echo=False, log_to_wandb=False):
-        self.counts[metric] += value
-        self.gauges[metric].set(self.counts[metric])
+        new_value = self.counts[metric] + value
+        self.counts[metric] = new_value
+        self.gauges[metric].set(new_value)
         if echo:
-            logging.info("%s %s", metric, self.counts[metric])
+            logging.info("%s %s", metric, new_value)
         if log_to_wandb:
-            wandb.log({metric: self.counts[metric]})
+            wandb.log({metric: new_value})
 
     def dec(self, metric: str, value: int = 1, echo=False):
         return self.inc(metric, -value, echo)
@@ -243,6 +244,7 @@ class ProgressTracker:
         df = pd.DataFrame(
             ret, columns=["task", "median", "mean", "std", "max", "min", "count"]
         ).set_index("task")
+        pd.set_option("display.max_colwidth", None)
         print(self.series.get("output_time"))
         print(df)
         self.job_cfg.app.worker_ids = []
@@ -269,7 +271,8 @@ class ProgressTracker:
 
     def performance_report(self):
         self.save_trace(save_to_wandb=True)
-        save_prometheus_snapshot()
+        # Disabling for now as this could take a long time.
+        # save_prometheus_snapshot()
         self.report_spilling()
         self.report()
 
