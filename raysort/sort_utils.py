@@ -197,7 +197,7 @@ def generate_part(
             s3_utils.upload(
                 path,
                 pinfo,
-                max_concurrency=max(1, cfg.io_parallelism // cfg.map_parallelism),
+                max_concurrency=cfg.map_io_parallelism,
             )
         elif cfg.azure_containers:
             azure_utils.upload(path, pinfo)
