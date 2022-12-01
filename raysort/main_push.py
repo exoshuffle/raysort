@@ -277,21 +277,21 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     def _submit_map(map_id: int) -> ray.ObjectRef:
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
         node_id = map_scheduler.get_node()
-        opt = dict(**ray_utils.node_i(cfg, node_id))
+        opt = dict(**ray_utils.node_i(cfg, node_id), resources={"worker": 1 / cfg.map_parallelism})
         task = mapper.options(**opt).remote(
             cfg, map_id, map_bounds, pinfolist, merge_controllers
         )
-        map_scheduler.register_task(task, node_id)
+        # map_scheduler.register_task(task, node_id)
         return task
 
     # Main map-merge loop.
     all_map_out = []
     for map_id in range(cfg.num_mappers):
-        map_scheduler.limit_concurrency(cfg.map_parallelism)
+        # map_scheduler.limit_concurrency(cfg.map_parallelism)
         all_map_out.append(_submit_map(map_id))
 
     # Wait for all map tasks to finish.
-    logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
+    # logging.info("Mapper nodes usage: %s", map_scheduler.node_usage_counter)
     logging.info("Waiting for %d map tasks to finish", len(all_map_out))
     ray.get(all_map_out)
     logging.info("All map tasks finished; start reduce stage")
