@@ -76,7 +76,7 @@ m6i_xl = InstanceType(
     memory_gib=16,
 )
 
-configs = [    
+configs = [
     # ------------------------------------------------------------
     #     t3.2xl 10 nodes scheduling policy debugging
     # ------------------------------------------------------------
