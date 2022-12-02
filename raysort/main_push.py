@@ -296,6 +296,9 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     ray.get(all_map_out)
     logging.info("All map tasks finished; start reduce stage")
 
+    if cfg.skip_final_reduce:
+        return []
+
     # Reduce stage.
     ret = ray.get([controller.reduce.remote() for controller in merge_controllers])
     return flatten(ret)
