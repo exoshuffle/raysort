@@ -334,7 +334,7 @@ def main():
             with tracing_utils.timeit("sort", log_to_wandb=True):
                 sort_main(cfg)
 
-        if cfg.validate_output:
+        if cfg.validate_output and not cfg.skip_final_reduce:
             sort_utils.validate_output(cfg)
     finally:
         ray.get(tracker.performance_report.remote())
