@@ -266,7 +266,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         cfg.num_workers, cfg.num_reducers_per_worker
     )
     num_shards = cfg.num_shards_per_mapper
-    map_scheduler = NodeScheduler(cfg)
+    # map_scheduler = NodeScheduler(cfg)
     merge_controllers = [
         MergeController.options(**ray_utils.node_i(cfg, w)).remote(
             cfg, w, merge_bounds[w]
@@ -276,8 +276,9 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 
     def _submit_map(map_id: int) -> ray.ObjectRef:
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
-        node_id = map_scheduler.get_node()
-        opt = dict(**ray_utils.node_i(cfg, node_id), resources={"worker": 1 / cfg.map_parallelism})
+        # node_id = map_scheduler.get_node()
+        # opt = dict(**ray_utils.node_i(cfg, node_id), resources={"worker": 1 / cfg.map_parallelism})
+        opt = dict(resources={"worker": 1 / cfg.map_parallelism})
         task = mapper.options(**opt).remote(
             cfg, map_id, map_bounds, pinfolist, merge_controllers
         )

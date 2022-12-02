@@ -76,7 +76,7 @@ m6i_xl = InstanceType(
     memory_gib=16,
 )
 
-configs = [
+configs = [    
     # ------------------------------------------------------------
     #     t3.2xl 10 nodes scheduling policy debugging
     # ------------------------------------------------------------
@@ -356,6 +356,23 @@ configs = [
             reduce_parallelism_multiplier=1,
         ),
     ),
+    JobConfig(
+        name="480gb-2gb-i4i-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=480,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            native_scheduling=True,
+        ),
+    ),
     # ------------------------------------------------------------
     #     i4i.2xl 100 nodes
     # ------------------------------------------------------------
@@ -428,6 +445,24 @@ configs = [
             map_parallelism_multiplier=1,
             reduce_parallelism_multiplier=1,
             merge_factor=1,
+        ),
+    ),
+    JobConfig(
+        name="0.96tb-2gb-i4i4x-s3",
+        cluster=dict(
+            instance_count=10,
+            instance_type=i4i_4xl,
+        ),
+        system=dict(),
+        app=dict(
+            **get_steps(),
+            total_gb=960,
+            input_part_gb=2,
+            s3_buckets=get_s3_buckets(),
+            map_parallelism_multiplier=1,
+            reduce_parallelism_multiplier=1,
+            native_scheduling=True,
+            skip_final_reduce=True,
         ),
     ),
     # ------------------------------------------------------------
