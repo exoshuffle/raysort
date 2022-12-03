@@ -377,7 +377,7 @@ def json_dump_no_space(data) -> str:
 def get_ray_start_cmd() -> Tuple[str, Dict, Dict]:
     system_config = {
         "local_fs_capacity_threshold": 0.999,
-        "memory_usage_threshold_fraction": 1.0,
+        "memory_usage_threshold": 1.0,
         "max_fused_object_count": cfg.system.max_fused_object_count,
         "object_spilling_threshold": cfg.system.object_spilling_threshold,
         "verbose_spill_logs": 0,

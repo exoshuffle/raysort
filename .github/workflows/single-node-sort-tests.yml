@@ -12,7 +12,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      RAY_memory_usage_threshold_fraction: 1.0
+      RAY_memory_usage_threshold: 1.0
       S3_BUCKET: raysort-github-ci
       WANDB_MODE: offline
     steps:
