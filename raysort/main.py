@@ -40,7 +40,7 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: list[int]) -> list[Block
 
 def mapper_sort_blocks(
     cfg: AppConfig, bounds: list[int], pinfolist: list[PartInfo]
-) -> Tuple[np.ndarray, list[Tuple[int, int]]]:
+) -> tuple[np.ndarray, list[tuple[int, int]]]:
     with tracing_utils.timeit("map_load", report_completed=False):
         part = sort_utils.load_partitions(cfg, pinfolist)
     sort_fn = (
@@ -133,8 +133,8 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
 def _merge_blocks_prep(
     cfg: AppConfig,
     bounds: list[int],
-    blocks: Tuple[ray.ObjectRef],
-) -> Tuple[Iterable[np.ndarray], list[ray.ObjectRef]]:
+    blocks: tuple[ray.ObjectRef],
+) -> tuple[Iterable[np.ndarray], list[ray.ObjectRef]]:
     refs = list(blocks)
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
@@ -157,7 +157,7 @@ def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
     bounds: list[int],
-    blocks: Tuple[np.ndarray],
+    blocks: tuple[np.ndarray],
 ) -> Union[list[PartInfo], list[np.ndarray]]:
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
     with tracing_utils.timeit("merge"):
@@ -199,7 +199,7 @@ def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
     bounds: list[int],
-    blocks: Tuple[np.ndarray],
+    blocks: tuple[np.ndarray],
 ) -> Union[list[PartInfo], list[np.ndarray]]:
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
     yield timeouts
@@ -255,7 +255,7 @@ def final_merge(
 
 def get_boundaries(
     num_map_returns: int, num_merge_returns: int = -1
-) -> Tuple[list[int], list[list[int]]]:
+) -> tuple[list[int], list[list[int]]]:
     if num_merge_returns == -1:
         return sortlib.get_boundaries(num_map_returns), []
     merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)

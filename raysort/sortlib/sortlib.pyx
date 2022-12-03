@@ -40,7 +40,6 @@ KeyT = np.uint64
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
 PayloadT = np.dtype((np.uint8, RECORD_SIZE - HEADER_SIZE))
 RecordT = np.dtype([("header", HeaderT), ("body", PayloadT)])
-BlockInfo = tuple[int, int]
 
 
 def get_boundaries(n: int) -> list[int]:
@@ -67,7 +66,7 @@ cdef ConstArray[Record] _to_const_record_array(buf):
     return ret
 
 
-def sort_and_partition(part: np.ndarray, boundaries: list[int]) -> list[BlockInfo]:
+def sort_and_partition(part: np.ndarray, boundaries: list[int]) -> list[tuple[int, int]]:
     arr = _to_record_array(part)
     blocks = SortAndPartition(arr, boundaries)
     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in blocks]
