@@ -3,7 +3,7 @@ import enum
 import math
 import os
 from dataclasses import InitVar, dataclass, field
-from typing import Dict, List, Optional
+from typing import Optional
 
 import ray
 
@@ -23,7 +23,7 @@ MB = KB * 1000
 GB = MB * 1000
 
 
-def get_s3_buckets(count: int = 10) -> List[str]:
+def get_s3_buckets(count: int = 10) -> list[str]:
     assert S3_BUCKET
     return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
@@ -147,7 +147,7 @@ class AppConfig:
     riffle: bool = False
     magnet: bool = False
 
-    s3_buckets: List[str] = field(default_factory=list)
+    s3_buckets: list[str] = field(default_factory=list)
     azure_containers: str = ""
     cloud_storage: bool = field(init=False)
 
@@ -159,10 +159,10 @@ class AppConfig:
     validate_output: bool = False
 
     # Runtime Context
-    worker_ips: List[str] = field(default_factory=list)
-    worker_ids: List[ray.NodeID] = field(default_factory=list)
-    worker_ip_to_id: Dict[str, ray.NodeID] = field(default_factory=dict)
-    data_dirs: List[str] = field(default_factory=list)
+    worker_ips: list[str] = field(default_factory=list)
+    worker_ids: list[ray.NodeID] = field(default_factory=list)
+    worker_ip_to_id: dict[str, ray.NodeID] = field(default_factory=dict)
+    data_dirs: list[str] = field(default_factory=list)
     is_local_cluster: bool = False
 
     def __post_init__(
@@ -229,14 +229,14 @@ class JobConfig:
     system: SystemConfig
     app: AppConfig
 
-    def __init__(self, name: str, cluster: Dict, system: Dict, app: Dict):
+    def __init__(self, name: str, cluster: dict, system: dict, app: dict):
         self.name = name
         self.cluster = ClusterConfig(**cluster)
         self.system = SystemConfig(**system, _cluster=self.cluster)
         self.app = AppConfig(**app, _cluster=self.cluster)
 
 
-def get_steps(steps: Optional[List[AppStep]] = None) -> Dict:
+def get_steps(steps: Optional[list[AppStep]] = None) -> dict:
     """
     Return a dictionary of steps to run for AppConfig.
     """

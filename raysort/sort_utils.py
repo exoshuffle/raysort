@@ -4,7 +4,7 @@ import os
 import subprocess
 import tempfile
 import time
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 import numpy as np
 import ray
@@ -30,7 +30,7 @@ def get_manifest_file(cfg: AppConfig, kind: str = "input") -> Path:
     return constants.MANIFEST_FMT.format(kind=kind, suffix=suffix)
 
 
-def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
+def load_manifest(cfg: AppConfig, kind: str = "input") -> list[PartInfo]:
     if cfg.skip_input and kind == "input":
         return [
             PartInfo(
@@ -49,7 +49,7 @@ def load_manifest(cfg: AppConfig, kind: str = "input") -> List[PartInfo]:
         return [PartInfo.from_csv_row(row) for row in reader]
 
 
-def load_partitions(cfg: AppConfig, pinfolist: List[PartInfo]) -> np.ndarray:
+def load_partitions(cfg: AppConfig, pinfolist: list[PartInfo]) -> np.ndarray:
     if len(pinfolist) == 1:
         return load_partition(cfg, pinfolist[0])
     if cfg.s3_buckets:
@@ -80,7 +80,7 @@ def load_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
 
 def save_partition(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> List[PartInfo]:
+) -> list[PartInfo]:
     if cfg.skip_output:
         first_chunk = True
         for datachunk in merger:
@@ -322,7 +322,7 @@ def validate_part(cfg: AppConfig, pinfo: PartInfo) -> bytes:
         return ret
 
 
-def compare_checksums(input_checksums: List[str], output_summary: str) -> bool:
+def compare_checksums(input_checksums: list[int], output_summary: str) -> None:
     assert "Checksum: " in output_summary, output_summary
     checksum_line = output_summary.split("Checksum: ")[1]
     output_checksum = checksum_line.split()[0]

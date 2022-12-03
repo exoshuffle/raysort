@@ -7,7 +7,7 @@ from libcpp.pair cimport pair
 from libcpp.vector cimport vector
 
 import io
-from typing import Callable, Iterable, List, Tuple, Union
+from typing import Callable, Iterable, Union
 
 import numpy as np
 
@@ -40,10 +40,10 @@ KeyT = np.uint64
 HeaderT = np.dtype((np.uint8, HEADER_SIZE))
 PayloadT = np.dtype((np.uint8, RECORD_SIZE - HEADER_SIZE))
 RecordT = np.dtype([("header", HeaderT), ("body", PayloadT)])
-BlockInfo = Tuple[int, int]
+BlockInfo = tuple[int, int]
 
 
-def get_boundaries(n: int) -> List[int]:
+def get_boundaries(n: int) -> list[int]:
     return GetBoundaries(n)
 
 
@@ -67,7 +67,7 @@ cdef ConstArray[Record] _to_const_record_array(buf):
     return ret
 
 
-def sort_and_partition(part: np.ndarray, boundaries: List[int]) -> List[BlockInfo]:
+def sort_and_partition(part: np.ndarray, boundaries: list[int]) -> list[BlockInfo]:
     arr = _to_record_array(part)
     blocks = SortAndPartition(arr, boundaries)
     return [(c.offset * RECORD_SIZE, c.size * RECORD_SIZE) for c in blocks]
@@ -78,7 +78,7 @@ def merge_partitions(
     get_block: Callable[[int, int], np.ndarray],
     batch_num_records: int = 1_000_000,
     ask_for_refills: bool = False,
-    boundaries: List[int] = [],
+    boundaries: list[int] = [],
 ) -> Iterable[np.ndarray]:
     """
     An iterator that returns merged blocks for upload.

@@ -1,5 +1,4 @@
 import time
-from typing import List
 
 import numpy as np
 import ray
@@ -15,9 +14,9 @@ from raysort.typing import PartId, PartInfo
 def mapper(
     cfg: AppConfig,
     _mapper_id: PartId,
-    bounds: List[int],
+    bounds: list[int],
     pinfo: PartInfo,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     with tracing_utils.timeit("map"):
         tracing_utils.record_value("map_arrive", time.time())
         with tracing_utils.timeit("map_load", report_completed=False):

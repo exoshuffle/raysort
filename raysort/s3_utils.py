@@ -3,7 +3,7 @@ import os
 import queue
 import threading
 import time
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 import boto3
 import botocore
@@ -47,7 +47,7 @@ def upload(src: Path, pinfo: PartInfo, *, delete_src: bool = True, **kwargs) -> 
 
 
 def download_parallel(
-    pinfolist: List[PartInfo], shard_size: int, concurrency: int
+    pinfolist: list[PartInfo], shard_size: int, concurrency: int
 ) -> np.ndarray:
     io_buffers = [io.BytesIO() for _ in pinfolist]
     threads = [
@@ -107,7 +107,7 @@ def upload_s3_buffer(
 
 def single_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> List[PartInfo]:
+) -> list[PartInfo]:
     buf = io.BytesIO()
     for datachunk in merger:
         buf.write(datachunk)
@@ -117,7 +117,7 @@ def single_upload(
 
 def multi_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> List[PartInfo]:
+) -> list[PartInfo]:
     parallelism = cfg.reduce_io_parallelism
     upload_threads = []
     mpu_queue = queue.PriorityQueue()
@@ -166,7 +166,7 @@ def multi_upload(
 
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> List[PartInfo]:
+) -> list[PartInfo]:
     # TODO(@lsf) make this a flag
     # return single_upload(cfg, pinfo, merger)
     # return multi_upload(cfg, pinfo, merger)

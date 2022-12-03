@@ -1,5 +1,4 @@
 import os
-from typing import List
 
 from raysort.typing import ByteCount, PartId, RecordCount
 
@@ -44,7 +43,7 @@ def bytes_to_records(n_bytes: ByteCount) -> RecordCount:
     return int(n_bytes / RECORD_SIZE)
 
 
-def merge_part_ids(*part_ids: List[PartId], skip_places: int = 4) -> PartId:
+def merge_part_ids(*part_ids: list[PartId], skip_places: int = 4) -> PartId:
     ret = 0
     mul = 1
     for p in reversed(part_ids):

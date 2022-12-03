@@ -7,7 +7,7 @@ import signal
 import socket
 import string
 import subprocess
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Optional, Union
 
 import boto3
 import click
@@ -58,7 +58,7 @@ def get_tf_dir(cluster_name: str) -> pathlib.Path:
     return TERRAFORM_DIR / f"_{cluster_name}"
 
 
-def get_instances(filters: Dict) -> List[Dict]:
+def get_instances(filters: dict) -> list[dict]:
     ec2 = boto3.client("ec2")
     paginator = ec2.get_paginator("describe_instances")
     ret = []
@@ -121,8 +121,8 @@ def terraform_provision(cluster_name: str) -> None:
 
 
 def get_tf_output(
-    cluster_name: str, key: Union[str, List[str]]
-) -> Union[List[str], List[List[str]]]:
+    cluster_name: str, key: Union[str, list[str]]
+) -> Union[list[str], list[list[str]]]:
     tf_dir = get_or_create_tf_dir(cluster_name, must_exist=True)
     p = shell_utils.run("terraform output -json", cwd=tf_dir, stdout=subprocess.PIPE)
     data = json.loads(p.stdout.decode("ascii"))
@@ -144,7 +144,7 @@ def aws_action(cluster_name: str, method: str, verb: str) -> None:
 # ------------------------------------------------------------
 
 
-def get_ansible_inventory_content(node_ips: List[str]) -> str:
+def get_ansible_inventory_content(node_ips: list[str]) -> str:
     def get_item(ip):
         host = "node_" + ip.replace(".", "_")
         return host, {"ansible_host": ip}
@@ -159,7 +159,7 @@ def get_ansible_inventory_content(node_ips: List[str]) -> str:
 
 
 def get_or_create_ansible_inventory(
-    cluster_name: str, ips: Optional[List[str]] = None
+    cluster_name: str, ips: Optional[list[str]] = None
 ) -> pathlib.Path:
     path = ANSIBLE_DIR / f"_{cluster_name}.yml"
     if not ips:
@@ -184,7 +184,7 @@ def run_ansible_playbook(
     inventory_path: pathlib.Path,
     playbook: str,
     *,
-    ev: Optional[Dict] = None,
+    ev: Optional[dict] = None,
     retries: int = 1,
     time_between_retries: float = 10,
 ) -> subprocess.CompletedProcess:
@@ -204,20 +204,20 @@ def run_ansible_playbook(
     )
 
 
-def get_data_disks() -> List[str]:
+def get_data_disks() -> list[str]:
     offset = cfg.cluster.instance_type.disk_device_offset
     return [
         f"/dev/nvme{i + offset}n1" for i in range(cfg.cluster.instance_type.disk_count)
     ]
 
 
-def get_mnt_paths() -> List[str]:
+def get_mnt_paths() -> list[str]:
     return [
         MNT_PATH_FMT.format(i=i) for i in range(cfg.cluster.instance_type.disk_count)
     ]
 
 
-def get_ansible_vars() -> Dict:
+def get_ansible_vars() -> dict:
     ret = {}
     if cfg.cluster.instance_type.disk_count == 0:
         ret["mnt_prefix"] = ""
@@ -230,7 +230,7 @@ def get_ansible_vars() -> Dict:
 # ------------------------------------------------------------
 
 
-def update_hosts_file(ips: List[str]) -> None:
+def update_hosts_file(ips: list[str]) -> None:
     PATH = "/etc/hosts"
     MARKER = "### HADOOP_YARN_HOSTS ###\n"
     with open(PATH) as fin:
@@ -248,7 +248,7 @@ def update_hosts_file(ips: List[str]) -> None:
     click.secho(f"Updated {PATH}", fg="green")
 
 
-def update_workers_file(ips: List[str]) -> None:
+def update_workers_file(ips: list[str]) -> None:
     PATH = os.path.join(os.getenv("HADOOP_HOME"), "etc/hadoop/workers")
     shell_utils.run(f"cp {PATH} {PATH}.backup")
     with open(PATH, "w") as fout:
@@ -257,7 +257,7 @@ def update_workers_file(ips: List[str]) -> None:
 
 
 def update_hadoop_xml(
-    filename: str, head_ip: str, mnt_paths: List[str], is_hdd: bool
+    filename: str, head_ip: str, mnt_paths: list[str], is_hdd: bool
 ) -> None:
     with open(HADOOP_TEMPLATE_DIR / (filename + ".template")) as fin:
         template = string.Template(fin.read())
@@ -274,7 +274,7 @@ def update_hadoop_xml(
     click.secho(f"Updated {output_path}", fg="green")
 
 
-def update_hadoop_config(head_ip: str, mnt_paths: List[str], is_hdd: bool) -> None:
+def update_hadoop_config(head_ip: str, mnt_paths: list[str], is_hdd: bool) -> None:
     for filename in ["core-site.xml", "hdfs-site.xml", "yarn-site.xml"]:
         update_hadoop_xml(filename, head_ip, mnt_paths, is_hdd)
 
@@ -294,7 +294,7 @@ def free_port(port: int):
             continue
 
 
-def get_prometheus_sd_content(head_ip: str, ips: List[str]) -> str:
+def get_prometheus_sd_content(head_ip: str, ips: list[str]) -> str:
     def get_addrs(port, include_head=True):
         return [f"{ip}:{port}" for ip in (ips if not include_head else ips + [head_ip])]
 
@@ -312,7 +312,7 @@ def get_prometheus_sd_content(head_ip: str, ips: List[str]) -> str:
     )
 
 
-def setup_prometheus(head_ip: str, ips: List[str]) -> None:
+def setup_prometheus(head_ip: str, ips: list[str]) -> None:
     prometheus_data_path = "/tmp/prometheus"
     os.makedirs(prometheus_data_path, exist_ok=True)
     with open("/tmp/prometheus/service_discovery.json", "w") as fout:
@@ -374,7 +374,7 @@ def json_dump_no_space(data) -> str:
     return json.dumps(data, separators=(",", ":"))
 
 
-def get_ray_start_cmd() -> Tuple[str, Dict, Dict]:
+def get_ray_start_cmd() -> tuple[str, dict, dict]:
     system_config = {
         "local_fs_capacity_threshold": 0.999,
         "memory_usage_threshold": 1.0,
@@ -446,7 +446,7 @@ def get_ray_start_cmd() -> Tuple[str, Dict, Dict]:
     return cmd, env, system_config
 
 
-def write_ray_system_config(conf: Dict, path: pathlib.Path) -> None:
+def write_ray_system_config(conf: dict, path: pathlib.Path) -> None:
     with open(path, "w") as fout:
         yaml.dump(conf, fout)
 

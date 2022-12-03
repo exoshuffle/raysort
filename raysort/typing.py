@@ -1,13 +1,13 @@
 import dataclasses
 import enum
-from typing import List, Optional, Tuple  # pylint: disable=import-self
+from typing import Optional  # pylint: disable=import-self
 
 ByteCount = int
 PartId = int
 Path = str
 RecordCount = int
 
-BlockInfo = Tuple[int, int]
+BlockInfo = tuple[int, int]
 
 
 class AppStep(enum.Enum):
@@ -35,7 +35,7 @@ class PartInfo:
         ret += f"(size={self.size},checksum={self.checksum})"
         return ret
 
-    def to_csv_row(self) -> List[str]:
+    def to_csv_row(self) -> list[str]:
         return [
             f"{self.part_id:010x}",
             self.node or "",
@@ -46,7 +46,7 @@ class PartInfo:
         ]
 
     @classmethod
-    def from_csv_row(cls, row: List[str]) -> "PartInfo":
+    def from_csv_row(cls, row: list[str]) -> "PartInfo":
         return cls(int(row[0], 16), row[1], row[2], row[3], int(row[4]), row[5])
 
 

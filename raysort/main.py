@@ -4,7 +4,7 @@ import logging
 import os
 import random
 import time
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import Callable, Iterable, Union
 
 import numpy as np
 import ray
@@ -23,11 +23,11 @@ from raysort.config import AppConfig, JobConfig
 from raysort.typing import BlockInfo, PartId, PartInfo, SpillingMode
 
 
-def flatten(xss: List[List]) -> List:
+def flatten(xss: list[list]) -> list:
     return [x for xs in xss for x in xs]
 
 
-def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[BlockInfo]:
+def _dummy_sort_and_partition(part: np.ndarray, bounds: list[int]) -> list[BlockInfo]:
     N = len(bounds)
     offset = 0
     size = int(np.ceil(part.size / N))
@@ -39,8 +39,8 @@ def _dummy_sort_and_partition(part: np.ndarray, bounds: List[int]) -> List[Block
 
 
 def mapper_sort_blocks(
-    cfg: AppConfig, bounds: List[int], pinfolist: List[PartInfo]
-) -> Tuple[np.ndarray, List[Tuple[int, int]]]:
+    cfg: AppConfig, bounds: list[int], pinfolist: list[PartInfo]
+) -> Tuple[np.ndarray, list[Tuple[int, int]]]:
     with tracing_utils.timeit("map_load", report_completed=False):
         part = sort_utils.load_partitions(cfg, pinfolist)
     sort_fn = (
@@ -56,8 +56,8 @@ def mapper_sort_blocks(
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
 def mapper(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
-) -> List[np.ndarray]:
+    cfg: AppConfig, _mapper_id: PartId, bounds: list[int], pinfolist: list[PartInfo]
+) -> list[np.ndarray]:
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
         if cfg.use_put:
@@ -70,7 +70,7 @@ def mapper(
 
 @ray.remote(num_cpus=0)
 def mapper_yield(
-    cfg: AppConfig, _mapper_id: PartId, bounds: List[int], pinfolist: List[PartInfo]
+    cfg: AppConfig, _mapper_id: PartId, bounds: list[int], pinfolist: list[PartInfo]
 ) -> Iterable[np.ndarray]:
     with tracing_utils.timeit("map"):
         part, blocks = mapper_sort_blocks(cfg, bounds, pinfolist)
@@ -132,9 +132,9 @@ def _get_block(blocks: np.ndarray, i: int, d: int):
 
 def _merge_blocks_prep(
     cfg: AppConfig,
-    bounds: List[int],
+    bounds: list[int],
     blocks: Tuple[ray.ObjectRef],
-) -> Tuple[Iterable[np.ndarray], List[ray.ObjectRef]]:
+) -> Tuple[Iterable[np.ndarray], list[ray.ObjectRef]]:
     refs = list(blocks)
     timeout_refs = []
     with tracing_utils.timeit("shuffle", report_completed=False):
@@ -156,9 +156,9 @@ def _merge_blocks_prep(
 def merge_blocks(
     cfg: AppConfig,
     merge_id: PartId,
-    bounds: List[int],
+    bounds: list[int],
     blocks: Tuple[np.ndarray],
-) -> Union[List[PartInfo], List[np.ndarray]]:
+) -> Union[list[PartInfo], list[np.ndarray]]:
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
     with tracing_utils.timeit("merge"):
         ret = [timeouts]
@@ -198,9 +198,9 @@ def merge_blocks(
 def merge_blocks_yield(
     cfg: AppConfig,
     _merge_id: PartId,
-    bounds: List[int],
+    bounds: list[int],
     blocks: Tuple[np.ndarray],
-) -> Union[List[PartInfo], List[np.ndarray]]:
+) -> Union[list[PartInfo], list[np.ndarray]]:
     merger, timeouts = _merge_blocks_prep(cfg, bounds, blocks)
     yield timeouts
     with tracing_utils.timeit("merge"):
@@ -215,8 +215,8 @@ def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
     reducer_id: PartId,
-    *parts: List,
-) -> List[PartInfo]:
+    *parts: list,
+) -> list[PartInfo]:
     with tracing_utils.timeit("reduce"):
         if isinstance(parts[0], PartInfo):
             if cfg.reduce_io_parallelism > 0:
@@ -255,7 +255,7 @@ def final_merge(
 
 def get_boundaries(
     num_map_returns: int, num_merge_returns: int = -1
-) -> Tuple[List[int], List[List[int]]]:
+) -> Tuple[list[int], list[list[int]]]:
     if num_merge_returns == -1:
         return sortlib.get_boundaries(num_map_returns), []
     merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
@@ -268,14 +268,14 @@ def get_boundaries(
     return map_bounds, merge_bounds
 
 
-def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> Dict:
+def get_node_aff(cfg: AppConfig, pinfo: PartInfo, part_id: PartId) -> dict:
     if pinfo.node:
         return ray_utils.node_ip_aff(cfg, pinfo.node)
     return ray_utils.node_i(cfg, part_id)
 
 
 @ray.remote(num_cpus=0)
-def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[PartInfo]:
+def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list) -> list[PartInfo]:
     with tracing_utils.timeit("reduce_master"):
         tasks = []
         for r in range(cfg.num_reducers_per_worker):
@@ -292,8 +292,8 @@ def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: List) -> List[Par
 def reduce_stage(
     cfg: AppConfig,
     merge_results: np.ndarray,
-    get_reduce_master_args: Callable[[int], List],
-) -> List[PartInfo]:
+    get_reduce_master_args: Callable[[int], list],
+) -> list[PartInfo]:
     if cfg.skip_final_reduce:
         ray_utils.wait(merge_results.flatten(), wait_all=True)
         return []
@@ -306,7 +306,7 @@ def reduce_stage(
     return flatten(ray.get(tasks))
 
 
-def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
+def sort_simple(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     bounds, _ = get_boundaries(cfg.num_reducers)
 
     mapper_opt = {"num_returns": cfg.num_reducers + 1}
@@ -339,7 +339,7 @@ def sort_simple(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
-def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
+def sort_riffle(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     round_merge_factor = cfg.merge_factor // cfg.map_parallelism
 
     start_time = time.time()
@@ -418,7 +418,7 @@ def sort_riffle(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
-def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
+def sort_two_stage(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     start_time = time.time()
     ref_recorder = tracing_utils.ObjectRefRecorder(cfg.record_object_refs)
     map_bounds, merge_bounds = get_boundaries(
@@ -515,7 +515,7 @@ def sort_two_stage(cfg: AppConfig, parts: List[PartInfo]) -> List[PartInfo]:
     )
 
 
-def sort_reduce_only(cfg: AppConfig) -> List[PartInfo]:
+def sort_reduce_only(cfg: AppConfig) -> list[PartInfo]:
     num_returns = cfg.num_reducers_per_worker
     bounds, _ = get_boundaries(num_returns)
     merger_opt = {"num_returns": num_returns + 1}

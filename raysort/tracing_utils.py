@@ -7,7 +7,7 @@ import os
 import re
 import shutil
 import time
-from typing import Callable, Dict, Iterable
+from typing import Callable, Iterable
 
 import ray
 import requests
@@ -109,7 +109,7 @@ def _make_trace_event(span: Span):
 
 
 # pylint: disable=protected-access
-def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
+def _get_spilling_stats(print_ray_stats: bool = False) -> dict[str, float]:
     summary = ray._private.internal_api.memory_summary(stats_only=True)
     if print_ray_stats:
         print(summary)
@@ -127,7 +127,7 @@ def _get_spilling_stats(print_ray_stats: bool = False) -> Dict[str, float]:
     }
 
 
-class _DefaultDictWithKey(collections.defaultdict):
+class _DefaultdictWithKey(collections.defaultdict):
     def __missing__(self, key):
         if self.default_factory:
             self[key] = self.default_factory(key)  # pylint: disable=not-callable
@@ -164,7 +164,7 @@ class ProgressTracker:
     def __init__(self, job_cfg: JobConfig, project: str = "raysort"):
         self.job_cfg = job_cfg
         self.counts = collections.defaultdict(int)
-        self.gauges = _DefaultDictWithKey(metrics.Gauge)
+        self.gauges = _DefaultdictWithKey(metrics.Gauge)
         self.series = collections.defaultdict(list)
         self.spans = []
         self.initial_spilling_stats = _get_spilling_stats()

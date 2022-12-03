@@ -1,7 +1,6 @@
 import glob
 import json
 import os
-from typing import Dict, List
 
 import pandas as pd
 import ray
@@ -9,7 +8,7 @@ import ray
 RAY_LOG_DIR = "/tmp/ray/session_latest/logs"
 
 
-def parse_log_file(filename: str) -> List[Dict]:
+def parse_log_file(filename: str) -> list[dict]:
     worker_ip = ray.util.get_node_ip_address()
     worker_pid = filename.split("-")[-1].split(".")[0]
     worker = f"{worker_ip}:{worker_pid}"
@@ -27,7 +26,7 @@ def parse_log_file(filename: str) -> List[Dict]:
 
 
 @ray.remote
-def parse_logs() -> List[Dict]:
+def parse_logs() -> list[dict]:
     ret = []
     for file in glob.glob(os.path.join(RAY_LOG_DIR, "io_worker-*.out")):
         data = parse_log_file(file)
@@ -35,7 +34,7 @@ def parse_logs() -> List[Dict]:
     return ret
 
 
-def load_object_ref_mapping() -> Dict[str, str]:
+def load_object_ref_mapping() -> dict[str, str]:
     ret = {}
     with open("/tmp/raysort-latest-objects.txt") as fin:
         for line in fin.readlines():

@@ -5,7 +5,7 @@ import socket
 import subprocess
 import tempfile
 import time
-from typing import Callable, Dict, List, Tuple
+from typing import Callable
 
 import ray
 from ray import cluster_utils
@@ -25,7 +25,7 @@ def run_on_all_workers(
     cfg: AppConfig,
     fn: ray.remote_function.RemoteFunction,
     include_current: bool = False,
-) -> List[ray.ObjectRef]:
+) -> list[ray.ObjectRef]:
     opts = [node_aff(node) for node in cfg.worker_ids]
     if include_current:
         opts.append(current_node_aff())
@@ -33,8 +33,8 @@ def run_on_all_workers(
 
 
 def schedule_tasks(
-    fn: Callable, task_args: List[Tuple], parallelism: int = 0
-) -> List[ray.ObjectRef]:
+    fn: Callable, task_args: list[tuple], parallelism: int = 0
+) -> list[ray.ObjectRef]:
     """
     Schedule tasks with a maximum parallelism on the current node.
     """
@@ -55,16 +55,16 @@ def remote(fn: Callable) -> RemoteFunction:
     return ray.remote(**opt)(fn)
 
 
-def current_node_aff() -> Dict:
+def current_node_aff() -> dict:
     return node_aff(ray.get_runtime_context().node_id)
 
 
-def node_ip_aff(cfg: AppConfig, node_ip: str) -> Dict:
+def node_ip_aff(cfg: AppConfig, node_ip: str) -> dict:
     assert node_ip is not None, node_ip
     return node_aff(cfg.worker_ip_to_id[node_ip])
 
 
-def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> Dict:
+def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> dict:
     return {
         "scheduling_strategy": ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
             node_id=node_id,
@@ -73,7 +73,7 @@ def node_aff(node_id: ray.NodeID, *, soft: bool = False) -> Dict:
     }
 
 
-def node_i(cfg: AppConfig, node_idx: int) -> Dict:
+def node_i(cfg: AppConfig, node_idx: int) -> dict:
     return node_aff(cfg.worker_ids[node_idx % cfg.num_workers])
 
 
@@ -181,7 +181,7 @@ def wait(
     wait_all: bool = False,
     soft_timeout: float = 120,
     **kwargs,
-) -> Tuple[List[ray.ObjectRef], List[ray.ObjectRef]]:
+) -> tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
     to_wait = [f for f in futures if f is not None]
     if len(to_wait) == 0:
         return [], []
@@ -211,7 +211,7 @@ def wait(
 
 
 def _build_cluster(
-    num_nodes: int, ray_args: Dict, system_config: Dict
+    num_nodes: int, ray_args: dict, system_config: dict
 ) -> cluster_utils.Cluster:
     cluster = cluster_utils.Cluster()
     cluster.add_node(

@@ -2,7 +2,7 @@ import io
 import os
 import queue
 import threading
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 import numpy as np
 import requests
@@ -61,7 +61,7 @@ def download(pinfo: PartInfo, filename: Optional[Path] = None) -> np.ndarray:
 
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> List[PartInfo]:
+) -> list[PartInfo]:
     concurrency = CONCURRENCY
     blob_client = get_blob_client(pinfo.bucket, pinfo.path)
     upload_threads = []
