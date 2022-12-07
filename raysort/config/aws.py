@@ -463,7 +463,7 @@ configs = [
             **get_steps(),
             total_gb=2000,
             input_part_gb=2,
-            # output_part_gb=4,
+            output_part_gb=4,
             s3_buckets=get_s3_buckets(),
             map_parallelism_multiplier=12 / 16,
             reduce_parallelism_multiplier=12 / 16,
