@@ -65,7 +65,7 @@ def _make_blocks(
 def test_config(config_name, merger_id: int = 0):
     job_cfg = config.get(config_name)
     cfg = job_cfg.app
-    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
+    map_bounds, merge_bounds = sort_utils.get_boundaries_auto(cfg, [])
     print(config_name)
     merge_limit = cfg.merge_factor * cfg.num_workers
     bounds = merge_bounds[merger_id]

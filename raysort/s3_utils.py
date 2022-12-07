@@ -1,3 +1,4 @@
+import concurrent.futures as cf
 import io
 import os
 import queue
@@ -78,7 +79,6 @@ def download_parallel(
 def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
-    buf: Optional[io.BytesIO] = None,
     size: Optional[int] = None,
     **kwargs,
 ) -> np.ndarray:
@@ -86,8 +86,7 @@ def download(
     if filename:
         client().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
         return np.empty(0, dtype=np.uint8)
-    if buf is None:
-        buf = io.BytesIO()
+    buf = io.BytesIO()
     if size:
         s3_custom.download_fileobj(
             client(), pinfo.bucket, pinfo.path, buf, size, Config=config
@@ -95,6 +94,21 @@ def download(
     else:
         client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
+
+
+def get_object_range(pinfo: PartInfo, bytes_range: tuple[int, int]) -> bytes:
+    start, size = bytes_range
+    end = start + size - 1
+    resp = client().get_object(
+        Bucket=pinfo.bucket, Key=pinfo.path, Range=f"bytes={start}-{end}"
+    )
+    return resp["Body"].read()
+
+
+def get_object_ranges(pinfo: PartInfo, ranges: list[tuple[int, int]]) -> list[bytes]:
+    with cf.ThreadPoolExecutor(max_workers=len(ranges)) as executor:
+        results = executor.map(get_object_range, [pinfo] * len(ranges), ranges)
+        return list(results)
 
 
 def upload_s3_buffer(

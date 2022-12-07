@@ -155,6 +155,8 @@ class AppConfig:
     fail_time: int = 45
 
     data_skew: bool = False
+    use_sampling: bool = False
+    num_samples_per_partition: int = 20
 
     generate_input: bool = False
     sort: bool = False

@@ -1,13 +1,14 @@
 import csv
+import functools
 import logging
 import os
 import subprocess
 import tempfile
 import time
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 import numpy as np
-import pandas
+import pandas as pd
 import ray
 
 from raysort import (
@@ -179,12 +180,15 @@ def _get_part_path(
     return os.path.join(*parts)
 
 
-def _run_gensort(offset: int, size: int, path: str, buf: bool = False) -> str:
+def _run_gensort(
+    offset: int, size: int, path: str, buf: bool = False, skew: bool = False
+) -> str:
     # Add `,buf` to use buffered I/O instead of direct I/O (for tmpfs).
     if buf:
         path += ",buf"
+    skewstr = "-s" if skew else ""
     proc = subprocess.run(
-        f"{constants.GENSORT_PATH} -c -b{offset} {size} {path}",
+        f"{constants.GENSORT_PATH} {skewstr} -c -b{offset} {size} {path}",
         shell=True,
         check=True,
         stderr=subprocess.PIPE,
@@ -209,7 +213,9 @@ def generate_part(
             pinfo = part_info(cfg, part_id)
             path = pinfo.path
         pinfo.size = size * constants.RECORD_SIZE
-        pinfo.checksum = _run_gensort(offset, size, path, cfg.cloud_storage)
+        pinfo.checksum = _run_gensort(
+            offset, size, path, cfg.cloud_storage, cfg.data_skew
+        )
         if cfg.s3_buckets:
             s3_utils.upload(
                 path,
@@ -263,7 +269,7 @@ def generate_input(cfg: AppConfig):
 
 def create_partition(part_size: int) -> np.ndarray:
     # TODO(@lsf): replace this with gensort
-    num_records = part_size // 100
+    num_records = constants.bytes_to_records(part_size)
     mat = np.empty((num_records, 100), dtype=np.uint8)
     mat[:, :10] = np.frombuffer(
         np.random.default_rng().bytes(num_records * 10), dtype=np.uint8
@@ -282,7 +288,7 @@ def calculate_boundaries(samples, n, bytes_for_bounds=8):
     )
     # To ensure that the first and last boundaries match the min and max value
     samples.extend([0, 2 ** (bytes_for_bounds * 8) - 1])
-    edges = pandas.qcut(samples, n, labels=False, retbins=True)[1]
+    edges = pd.qcut(samples, n, labels=False, retbins=True)[1]
     return list(map(int, edges))
 
 
@@ -389,18 +395,45 @@ def validate_output(cfg: AppConfig):
 # ------------------------------------------------------------
 
 
-def get_boundaries(cfg: AppConfig) -> tuple[list[int], list[list[int]]]:
-    if cfg.data_skew:
-        return get_boundaries_sampling(cfg)
-    return get_boundaries_static(cfg.num_map_returns, cfg.num_merge_returns)
+@ray.remote
+def sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
+    total_num_records = constants.bytes_to_records(cfg.input_part_size)
+    indices = np.random.randint(total_num_records, size=cfg.num_samples_per_partition)
+    byte_ranges = [(i * constants.RECORD_SIZE, constants.KEY_SIZE) for i in indices]
+    # TODO(@lsf): implement sampling from filesystem and Azure.
+    with tracing_utils.timeit("sample"):
+        key_bytes = s3_utils.get_object_ranges(pinfo, byte_ranges)
+        return np.concatenate([np.frombuffer(kb, dtype=">u8") for kb in key_bytes])
 
 
-def get_boundaries_static(
-    num_map_returns: int, num_merge_returns: int = -1
+def _get_key_sample(cfg: AppConfig, parts: list[PartInfo]) -> np.ndarray:
+    logging.info(
+        "Determining boundaries by sampling %d data points each from %d partitions",
+        cfg.num_samples_per_partition,
+        len(parts),
+    )
+    samples = ray.get([sample_partition.remote(cfg, p) for p in parts])
+    return np.concatenate(samples)
+
+
+def _get_boundaries_with_sample(sample: np.ndarray, num_returns: int) -> list[int]:
+    # edges = pd.qcut(samples, n, labels=False, retbins=True)[1]
+    # return list(map(int, edges))
+    quantiles = np.linspace(0, 1, num_returns + 1)[:-1]
+    ret = np.quantile(sample, quantiles)
+    print("boundaries", ret)
+    print("boundaries norm", [x / 2**64 for x in ret])
+    return ret
+
+
+def get_boundaries(
+    num_map_returns: int,
+    num_merge_returns: int = -1,
+    get_boundaries_impl: Callable[[int], list[int]] = sortlib.get_boundaries,
 ) -> tuple[list[int], list[list[int]]]:
     if num_merge_returns == -1:
-        return sortlib.get_boundaries(num_map_returns), []
-    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
+        return get_boundaries_impl(num_map_returns), []
+    merge_bounds_flat = get_boundaries_impl(num_map_returns * num_merge_returns)
     merge_bounds = (
         np.array(merge_bounds_flat, dtype=sortlib.KeyT)
         .reshape(num_map_returns, num_merge_returns)
@@ -408,3 +441,18 @@ def get_boundaries_static(
     )
     map_bounds = [b[0] for b in merge_bounds]
     return map_bounds, merge_bounds
+
+
+def get_boundaries_auto(
+    cfg: AppConfig, parts: list[PartInfo]
+) -> tuple[list[int], list[list[int]]]:
+    get_boundaries_impl = sortlib.get_boundaries
+    if cfg.data_skew:
+        with tracing_utils.timeit("sample_all"):
+            sample = _get_key_sample(cfg, parts)
+            get_boundaries_impl = functools.partial(_get_boundaries_with_sample, sample)
+    return get_boundaries(
+        cfg.num_workers,
+        cfg.num_reducers_per_worker,
+        get_boundaries_impl=get_boundaries_impl,
+    )

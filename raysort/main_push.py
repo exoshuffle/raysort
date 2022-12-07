@@ -163,6 +163,7 @@ class MergeController:
             self._close_current_merger()
         start = time.perf_counter()
         self._merged_bytes += sum(ray.get(list(self._merge_tasks.keys())))
+        print(self._merged_bytes, self._mapper_received.sum())
         assert self._merged_bytes == self._mapper_received.sum(), (
             self._merged_bytes,
             self._mapper_received.sum(),
@@ -247,7 +248,7 @@ class NodeScheduler:
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
+    map_bounds, merge_bounds = sort_utils.get_boundaries_auto(cfg, parts)
     num_shards = cfg.num_shards_per_mapper
     map_scheduler = NodeScheduler(cfg)
     merge_controllers = [

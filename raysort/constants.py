@@ -5,6 +5,7 @@ from raysort.typing import ByteCount, PartId, RecordCount
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
 # Basics
+KEY_SIZE = 8  # bytes
 RECORD_SIZE = 100  # bytes
 
 # Ray Resources
