@@ -219,21 +219,6 @@ def final_merge(
         return sort_utils.save_partition(cfg, pinfo, merger)[0]
 
 
-def get_boundaries(
-    num_map_returns: int, num_merge_returns: int = -1
-) -> tuple[list[int], list[list[int]]]:
-    if num_merge_returns == -1:
-        return sortlib.get_boundaries(num_map_returns), []
-    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
-    merge_bounds = (
-        np.array(merge_bounds_flat, dtype=sortlib.KeyT)
-        .reshape(num_map_returns, num_merge_returns)
-        .tolist()
-    )
-    map_bounds = [b[0] for b in merge_bounds]
-    return map_bounds, merge_bounds
-
-
 class NodeScheduler:
     def __init__(self, cfg: AppConfig) -> None:
         self.num_workers = cfg.num_workers
@@ -262,7 +247,7 @@ class NodeScheduler:
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    map_bounds, merge_bounds = get_boundaries(
+    map_bounds, merge_bounds = sort_utils.get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
     )
     num_shards = cfg.num_shards_per_mapper

@@ -15,6 +15,7 @@ from raysort import (
     logging_utils,
     ray_utils,
     s3_utils,
+    sortlib,
     tracing_utils,
 )
 from raysort.config import AppConfig
@@ -365,3 +366,23 @@ def validate_output(cfg: AppConfig):
         compare_checksums(input_checksums, output_summary)
 
     logging.info("All OK!")
+
+
+# ------------------------------------------------------------
+#     Sampling and Boundaries Calculation
+# ------------------------------------------------------------
+
+
+def get_boundaries(
+    num_map_returns: int, num_merge_returns: int = -1
+) -> tuple[list[int], list[list[int]]]:
+    if num_merge_returns == -1:
+        return sortlib.get_boundaries(num_map_returns), []
+    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
+    merge_bounds = (
+        np.array(merge_bounds_flat, dtype=sortlib.KeyT)
+        .reshape(num_map_returns, num_merge_returns)
+        .tolist()
+    )
+    map_bounds = [b[0] for b in merge_bounds]
+    return map_bounds, merge_bounds

@@ -10,22 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from raysort import config, constants, sortlib
-
-
-def get_boundaries(
-    num_map_returns: int, num_merge_returns: int = -1
-) -> tuple[list[int], list[list[int]]]:
-    if num_merge_returns == -1:
-        return sortlib.get_boundaries(num_map_returns), []
-    merge_bounds_flat = sortlib.get_boundaries(num_map_returns * num_merge_returns)
-    merge_bounds = (
-        np.array(merge_bounds_flat, dtype=sortlib.KeyT)
-        .reshape(num_map_returns, num_merge_returns)
-        .tolist()
-    )
-    map_bounds = [b[0] for b in merge_bounds]
-    return map_bounds, merge_bounds
+from raysort import config, constants, sortlib, sort_utils
 
 
 def _merge_blocks(blocks: list[np.ndarray], bounds: list[int]) -> pd.Series:
@@ -80,7 +65,7 @@ def _make_blocks(
 def test_config(config_name, merger_id: int = 0):
     job_cfg = config.get(config_name)
     cfg = job_cfg.app
-    map_bounds, merge_bounds = get_boundaries(
+    map_bounds, merge_bounds = sort_utils.get_boundaries(
         cfg.num_workers, cfg.num_reducers_per_worker
     )
     print(config_name)
