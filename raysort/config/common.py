@@ -154,6 +154,8 @@ class AppConfig:
     fail_node: Optional[str] = None
     fail_time: int = 45
 
+    data_skew: bool = False
+
     generate_input: bool = False
     sort: bool = False
     validate_output: bool = False
