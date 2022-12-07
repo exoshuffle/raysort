@@ -247,9 +247,7 @@ class NodeScheduler:
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    map_bounds, merge_bounds = sort_utils.get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
-    )
+    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
     num_shards = cfg.num_shards_per_mapper
     map_scheduler = NodeScheduler(cfg)
     merge_controllers = [

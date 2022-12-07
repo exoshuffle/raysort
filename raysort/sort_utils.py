@@ -389,7 +389,13 @@ def validate_output(cfg: AppConfig):
 # ------------------------------------------------------------
 
 
-def get_boundaries(
+def get_boundaries(cfg: AppConfig) -> tuple[list[int], list[list[int]]]:
+    if cfg.data_skew:
+        return get_boundaries_sampling(cfg)
+    return get_boundaries_static(cfg.num_map_returns, cfg.num_merge_returns)
+
+
+def get_boundaries_static(
     num_map_returns: int, num_merge_returns: int = -1
 ) -> tuple[list[int], list[list[int]]]:
     if num_merge_returns == -1:

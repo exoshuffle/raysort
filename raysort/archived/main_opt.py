@@ -185,9 +185,7 @@ def reduce_master(cfg: AppConfig, worker_id: int, merge_parts: list) -> list[Par
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    map_bounds, merge_bounds = sort_utils.get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
-    )
+    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}
     merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}
@@ -359,9 +357,7 @@ class ReduceController:
 def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     assert cfg.merge_factor == 1, cfg
     # cfg.skip_sorting = True
-    map_bounds, merge_bounds = sort_utils.get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
-    )
+    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
 
     mapper_opt = {"num_returns": cfg.num_workers + 1}
     merger_opt = {"num_returns": cfg.num_reducers_per_worker + 1}

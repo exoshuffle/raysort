@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from raysort import config, constants, sortlib, sort_utils
+from raysort import config, constants, sort_utils, sortlib
 
 
 def _merge_blocks(blocks: list[np.ndarray], bounds: list[int]) -> pd.Series:
@@ -65,9 +65,7 @@ def _make_blocks(
 def test_config(config_name, merger_id: int = 0):
     job_cfg = config.get(config_name)
     cfg = job_cfg.app
-    map_bounds, merge_bounds = sort_utils.get_boundaries(
-        cfg.num_workers, cfg.num_reducers_per_worker
-    )
+    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
     print(config_name)
     merge_limit = cfg.merge_factor * cfg.num_workers
     bounds = merge_bounds[merger_id]

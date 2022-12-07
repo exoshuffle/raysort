@@ -54,7 +54,7 @@ def sort(cfg: AppConfig):
 
     parts = sort_utils.load_manifest(cfg)
     print("Number of partitions", len(parts))
-    bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
+    bounds, _ = sort_utils.get_boundaries_static(cfg.num_reducers)
     mapper_opt = {"num_returns": cfg.num_reducers}
 
     map_round = 20
@@ -102,7 +102,7 @@ def sort_partial_streaming(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
     print("Number of partitions", len(parts))
     # May have to modify to schedule tasks in rounds for performance later on
-    bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
+    bounds, _ = sort_utils.get_boundaries_static(cfg.num_reducers)
     mapper_opt = {"num_returns": cfg.num_reducers}
 
     map_round = 80
@@ -150,7 +150,7 @@ def sort_streaming(cfg: AppConfig):
 
     parts = sort_utils.load_manifest(cfg)
     # May have to modify to schedule tasks in rounds for performance later on
-    bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
+    bounds, _ = sort_utils.get_boundaries_static(cfg.num_reducers)
     mapper_opt = {"num_returns": cfg.num_reducers}
 
     map_round = 40
