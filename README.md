@@ -13,7 +13,15 @@ pushd raysort/sortlib && python setup.py build_ext --inplace && popd
 scripts/installers/install_binaries.sh
 ```
 
-Edit `.envrc` and change `USER` and `S3_BUCKET` to your own. Set up [direnv](https://direnv.net/) so that the `.envrc` files are sourced automatically when you `cd` into a directory. Otherwise, manually `source .envrc`.
+### Create an S3 Bucket (Optional)
+You can use an existing S3 bucket or create one using the provided terraform script as follows.
+1. Install Terraform: `scripts/installers/install_terraform.sh`
+2. Navigate to `scripts/config/terraform/aws-s3-template`
+3. Run `terraform init`
+4. Run `terraform apply -var="bucket_count=1" -var="bucket_prefix=YOUR_PREFIX_HERE"`. Replace `YOUR_PREFIX_HERE` with a bucket name prefix.
+5. Your bucket should be created with name similar to `YOUR_PREFIX_HERE-000`.
+
+Edit `.envrc` and change `USERNAME` and `S3_BUCKET` to your own. Set up [direnv](https://direnv.net/) so that the `.envrc` files are sourced automatically when you `cd` into a directory. Otherwise, manually `source .envrc`.
 
 ## Running Locally
 
