@@ -1,3 +1,4 @@
+import concurrent.futures as cf
 import csv
 import functools
 import logging
@@ -395,15 +396,29 @@ def validate_output(cfg: AppConfig):
 # ------------------------------------------------------------
 
 
+def _get_single_sample(cfg: AppConfig, pinfo: PartInfo, idx: int) -> np.ndarray:
+    offset = idx * constants.RECORD_SIZE
+    if cfg.s3_buckets:
+        sample_bytes = s3_utils.get_object_range(pinfo, (offset, constants.KEY_SIZE))
+        return np.frombuffer(sample_bytes, dtype=">u8")
+    return np.fromfile(
+        pinfo.path, dtype=np.uint8, offset=offset, count=constants.KEY_SIZE
+    ).view(">u8")
+
+
 @ray.remote
-def sample_partition(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
-    total_num_records = constants.bytes_to_records(cfg.input_part_size)
-    indices = np.random.randint(total_num_records, size=cfg.num_samples_per_partition)
-    byte_ranges = [(i * constants.RECORD_SIZE, constants.KEY_SIZE) for i in indices]
-    # TODO(@lsf): implement sampling from filesystem and Azure.
+def get_partition_sample(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
     with tracing_utils.timeit("sample"):
-        key_bytes = s3_utils.get_object_ranges(pinfo, byte_ranges)
-        return np.concatenate([np.frombuffer(kb, dtype=">u8") for kb in key_bytes])
+        total_num_records = constants.bytes_to_records(cfg.input_part_size)
+        indices = np.random.randint(
+            total_num_records, size=cfg.num_samples_per_partition
+        )
+        with cf.ThreadPoolExecutor(max_workers=1) as executor:
+            futures = [
+                executor.submit(_get_single_sample, cfg, pinfo, idx) for idx in indices
+            ]
+            results = [f.result() for f in futures]
+            return np.concatenate(results)
 
 
 def _get_key_sample(cfg: AppConfig, parts: list[PartInfo]) -> np.ndarray:
@@ -412,17 +427,19 @@ def _get_key_sample(cfg: AppConfig, parts: list[PartInfo]) -> np.ndarray:
         cfg.num_samples_per_partition,
         len(parts),
     )
-    samples = ray.get([sample_partition.remote(cfg, p) for p in parts])
-    return np.concatenate(samples)
+    samples = ray.get([get_partition_sample.remote(cfg, p) for p in parts])
+    endpoints = [0, np.iinfo(sortlib.KeyT).max]
+    return np.concatenate(samples + [endpoints])
 
 
 def _get_boundaries_with_sample(sample: np.ndarray, num_returns: int) -> list[int]:
-    # edges = pd.qcut(samples, n, labels=False, retbins=True)[1]
-    # return list(map(int, edges))
     quantiles = np.linspace(0, 1, num_returns + 1)[:-1]
-    ret = np.quantile(sample, quantiles)
+    ret = np.quantile(sample, quantiles, method="nearest")
+    truth = sortlib.get_boundaries(num_returns)
+    print("boundaries uniform", truth)
+    print("boundaries uniform q", [x / 2**64 for x in truth])
     print("boundaries", ret)
-    print("boundaries norm", [x / 2**64 for x in ret])
+    print("boundaries q", [x / 2**64 for x in ret])
     return ret
 
 

@@ -1,4 +1,3 @@
-import concurrent.futures as cf
 import io
 import os
 import queue
@@ -103,12 +102,6 @@ def get_object_range(pinfo: PartInfo, bytes_range: tuple[int, int]) -> bytes:
         Bucket=pinfo.bucket, Key=pinfo.path, Range=f"bytes={start}-{end}"
     )
     return resp["Body"].read()
-
-
-def get_object_ranges(pinfo: PartInfo, ranges: list[tuple[int, int]]) -> list[bytes]:
-    with cf.ThreadPoolExecutor(max_workers=len(ranges)) as executor:
-        results = executor.map(get_object_range, [pinfo] * len(ranges), ranges)
-        return list(results)
 
 
 def upload_s3_buffer(

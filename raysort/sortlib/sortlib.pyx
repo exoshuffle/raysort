@@ -83,7 +83,10 @@ def merge_partitions(
     An iterator that returns merged blocks for upload.
     """
     # The blocks array is necessary for Python reference counting.
-    blocks = [get_block(i, 0) for i in range(num_blocks)]
+    blocks = [blk
+        for blk in [get_block(i, 0) for i in range(num_blocks)]
+        if not (blk is None or blk.size == 0)
+    ]
     block_indexes = np.zeros(num_blocks, dtype=int)
 
     cdef vector[ConstArray[Record]] record_arrays
