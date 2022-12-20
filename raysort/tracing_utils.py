@@ -228,13 +228,10 @@ class ProgressTracker:
         import pandas as pd
 
         ret = []
-        counter = 0
         for key, values in self.series.items():
-            counter += 1
             ss = pd.Series(values)
             ret.append(
                 [
-                    counter,
                     key,
                     ss.median(),
                     ss.mean(),
@@ -245,8 +242,8 @@ class ProgressTracker:
                 ]
             )
         df = pd.DataFrame(
-            ret, columns=["index", "task", "median", "mean", "std", "max", "min", "count"]
-        ).set_index("index")
+            ret, columns=["task", "median", "mean", "std", "max", "min", "count"]
+        )
         pd.set_option("display.max_colwidth", None)
         print(self.series.get("output_time"))
         print(df)
