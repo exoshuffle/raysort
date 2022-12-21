@@ -32,7 +32,7 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
     cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries) nogil
     cdef cppclass Merger:
         Merger(const vector[ConstArray[Record]]& parts, bool ask_for_refills, const vector[Key]& boundaries) nogil
-        pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
+        pair[int, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
         void Refill(const ConstArray[Record]& part, int part_id) nogil
 
 
@@ -103,7 +103,7 @@ def merge_partitions(
         with nogil:
             ret = merger.GetBatch(ptr, max_num_records)
         cnt, part_id = ret
-        if cnt == 0:
+        if cnt == -1:
             return
         actual_bytes = cnt * RECORD_SIZE
         yield buffer[:actual_bytes]

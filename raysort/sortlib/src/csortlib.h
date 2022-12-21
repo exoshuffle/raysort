@@ -71,12 +71,12 @@ std::vector<Partition> SortAndPartition(const Array<Record> &record_array,
 // Compute the boundaries by partitioning the key space into partitions.
 // Return the boundary integers.
 // E.g. the keys (first 8 bytes) of all records in the i-th partition
-// must be in the half-open interval [ boundaries[i], boundaries[i + 1] ).
+// must be in the half-open interval [boundaries[i], boundaries[i + 1]).
 // TODO: this will be more complicated for skewed distribution.
 std::vector<Key> GetBoundaries(size_t num_partitions);
 
 using PartitionId = int16_t;
-using GetBatchRetVal = std::pair<size_t, PartitionId>;
+using GetBatchRetVal = std::pair<int, PartitionId>;
 
 // Responsible for merging M sorted partitions and producing the output
 // in blocks.
@@ -89,7 +89,8 @@ public:
          bool ask_for_refills, const std::vector<Key> &boundaries);
 
   // Returns (count, part_id) where
-  // - count is the actual number of records written into `ret`, and
+  // - count is the actual number of records written into `ret`.
+  //   -1 means there are no more records to merge.
   // - part_id is the partition that has been depleted (-1 if none).
   GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records);
 

@@ -1152,7 +1152,7 @@ struct __pyx_obj_7sortlib___pyx_scope_struct__merge_partitions {
   PyObject *__pyx_v_part_id;
   csortlib::Record *__pyx_v_ptr;
   std::vector<csortlib::ConstArray<csortlib::Record> >  __pyx_v_record_arrays;
-  std::pair<size_t,int>  __pyx_v_ret;
+  std::pair<int,int>  __pyx_v_ret;
 };
 
 
@@ -2111,7 +2111,7 @@ static csortlib::Array<csortlib::Record>  __pyx_f_7sortlib__to_record_array(PyOb
 static csortlib::ConstArray<csortlib::Record>  __pyx_f_7sortlib__to_const_record_array(PyObject *); /*proto*/
 static PyObject *__pyx_convert_vector_to_py_csortlib_3a__3a_Key(const std::vector<csortlib::Key>  &); /*proto*/
 static std::vector<csortlib::Key>  __pyx_convert_vector_from_py_csortlib_3a__3a_Key(PyObject *); /*proto*/
-static PyObject *__pyx_convert_pair_to_py_size_t____int(std::pair<size_t,int>  const &); /*proto*/
+static PyObject *__pyx_convert_pair_to_py_int____int(std::pair<int,int>  const &); /*proto*/
 static struct __pyx_array_obj *__pyx_array_new(PyObject *, Py_ssize_t, char *, char *, char *); /*proto*/
 static void *__pyx_align_pointer(void *, size_t); /*proto*/
 static PyObject *__pyx_memoryview_new(PyObject *, int, int, __Pyx_TypeInfo *); /*proto*/
@@ -3613,7 +3613,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  *         with nogil:
  *             ret = merger.GetBatch(ptr, max_num_records)             # <<<<<<<<<<<<<<
  *         cnt, part_id = ret
- *         if cnt == 0:
+ *         if cnt == -1:
  */
           __pyx_cur_scope->__pyx_v_ret = __pyx_cur_scope->__pyx_v_merger->GetBatch(__pyx_cur_scope->__pyx_v_ptr, __pyx_cur_scope->__pyx_v_max_num_records);
         }
@@ -3641,10 +3641,10 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
  *         with nogil:
  *             ret = merger.GetBatch(ptr, max_num_records)
  *         cnt, part_id = ret             # <<<<<<<<<<<<<<
- *         if cnt == 0:
+ *         if cnt == -1:
  *             return
  */
-    __pyx_t_7 = __pyx_convert_pair_to_py_size_t____int(__pyx_cur_scope->__pyx_v_ret); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 105, __pyx_L1_error)
+    __pyx_t_7 = __pyx_convert_pair_to_py_int____int(__pyx_cur_scope->__pyx_v_ret); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 105, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     if ((likely(PyTuple_CheckExact(__pyx_t_7))) || (PyList_CheckExact(__pyx_t_7))) {
       PyObject* sequence = __pyx_t_7;
@@ -3704,11 +3704,11 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
     /* "sortlib.pyx":106
  *             ret = merger.GetBatch(ptr, max_num_records)
  *         cnt, part_id = ret
- *         if cnt == 0:             # <<<<<<<<<<<<<<
+ *         if cnt == -1:             # <<<<<<<<<<<<<<
  *             return
  *         actual_bytes = cnt * RECORD_SIZE
  */
-    __pyx_t_7 = __Pyx_PyInt_EqObjC(__pyx_cur_scope->__pyx_v_cnt, __pyx_int_0, 0, 0); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 106, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyInt_EqObjC(__pyx_cur_scope->__pyx_v_cnt, __pyx_int_neg_1, -1L, 0); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 106, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __pyx_t_13 = __Pyx_PyObject_IsTrue(__pyx_t_7); if (unlikely(__pyx_t_13 < 0)) __PYX_ERR(0, 106, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
@@ -3716,7 +3716,7 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
 
       /* "sortlib.pyx":107
  *         cnt, part_id = ret
- *         if cnt == 0:
+ *         if cnt == -1:
  *             return             # <<<<<<<<<<<<<<
  *         actual_bytes = cnt * RECORD_SIZE
  *         yield buffer[:actual_bytes]
@@ -3728,14 +3728,14 @@ static PyObject *__pyx_gb_7sortlib_6generator(__pyx_CoroutineObject *__pyx_gener
       /* "sortlib.pyx":106
  *             ret = merger.GetBatch(ptr, max_num_records)
  *         cnt, part_id = ret
- *         if cnt == 0:             # <<<<<<<<<<<<<<
+ *         if cnt == -1:             # <<<<<<<<<<<<<<
  *             return
  *         actual_bytes = cnt * RECORD_SIZE
  */
     }
 
     /* "sortlib.pyx":108
- *         if cnt == 0:
+ *         if cnt == -1:
  *             return
  *         actual_bytes = cnt * RECORD_SIZE             # <<<<<<<<<<<<<<
  *         yield buffer[:actual_bytes]
@@ -4156,13 +4156,13 @@ static std::vector<csortlib::Key>  __pyx_convert_vector_from_py_csortlib_3a__3a_
 
 /* "pair.to_py":158
  * 
- * @cname("__pyx_convert_pair_to_py_size_t____int")
- * cdef object __pyx_convert_pair_to_py_size_t____int(const pair[X,Y]& p):             # <<<<<<<<<<<<<<
+ * @cname("__pyx_convert_pair_to_py_int____int")
+ * cdef object __pyx_convert_pair_to_py_int____int(const pair[X,Y]& p):             # <<<<<<<<<<<<<<
  *     return p.first, p.second
  * 
  */
 
-static PyObject *__pyx_convert_pair_to_py_size_t____int(std::pair<size_t,int>  const &__pyx_v_p) {
+static PyObject *__pyx_convert_pair_to_py_int____int(std::pair<int,int>  const &__pyx_v_p) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -4171,17 +4171,17 @@ static PyObject *__pyx_convert_pair_to_py_size_t____int(std::pair<size_t,int>  c
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
-  __Pyx_RefNannySetupContext("__pyx_convert_pair_to_py_size_t____int", 0);
+  __Pyx_RefNannySetupContext("__pyx_convert_pair_to_py_int____int", 0);
 
   /* "pair.to_py":159
- * @cname("__pyx_convert_pair_to_py_size_t____int")
- * cdef object __pyx_convert_pair_to_py_size_t____int(const pair[X,Y]& p):
+ * @cname("__pyx_convert_pair_to_py_int____int")
+ * cdef object __pyx_convert_pair_to_py_int____int(const pair[X,Y]& p):
  *     return p.first, p.second             # <<<<<<<<<<<<<<
  * 
  * 
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyInt_FromSize_t(__pyx_v_p.first); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 159, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_int(__pyx_v_p.first); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 159, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_t_2 = __Pyx_PyInt_From_int(__pyx_v_p.second); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 159, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
@@ -4199,8 +4199,8 @@ static PyObject *__pyx_convert_pair_to_py_size_t____int(std::pair<size_t,int>  c
 
   /* "pair.to_py":158
  * 
- * @cname("__pyx_convert_pair_to_py_size_t____int")
- * cdef object __pyx_convert_pair_to_py_size_t____int(const pair[X,Y]& p):             # <<<<<<<<<<<<<<
+ * @cname("__pyx_convert_pair_to_py_int____int")
+ * cdef object __pyx_convert_pair_to_py_int____int(const pair[X,Y]& p):             # <<<<<<<<<<<<<<
  *     return p.first, p.second
  * 
  */
@@ -4210,7 +4210,7 @@ static PyObject *__pyx_convert_pair_to_py_size_t____int(std::pair<size_t,int>  c
   __Pyx_XDECREF(__pyx_t_1);
   __Pyx_XDECREF(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_3);
-  __Pyx_AddTraceback("pair.to_py.__pyx_convert_pair_to_py_size_t____int", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("pair.to_py.__pyx_convert_pair_to_py_int____int", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = 0;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
@@ -17276,7 +17276,7 @@ static PyObject *__pyx_tp_new_7sortlib___pyx_scope_struct__merge_partitions(PyTy
   }
   p = ((struct __pyx_obj_7sortlib___pyx_scope_struct__merge_partitions *)o);
   new((void*)&(p->__pyx_v_record_arrays)) std::vector<csortlib::ConstArray<csortlib::Record> > ();
-  new((void*)&(p->__pyx_v_ret)) std::pair<size_t,int> ();
+  new((void*)&(p->__pyx_v_ret)) std::pair<int,int> ();
   p->__pyx_v_mv.data = NULL;
   p->__pyx_v_mv.memview = NULL;
   return o;

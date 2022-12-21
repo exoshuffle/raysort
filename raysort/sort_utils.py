@@ -413,7 +413,7 @@ def get_partition_sample(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         indices = np.random.randint(
             total_num_records, size=cfg.num_samples_per_partition
         )
-        with cf.ThreadPoolExecutor(max_workers=1) as executor:
+        with cf.ThreadPoolExecutor() as executor:
             futures = [
                 executor.submit(_get_single_sample, cfg, pinfo, idx) for idx in indices
             ]

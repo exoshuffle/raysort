@@ -60,7 +60,7 @@ def _merge_blocks(
     blocks: list[np.ndarray], bounds: list[int]
 ) -> Iterable[Union[np.ndarray, int]]:
     total_bytes = sum(b.size for b in blocks)
-    num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+    num_records = max(1, constants.bytes_to_records(total_bytes))
     get_block = lambda i, d: blocks[i] if d == 0 else None
     merger = sortlib.merge_partitions(
         len(blocks), get_block, num_records, False, bounds
@@ -81,7 +81,7 @@ class Merger:
     def add_block(self, block: np.ndarray) -> None:
         self._blocks.append(block)
 
-    def merge(self) -> Iterable[Union[np.ndarray, int]]:
+    def merge(self) -> Iterable[np.ndarray]:
         with tracing_utils.timeit("merge"):
             for datachunk in _merge_blocks(self._blocks, self.bounds):
                 yield datachunk
@@ -159,7 +159,6 @@ class MergeController:
             self._close_current_merger()
         start = time.perf_counter()
         self._merged_bytes += sum(ray.get(list(self._merge_tasks.keys())))
-        print(self._merged_bytes, self._mapper_received.sum())
         assert self._merged_bytes == self._mapper_received.sum(), (
             self._merged_bytes,
             self._mapper_received.sum(),
@@ -283,6 +282,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 
 def sort_main(cfg: AppConfig):
     parts = sort_utils.load_manifest(cfg)
+    np.random.shuffle(parts)
     results = sort_optimized(cfg, parts)
 
     with open(sort_utils.get_manifest_file(cfg, kind="output"), "w") as fout:
