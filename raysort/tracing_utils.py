@@ -243,7 +243,7 @@ class ProgressTracker:
             )
         df = pd.DataFrame(
             ret, columns=["task", "median", "mean", "std", "max", "min", "count"]
-        ).set_index("task")
+        )
         pd.set_option("display.max_colwidth", None)
         print(self.series.get("output_time"))
         print(df)
