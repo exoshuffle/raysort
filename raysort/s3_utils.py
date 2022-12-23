@@ -78,8 +78,8 @@ def download_parallel(
 def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
-    buf: Optional[io.BytesIO] = None,
     size: Optional[int] = None,
+    buf: Optional[io.BytesIO] = None,
     **kwargs,
 ) -> np.ndarray:
     config = get_transfer_config(**kwargs)
@@ -95,6 +95,15 @@ def download(
     else:
         client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
+
+
+def get_object_range(pinfo: PartInfo, bytes_range: tuple[int, int]) -> bytes:
+    start, size = bytes_range
+    end = start + size - 1
+    resp = client().get_object(
+        Bucket=pinfo.bucket, Key=pinfo.path, Range=f"bytes={start}-{end}"
+    )
+    return resp["Body"].read()
 
 
 def upload_s3_buffer(

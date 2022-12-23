@@ -201,8 +201,10 @@ public:
   bool ask_for_refills_;
   std::vector<Key> boundaries_;
 
+  // The index of the next boundary to be reached.
+  // bound_i_ == boundaries_.size() means that we are past the last boundary,
+  // and we are collecting the last partition.
   size_t bound_i_ = 0;
-  bool past_last_bound_ = false;
 
   Impl(const std::vector<ConstArray<Record>> &parts, bool ask_for_refills,
        const std::vector<Key> &boundaries)
@@ -211,12 +213,7 @@ public:
     for (size_t i = 0; i < parts_.size(); ++i) {
       _PushFirstItem(parts_[i], i);
     }
-    _IncBound();
-  }
-
-  void _IncBound() {
-    bound_i_++;
-    past_last_bound_ = bound_i_ >= boundaries_.size();
+    ++bound_i_;
   }
 
   inline void _PushFirstItem(const ConstArray<Record> &part,
@@ -226,7 +223,7 @@ public:
     }
   }
 
-  void Refill(const ConstArray<Record> &part, PartitionId part_id) {
+  inline void Refill(const ConstArray<Record> &part, PartitionId part_id) {
     assert(part_id < parts_.size());
     parts_[part_id] = part;
     _PushFirstItem(part, part_id);
@@ -235,14 +232,14 @@ public:
   GetBatchRetVal GetBatch(Record *const &ret, size_t max_num_records) {
     size_t cnt = 0;
     auto cur = ret;
-    Key bound = past_last_bound_ ? 0 : boundaries_[bound_i_];
+    Key bound = bound_i_ >= boundaries_.size() ? 0 : boundaries_[bound_i_];
     while (!heap_.empty()) {
       if (cnt >= max_num_records) {
         return std::make_pair(cnt, -1);
       }
       const SortData top = heap_.top();
-      if (!past_last_bound_ && top.record->key() >= bound) {
-        _IncBound();
+      if (bound_i_ < boundaries_.size() && top.record->key() >= bound) {
+        ++bound_i_;
         return std::make_pair(cnt, -1);
       }
       heap_.pop();
@@ -257,6 +254,10 @@ public:
         return std::make_pair(cnt, i);
       }
     }
+    if (cnt == 0 && bound_i_ > boundaries_.size()) {
+      return std::make_pair(-1, -1);
+    }
+    ++bound_i_;
     return std::make_pair(cnt, -1);
   }
 }; // namespace csortlib

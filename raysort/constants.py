@@ -1,10 +1,11 @@
 import os
 
-from raysort.typing import ByteCount, PartId, RecordCount
+from raysort.typing import PartId, RecordCount
 
 __DIR__ = os.path.dirname(os.path.abspath(__file__))
 
 # Basics
+KEY_SIZE = 8  # bytes
 RECORD_SIZE = 100  # bytes
 
 # Ray Resources
@@ -39,7 +40,7 @@ PROM_NODE_EXPORTER_PORT = 8091
 
 
 # Convenience functions
-def bytes_to_records(n_bytes: ByteCount) -> RecordCount:
+def bytes_to_records(n_bytes: float) -> RecordCount:
     return int(n_bytes / RECORD_SIZE)
 
 

@@ -210,6 +210,16 @@ configs = [
         ),
     ),
     JobConfig(
+        name="LocalS3IOSkew",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_mini_app_config,
+            s3_buckets=get_s3_buckets(1),
+            data_skew=True,
+        ),
+    ),
+    JobConfig(
         name="LocalS3IOMultiShard",
         cluster=local_cluster,
         system=dict(),

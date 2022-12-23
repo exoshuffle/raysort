@@ -292,7 +292,7 @@ def reduce_stage(
 
 
 def sort_simple(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    bounds, _ = sort_utils.get_boundaries_static(cfg.num_reducers)
+    bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
 
     mapper_opt = {"num_returns": cfg.num_reducers + 1}
     map_results = np.empty((cfg.num_mappers, cfg.num_reducers), dtype=object)
@@ -328,8 +328,8 @@ def sort_riffle(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     round_merge_factor = cfg.merge_factor // cfg.map_parallelism
 
     start_time = time.time()
-    map_bounds, _ = sort_utils.get_boundaries_static(1)
-    merge_bounds, _ = sort_utils.get_boundaries_static(cfg.num_reducers)
+    map_bounds, _ = sort_utils.get_boundaries(1)
+    merge_bounds, _ = sort_utils.get_boundaries(cfg.num_reducers)
 
     mapper_opt = {"num_returns": 2}
     merger_opt = {"num_returns": cfg.num_reducers + 1}
@@ -406,7 +406,7 @@ def sort_riffle(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 def sort_two_stage(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     start_time = time.time()
     ref_recorder = tracing_utils.ObjectRefRecorder(cfg.record_object_refs)
-    map_bounds, merge_bounds = sort_utils.get_boundaries(cfg)
+    map_bounds, merge_bounds = sort_utils.get_boundaries_auto(cfg, parts)
 
     map_fn = mapper_yield if cfg.use_yield else mapper
     merge_fn = merge_blocks_yield if cfg.use_yield else merge_blocks
@@ -500,7 +500,7 @@ def sort_two_stage(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
 
 def sort_reduce_only(cfg: AppConfig) -> list[PartInfo]:
     num_returns = cfg.num_reducers_per_worker
-    bounds, _ = sort_utils.get_boundaries_static(num_returns)
+    bounds, _ = sort_utils.get_boundaries(num_returns)
     merger_opt = {"num_returns": num_returns + 1}
     merge_results = np.empty(
         (cfg.num_workers, cfg.num_mergers_per_worker, num_returns),

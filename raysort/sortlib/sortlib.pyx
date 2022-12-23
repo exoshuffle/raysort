@@ -32,7 +32,7 @@ cdef extern from "src/csortlib.h" namespace "csortlib":
     cdef vector[Partition] SortAndPartition(const Array[Record]& record_array, const vector[Key]& boundaries) nogil
     cdef cppclass Merger:
         Merger(const vector[ConstArray[Record]]& parts, bool ask_for_refills, const vector[Key]& boundaries) nogil
-        pair[size_t, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
+        pair[int, int] GetBatch(Record* const& ptr, size_t max_num_records) nogil
         void Refill(const ConstArray[Record]& part, int part_id) nogil
 
 
@@ -83,7 +83,10 @@ def merge_partitions(
     An iterator that returns merged blocks for upload.
     """
     # The blocks array is necessary for Python reference counting.
-    blocks = [get_block(i, 0) for i in range(num_blocks)]
+    blocks = [blk
+        for blk in [get_block(i, 0) for i in range(num_blocks)]
+        if not (blk is None or blk.size == 0)
+    ]
     block_indexes = np.zeros(num_blocks, dtype=int)
 
     cdef vector[ConstArray[Record]] record_arrays
@@ -100,7 +103,7 @@ def merge_partitions(
         with nogil:
             ret = merger.GetBatch(ptr, max_num_records)
         cnt, part_id = ret
-        if cnt == 0:
+        if cnt == -1:
             return
         actual_bytes = cnt * RECORD_SIZE
         yield buffer[:actual_bytes]

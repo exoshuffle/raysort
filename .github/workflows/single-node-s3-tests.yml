@@ -71,3 +71,8 @@ jobs:
         env:
           CONFIG: LocalS3IOManualSpillingS3Parallel
         run: python raysort/main.py
+
+      - name: 0.1GB Ray native shuffle on skewed data
+        env:
+          CONFIG: LocalS3IOSkew
+        run: python raysort/main.py
