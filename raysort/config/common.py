@@ -169,6 +169,10 @@ class AppConfig:
     data_dirs: list[str] = field(default_factory=list)
     is_local_cluster: bool = False
 
+    # runtime testing
+    # TODO (dl): do we need this to be configurable?
+    num_samples_per_partition: int = 20
+
     def __post_init__(
         self,
         cluster: ClusterConfig,
