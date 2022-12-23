@@ -79,13 +79,15 @@ def download(
     pinfo: PartInfo,
     filename: Optional[Path] = None,
     size: Optional[int] = None,
+    buf: Optional[io.BytesIO] = None,
     **kwargs,
 ) -> np.ndarray:
     config = get_transfer_config(**kwargs)
     if filename:
         client().download_file(pinfo.bucket, pinfo.path, filename, Config=config)
         return np.empty(0, dtype=np.uint8)
-    buf = io.BytesIO()
+    if buf is None:
+        buf = io.BytesIO()
     if size:
         s3_custom.download_fileobj(
             client(), pinfo.bucket, pinfo.path, buf, size, Config=config
