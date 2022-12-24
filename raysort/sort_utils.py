@@ -397,10 +397,17 @@ def validate_output(cfg: AppConfig):
 # ------------------------------------------------------------
 
 # parameter s3_client is required if cfg.s3_buckets is True
-def _get_single_sample(cfg: AppConfig, pinfo: PartInfo, idx: int, s3_client: botocore.client.BaseClient = None) -> np.ndarray:
+def _get_single_sample(
+    cfg: AppConfig,
+    pinfo: PartInfo,
+    idx: int,
+    s3_client: botocore.client.BaseClient = None,
+) -> np.ndarray:
     offset = idx * constants.RECORD_SIZE
     if cfg.s3_buckets:
-        sample_bytes = s3_utils.get_object_range(s3_client, pinfo, (offset, constants.KEY_SIZE))
+        sample_bytes = s3_utils.get_object_range(
+            s3_client, pinfo, (offset, constants.KEY_SIZE)
+        )
         return np.frombuffer(sample_bytes, dtype=">u8")
     return np.fromfile(
         pinfo.path, dtype=np.uint8, offset=offset, count=constants.KEY_SIZE
@@ -417,7 +424,10 @@ def get_partition_sample(cfg: AppConfig, pinfo: PartInfo) -> np.ndarray:
         s3_client = s3_utils.client() if cfg.s3_buckets else None
         with cf.ThreadPoolExecutor() as executor:
             futures = [
-                executor.submit(_get_single_sample, cfg, pinfo, idx, s3_client=s3_client) for idx in indices
+                executor.submit(
+                    _get_single_sample, cfg, pinfo, idx, s3_client=s3_client
+                )
+                for idx in indices
             ]
             results = [f.result() for f in futures]
             return np.concatenate(results)

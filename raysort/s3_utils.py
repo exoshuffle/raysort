@@ -96,8 +96,11 @@ def download(
         client().download_fileobj(pinfo.bucket, pinfo.path, buf, Config=config)
     return np.frombuffer(buf.getbuffer(), dtype=np.uint8)
 
+
 # s3_client is thread safe but not process safe, and should be reused if possible to reduce runtime.
-def get_object_range(s3_client: botocore.client.BaseClient, pinfo: PartInfo, bytes_range: tuple[int, int]) -> bytes:
+def get_object_range(
+    s3_client: botocore.client.BaseClient, pinfo: PartInfo, bytes_range: tuple[int, int]
+) -> bytes:
     start, size = bytes_range
     end = start + size - 1
     resp = s3_client.get_object(
