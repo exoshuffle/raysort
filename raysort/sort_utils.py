@@ -1,4 +1,3 @@
-import botocore
 import concurrent.futures as cf
 import csv
 import functools
@@ -9,6 +8,7 @@ import tempfile
 import time
 from typing import Callable, Iterable, Optional
 
+import botocore
 import numpy as np
 import pandas as pd
 import ray
@@ -396,7 +396,6 @@ def validate_output(cfg: AppConfig):
 #     Sampling and Boundaries Calculation
 # ------------------------------------------------------------
 
-# parameter s3_client is required if cfg.s3_buckets is True
 def _get_single_sample(
     cfg: AppConfig,
     pinfo: PartInfo,
@@ -405,6 +404,8 @@ def _get_single_sample(
 ) -> np.ndarray:
     offset = idx * constants.RECORD_SIZE
     if cfg.s3_buckets:
+        assert s3_client, "must provide s3_client if using buckets"
+
         sample_bytes = s3_utils.get_object_range(
             s3_client, pinfo, (offset, constants.KEY_SIZE)
         )
