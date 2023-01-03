@@ -87,3 +87,8 @@ jobs:
         env:
           CONFIG: LocalRiffle
         run: python raysort/main.py
+
+      - name: 1GB Ray native shuffle on skewed data
+        env:
+          CONFIG: LocalSkew
+        run: python raysort/main.py

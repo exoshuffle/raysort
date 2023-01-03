@@ -129,6 +129,15 @@ configs = [
             simple_shuffle=True,
         ),
     ),
+    JobConfig(
+        name="LocalSkew",
+        cluster=local_cluster,
+        system=dict(),
+        app=dict(
+            **local_app_config,
+            data_skew=True,
+        ),
+    ),
     # ------------------------------------------------------------
     #     Local fault tolerance experiments
     # ------------------------------------------------------------
