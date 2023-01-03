@@ -143,7 +143,7 @@ def _merge_blocks_prep(
             blocks = ray.get(blocks)
 
     total_bytes = sum(b.size for b in blocks)
-    num_records = constants.bytes_to_records(total_bytes / len(bounds) * 2)
+    num_records = max(1, constants.bytes_to_records(total_bytes))
     get_block = functools.partial(_get_block, blocks)
 
     merge_fn = _dummy_merge if cfg.skip_sorting else sortlib.merge_partitions
