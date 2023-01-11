@@ -117,7 +117,7 @@ aws configure
 #### Cluster missing packages/version mismatch
 
 Verify that the image the nodes are being created from matches expectations.
-This image [`raysort-hadoop-spark-conda`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da5da6db44aaf267) is currently being used.
+This image [`raysort-worker-20230108`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da946239520bf5d7) is currently being used.
 
 #### Cannot connect to worker node
 

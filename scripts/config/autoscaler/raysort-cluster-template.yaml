@@ -18,7 +18,7 @@ available_node_types:
       # IAM profile providing full access to EC2 and S3, required for head node to launch workers
       IamInstanceProfile:
         Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
-      ImageId: ami-07bf3818d912ab0ed # raysort-worker-20221011
+      ImageId: ami-0da946239520bf5d7 # raysort-worker-20230108
       KeyName: login-us-west-2
 
   ray.worker.default:
@@ -28,7 +28,7 @@ available_node_types:
       # IAM profile providing full access to EC2 and S3, required for S3 I/O
       IamInstanceProfile:
         Arn: arn:aws:iam::473239480893:instance-profile/ray-autoscaler-v1
-      ImageId: ami-07bf3818d912ab0ed # raysort-worker-20221011
+      ImageId: ami-0da946239520bf5d7 # raysort-worker-20230108
       KeyName: login-us-west-2
       InstanceMarketOptions:
         MarketType: spot
