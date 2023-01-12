@@ -117,7 +117,7 @@ aws configure
 #### Cluster missing packages/version mismatch
 
 Verify that the image the nodes are being created from matches expectations.
-This image [`raysort-worker-20230108`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0da946239520bf5d7) is currently being used.
+This image [`raysort-worker-20230111`](https://us-west-2.console.aws.amazon.com/ec2/v2/home?region=us-west-2#ImageDetails:imageId=ami-0c5cce1d70efb41f5) is currently being used.
 
 #### Cannot connect to worker node
 
