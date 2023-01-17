@@ -8,10 +8,9 @@ __DIR__ = os.path.dirname(os.path.abspath(__file__))
 KEY_SIZE = 8  # bytes
 RECORD_SIZE = 100  # bytes
 
-# Ray Resources
+# Ray constants
 WORKER_RESOURCE = "worker"
-
-# Progress Tracker Actor
+ACTOR_NAMESPACE = "raysort"
 PROGRESS_TRACKER_ACTOR = "ProgressTrackerActor"
 
 # Executable locations
