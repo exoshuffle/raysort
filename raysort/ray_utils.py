@@ -56,7 +56,7 @@ def remote(fn: Callable) -> RemoteFunction:
 
 
 def current_node_aff() -> dict:
-    return node_aff(ray.get_runtime_context().node_id)
+    return node_aff(ray.get_runtime_context().get_node_id())
 
 
 def node_ip_aff(cfg: AppConfig, node_ip: str) -> dict:
@@ -278,7 +278,7 @@ def _get_data_dirs():
 
 @ray.remote
 def get_node_id() -> ray.NodeID:
-    return ray.get_runtime_context().node_id
+    return ray.get_runtime_context().get_node_id()
 
 
 def _init_runtime_context(cfg: AppConfig):

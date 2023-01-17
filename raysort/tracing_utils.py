@@ -87,13 +87,15 @@ def record_value(*args, **kwargs):
 
 
 def get_progress_tracker() -> ray.actor.ActorHandle:
-    return ray.get_actor(constants.PROGRESS_TRACKER_ACTOR)
+    return ray.get_actor(
+        constants.PROGRESS_TRACKER_ACTOR, namespace=constants.ACTOR_NAMESPACE
+    )
 
 
 def create_progress_tracker(*args, **kwargs) -> ray.actor.ActorHandle:
-    return ProgressTracker.options(name=constants.PROGRESS_TRACKER_ACTOR).remote(
-        *args, **kwargs
-    )
+    return ProgressTracker.options(
+        name=constants.PROGRESS_TRACKER_ACTOR, namespace=constants.ACTOR_NAMESPACE
+    ).remote(*args, **kwargs)
 
 
 def _make_trace_event(span: Span):
