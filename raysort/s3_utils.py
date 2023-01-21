@@ -176,11 +176,13 @@ def multipart_upload(
         mpu_id, resp = mpu_queue.get()
         mpu_parts.append({"ETag": resp["ETag"], "PartNumber": mpu_id})
 
-    s3_client.complete_multipart_upload(
-        Bucket=pinfo.bucket,
-        Key=pinfo.path,
-        MultipartUpload={"Parts": mpu_parts},
-        UploadId=mpu["UploadId"],
-    )
+    # only complete the multipart upload if data was uploaded
+    if len(mpu_parts) > 0:
+        s3_client.complete_multipart_upload(
+            Bucket=pinfo.bucket,
+            Key=pinfo.path,
+            MultipartUpload={"Parts": mpu_parts},
+            UploadId=mpu["UploadId"],
+        )
     pinfo.size = bytes_count
     return [pinfo]
