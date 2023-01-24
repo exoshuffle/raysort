@@ -191,7 +191,7 @@ class MergeController:
                 merge_results[r, :] = None
                 tasks_in_flight.append(ref)
                 results.append(ref)
-            return ray.get(results)
+            return [result for result in ray.get(results) if result is not None]
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
