@@ -119,7 +119,7 @@ def upload_s3_buffer(
 
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> list[PartInfo]:
+) -> list[Optional[PartInfo]]:
     parallelism = cfg.reduce_io_parallelism
     s3_client = client()
     mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
@@ -176,11 +176,13 @@ def multipart_upload(
         mpu_id, resp = mpu_queue.get()
         mpu_parts.append({"ETag": resp["ETag"], "PartNumber": mpu_id})
 
-    s3_client.complete_multipart_upload(
-        Bucket=pinfo.bucket,
-        Key=pinfo.path,
-        MultipartUpload={"Parts": mpu_parts},
-        UploadId=mpu["UploadId"],
-    )
-    pinfo.size = bytes_count
-    return [pinfo]
+    if len(mpu_parts) > 0:
+        s3_client.complete_multipart_upload(
+            Bucket=pinfo.bucket,
+            Key=pinfo.path,
+            MultipartUpload={"Parts": mpu_parts},
+            UploadId=mpu["UploadId"],
+        )
+        pinfo.size = bytes_count
+        return [pinfo]
+    return [None]

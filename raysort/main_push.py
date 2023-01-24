@@ -1,7 +1,7 @@
 import csv
 import logging
 import time
-from typing import Iterable, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 import ray
@@ -191,7 +191,7 @@ class MergeController:
                 merge_results[r, :] = None
                 tasks_in_flight.append(ref)
                 results.append(ref)
-            return ray.get(results)
+            return [r for r in ray.get(results) if r is not None]
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -202,7 +202,7 @@ def final_merge(
     worker_id: PartId,
     reduce_idx: PartId,
     *parts: list[np.ndarray],
-) -> PartInfo:
+) -> Optional[PartInfo]:
     logging_utils.init()
     with tracing_utils.timeit("reduce"):
         M = len(parts)
