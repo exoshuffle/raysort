@@ -119,7 +119,7 @@ def upload_s3_buffer(
 
 def multipart_upload(
     cfg: AppConfig, pinfo: PartInfo, merger: Iterable[np.ndarray]
-) -> list[PartInfo]:
+) -> list[Optional[PartInfo]]:
     parallelism = cfg.reduce_io_parallelism
     s3_client = client()
     mpu = s3_client.create_multipart_upload(Bucket=pinfo.bucket, Key=pinfo.path)
@@ -185,5 +185,4 @@ def multipart_upload(
         )
         pinfo.size = bytes_count
         return [pinfo]
-    else:
-        return [None]
+    return [None]
