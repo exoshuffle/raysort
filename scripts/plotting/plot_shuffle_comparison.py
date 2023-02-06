@@ -27,8 +27,8 @@ SMALL_SIZE = 9
 MEDIUM_SIZE = 12
 BIG_SIZE = 14
 
-SYS = "LS"
-SYS_FULL = "LibShuffle"
+SYS = "ES"
+SYS_FULL = "Exoshuffle"
 
 plt.rc("font", size=BIG_SIZE)  # controls default text sizes
 plt.rc("axes", titlesize=BIG_SIZE)  # fontsize of the axes title
