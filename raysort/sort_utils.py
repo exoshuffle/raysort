@@ -478,7 +478,7 @@ def get_boundaries_auto(
     cfg: AppConfig, parts: list[PartInfo]
 ) -> tuple[list[int], list[list[int]]]:
     get_boundaries_impl = sortlib.get_boundaries
-    if cfg.data_skew:
+    if cfg.use_sampling:
         with tracing_utils.timeit("sample_all"):
             sample = _get_key_sample(cfg, parts)
             get_boundaries_impl = functools.partial(_get_boundaries_with_sample, sample)
