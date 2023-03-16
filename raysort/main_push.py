@@ -185,8 +185,10 @@ class MergeController:
             for r, merge_out in enumerate(merge_results):
                 if len(tasks_in_flight) >= self.cfg.reduce_parallelism:
                     _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
+
+                # don't need to wait here they should be done already
                 ref = final_merge.options(**ray_utils.current_node_aff()).remote(
-                    self.cfg, self.worker_id, r, *merge_out
+                    self.cfg, self.worker_id, r, merge_out
                 )
                 merge_results[r, :] = None
                 tasks_in_flight.append(ref)
@@ -201,19 +203,55 @@ def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
     reduce_idx: PartId,
-    *parts: list[np.ndarray],
-) -> Optional[PartInfo]:
+    parts: list[np.ndarray],
+    subpart_idx: PartId = 1,
+    level: int = 1,
+) -> list[PartInfo]:
     logging_utils.init()
+    # print(":) final_merge: level =", level)
     with tracing_utils.timeit("reduce"):
         M = len(parts)
+        if M == 0:
+            return [None]
+
+        part_locs = ray.experimental.get_object_locations(parts)
+        part_sizes = [loc["object_size"] for loc in part_locs.values()]
+        # print("part_sizes:", part_sizes)
+        parts_memory_gb = sum(part_sizes) // 1_000_000_000
+
+        if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
+            # print(":) exceeded threshold, recursing")
+            L = M // 2
+            
+            first_half = final_merge.options(**ray_utils.current_node_aff()).remote(
+                    cfg, worker_id, reduce_idx, parts[:L], subpart_idx = subpart_idx * 2, level = level + 1
+                ) or []
+            second_half = final_merge.options(**ray_utils.current_node_aff()).remote(
+                    cfg, worker_id, reduce_idx, parts[L:], subpart_idx = subpart_idx * 2 + 1, level = level + 1
+                ) or []
+            
+            grouped = [first_half, second_half]
+            # print("grouped:", grouped)
+            ray_get = ray.get(grouped)
+            # print("ray_get:", ray_get)
+            output = []
+            for lst in ray_get:
+                # print(lst)
+                output.extend(lst)
+            # print("output:", output)
+            return output
+
+        parts = ray.get(parts.tolist())
+
         get_block = lambda i, d: parts[i] if d == 0 else None
-        part_id = constants.merge_part_ids(worker_id, reduce_idx)
+        part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
         merger = sortlib.merge_partitions(M, get_block)
-        return sort_utils.save_partition(cfg, pinfo, merger)[0]
-
+        output = sort_utils.save_partition(cfg, pinfo, merger)
+        print("save_partition output:", output)
+        return output
 
 class NodeScheduler:
     def __init__(self, cfg: AppConfig) -> None:
@@ -287,8 +325,9 @@ def sort_main(cfg: AppConfig):
 
     with open(sort_utils.get_manifest_file(cfg, kind="output"), "w") as fout:
         writer = csv.writer(fout)
-        for pinfo in results:
-            writer.writerow(pinfo.to_csv_row())
+        for pinfo_lst in results:
+            for pinfo in pinfo_lst:
+                writer.writerow(pinfo.to_csv_row())
 
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
