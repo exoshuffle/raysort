@@ -302,7 +302,7 @@ def calculate_boundaries(samples, n, bytes_for_bounds=8):
 def _run_valsort(argstr: str) -> str:
     proc = subprocess.run(
         f"{constants.VALSORT_PATH} {argstr}",
-        check=True,
+        check=False,
         shell=True,
         capture_output=True,
         text=True,
