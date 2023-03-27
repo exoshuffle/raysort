@@ -487,3 +487,10 @@ def get_boundaries_auto(
         cfg.num_reducers_per_worker,
         get_boundaries_impl=get_boundaries_impl,
     )
+
+
+def get_median_key(part: np.ndarray) -> float:
+    records = part.reshape((-1, 100))
+    key_bytes = records[:, :8]
+    keys = key_bytes.view(dtype=np.uint64)
+    return np.median(keys)
