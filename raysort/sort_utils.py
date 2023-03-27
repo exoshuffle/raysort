@@ -492,5 +492,5 @@ def get_boundaries_auto(
 def get_median_key(part: np.ndarray) -> float:
     records = part.reshape((-1, 100))
     key_bytes = records[:, :8]
-    keys = key_bytes.view(dtype=np.uint64)
+    keys = key_bytes.view(dtype=np.dtype('>u8'))
     return np.median(keys)
