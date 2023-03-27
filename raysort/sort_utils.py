@@ -308,7 +308,7 @@ def _run_valsort(argstr: str) -> str:
         text=True,
     )
     if proc.returncode != 0:
-        logging.critical("\n%s", proc.stderr.decode("ascii"))
+        logging.critical("\n%s", proc.stderr)
         raise RuntimeError(f"Validation failed: {argstr}")
     return proc.stderr
 
