@@ -494,3 +494,28 @@ def get_median_key(part: np.ndarray) -> float:
     key_bytes = records[:, :8]
     keys = key_bytes.view(dtype=np.dtype('>u8'))
     return np.median(keys)
+
+@ray.remote(num_returns=2)
+def split_part(part, pivot, identifier):
+    def id_print(*output):
+        print(":)) split_part: identifier:", identifier, "| output:", output)
+
+
+    if isinstance(part, ray.ObjectRef):        
+        part = ray.get(part)
+    
+    id_print("entered split_part", pivot, part)
+
+    if len(part) == 0:
+        id_print("returning empty list because length is 0: ", len(part))
+        return [], []
+    copy_of_part = part.copy()
+    blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
+
+    idx_two = blocks[1]
+    part_one = part[0 : idx_two[0]]
+    part_two = part[idx_two[0]:]
+    id_print("size after splitting", len(part_one), len(part_two))
+    id_print("size ratio after splitting", len(part_one) / len(part), len(part_two) / len(part))
+
+    return part_one, part_two
