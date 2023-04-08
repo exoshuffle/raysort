@@ -24,13 +24,14 @@ GB = MB * 1000
 
 
 def get_s3_buckets(count: int = 10) -> list[str]:
-    assert S3_BUCKET
+    # assert S3_BUCKET
     return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
 
 class Cloud(enum.Enum):
     AWS = "aws"
     AZURE = "azure"
+    GCP = "gcp"
 
 
 @dataclass

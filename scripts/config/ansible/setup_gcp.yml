@@ -1,0 +1,106 @@
+---
+- hosts: all
+  gather_facts: false
+  strategy: free
+  vars:
+    data_disks:
+      - /dev/nvme0n1   
+      - /dev/nvme0n2
+      - /dev/nvme0n3
+      - /dev/nvme0n4
+    fstype: xfs
+    mnt_prefix: /mnt/data
+    tmpfs_path: /mnt/tmpfs
+    workdir: ~/raysort
+    pythondir: ~/miniconda3/envs/raysort/bin
+    hosts_path: /etc/hosts
+  environment:
+    CC: /opt/intel/oneapi/compiler/latest/linux/bin/icx
+    CXX: /opt/intel/oneapi/compiler/latest/linux/bin/icpx
+    CFLAGS: "-Ofast -xHost -ipo"
+    CXXFLAGS: "-Ofast -xHost -ipo"
+  tasks:
+    - name: Create a filesystem on each of the data disks
+      become: true
+      community.general.filesystem:
+        fstype: "{{ fstype }}"
+        dev: "{{ item }}"
+      loop: "{{ data_disks }}"
+
+    - name: Create data disk mount points
+      become: true
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}"
+        state: directory
+        mode: "0777"
+      loop: "{{ range(data_disks|length)|list }}"
+
+    - name: Mount the data disks
+      become: true
+      ansible.posix.mount:
+        path: "{{ mnt_prefix }}{{ idx }}"
+        src: "{{ item }}"
+        fstype: "{{ fstype }}"
+        state: mounted
+      when: mnt_prefix and data_disks
+      loop: "{{ data_disks }}"
+      loop_control:
+        index_var: idx
+
+    - name: Set permission for disk mount points
+      become: true
+      ansible.builtin.file:
+        path: "{{ mnt_prefix }}{{ item }}"
+        state: directory
+        mode: "0777"
+      loop: "{{ range(data_disks|length)|list }}"
+
+    - name: Create tmpfs mount point
+      become: true
+      ansible.builtin.file:
+        path: "{{ tmpfs_path }}"
+        state: directory
+        mode: "0777"
+
+    - name: Mount tmpfs
+      become: true
+      ansible.posix.mount:
+        path: "{{ tmpfs_path }}"
+        src: tmpfs
+        fstype: tmpfs
+        state: mounted
+
+    - name: Sync workdir
+      ansible.posix.synchronize:
+        src: "{{ workdir }}/"
+        dest: "{{ workdir }}"
+        delete: true
+        rsync_opts:
+          - --exclude=.git
+          - --exclude=data
+          - --exclude=ray
+          - --exclude=wandb
+
+    - name: Install Python dependencies
+      ansible.builtin.shell: |
+        {{ pythondir }}/pip install -Ur {{ workdir }}/requirements/worker.txt
+      changed_when: true
+
+    - name: Install project packages
+      ansible.builtin.shell: |
+        cd {{ workdir }} && {{ pythondir }}/pip install -e .
+        rm -rf {{ workdir }}/raysort/sortlib/build
+        export LD_LIBRARY_PATH=/opt/intel/oneapi/compiler/2023.0.0/linux/compiler/lib/intel64_lin:$LD_LIBRARY_PATH
+        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
+      changed_when: true
+
+    - name: Set soft and hard ulimit
+      become: true
+      community.general.pam_limits:
+        domain: "*"
+        limit_type: "{{ item }}"
+        limit_item: nofile
+        value: 65535
+      loop:
+        - hard
+        - soft
