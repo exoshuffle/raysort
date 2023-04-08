@@ -1,9 +1,4 @@
-from raysort.config.common import (
-    Cloud,
-    InstanceType,
-    JobConfig,
-    get_steps,
-)
+from raysort.config.common import Cloud, InstanceType, JobConfig, get_steps
 
 # ------------------------------------------------------------
 #     VM Types
