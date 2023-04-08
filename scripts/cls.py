@@ -86,7 +86,7 @@ def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) ->
     if raise_if_exists and ret:
         shell_utils.error(f"{cluster_name} must not exist (found {cnt} instances)")
     return ret
-    
+
 
 def get_terraform_vars(**kwargs) -> str:
     return "".join([f' -var="{k}={v}"' for k, v in kwargs.items()])
@@ -212,11 +212,13 @@ def get_data_disks() -> list[str]:
     offset = cfg.cluster.instance_type.disk_device_offset
     if cfg.cluster.instance_type.cloud == config.Cloud.GCP:
         return [
-            f"/dev/nvme0n{i + offset}" for i in range(cfg.cluster.instance_type.disk_count)
+            f"/dev/nvme0n{i + offset}"
+            for i in range(cfg.cluster.instance_type.disk_count)
         ]
     else:
         return [
-            f"/dev/nvme{i + offset}n1" for i in range(cfg.cluster.instance_type.disk_count)
+            f"/dev/nvme{i + offset}n1"
+            for i in range(cfg.cluster.instance_type.disk_count)
         ]
 
 
@@ -455,7 +457,7 @@ def get_ray_start_cmd() -> tuple[str, dict, dict]:
         env = {}
     else:
         env = {
-          "RAY_STORAGE": cfg.system.ray_storage,
+            "RAY_STORAGE": cfg.system.ray_storage,
         }
     env = {k: str(v) for k, v in env.items()}
     return cmd, env, system_config

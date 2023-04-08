@@ -34,6 +34,7 @@ plt.rcParams.update(
 sns.set_theme(style="ticks", font_scale=1)
 sns.set_palette("Set2")
 
+
 # Read in json file of timestamps for map and reduce tasks
 def get_json_input(fname):
     f = open(fname)
