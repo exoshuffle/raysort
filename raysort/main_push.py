@@ -261,7 +261,7 @@ def final_merge(
             grouped = [first_half, second_half]
             ray_get = ray.get(grouped)
 
-            return [item for sublist in ray_get for item in sublist]
+            return flatten(ray_get)
 
         id_print("within threshold, processing")
         # filter out empty lists?
