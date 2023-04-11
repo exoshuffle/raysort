@@ -190,6 +190,8 @@ class MergeController:
                     self.cfg, self.worker_id, r, list(merge_out)
                 )
                 merge_results[r, :] = None
+                # tasks_in_flight.extend(ref)
+                # results.extend(ref)
                 if isinstance(ref, list):
                     tasks_in_flight.extend(ref)
                     results.extend(ref)
@@ -213,7 +215,8 @@ def final_merge(
     logging_utils.init()
 
     def id_print(*output):
-        print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
+        # print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
+        pass
 
     id_print("| level =", level)
 
@@ -236,32 +239,38 @@ def final_merge(
         if M > 1 and parts_memory_gb > THRESHOLD_GB:
             id_print("exceeded threshold, recursing")
             # split parts
+            # the first part may be an empty list so it wouldn't have a pivot, so need to keep checking
             part_0 = ray.get(parts[0])
+            counter = 1
+            while len(part_0) == 0:
+                part_0 = ray.get(parts[counter])
+                counter += 1
             pivot = sort_utils.get_median_key(part_0)
-            separated_parts = []
-            for part in parts:
-                separated_parts.append(sort_utils.split_part.remote(part, pivot, (str(worker_id) + "_" + str(reduce_idx))))
+            separated_parts = [sort_utils.split_part.remote(part, pivot, (str(worker_id) + "_" + str(reduce_idx))) for part in parts]
             
             first_parts = [a for a,_ in separated_parts if a]
             second_parts = [b for _,b in separated_parts if b]
 
             first_half = final_merge.options(**ray_utils.current_node_aff()).remote(
                     cfg, worker_id, reduce_idx, first_parts, subpart_idx = subpart_idx * 2, level = level + 1
-                ) or []
+                )
             second_half = final_merge.options(**ray_utils.current_node_aff()).remote(
                     cfg, worker_id, reduce_idx, second_parts, subpart_idx = subpart_idx * 2 + 1, level = level + 1
-                ) or []
+                )
             
             grouped = [first_half, second_half]
             ray_get = ray.get(grouped)
 
-            output = []
-            for lst in ray_get:
-                output.extend(lst)
-            return output
+            return [item for sublist in ray_get for item in sublist]
 
         id_print("within threshold, processing")
-        parts = ray.get(parts)
+        # filter out empty lists?
+        parts = [p for p in ray.get(parts) if len(p) > 0]
+
+        # need to check length again after filtering
+        M = len(parts)
+        if M == 0:
+            return []
 
         get_block = lambda i, d: parts[i] if d == 0 else None
         part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)

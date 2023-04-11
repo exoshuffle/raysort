@@ -6,7 +6,7 @@ import os
 import subprocess
 import tempfile
 import time
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Tuple
 
 import botocore
 import numpy as np
@@ -496,9 +496,10 @@ def get_median_key(part: np.ndarray) -> float:
     return np.median(keys)
 
 @ray.remote(num_returns=2)
-def split_part(part, pivot, identifier):
+def split_part(part, pivot, identifier) -> Tuple[np.ndarray, np.ndarray]:
     def id_print(*output):
-        print(":)) split_part: identifier:", identifier, "| output:", output)
+        # print(":)) split_part: identifier:", identifier, "| output:", output)
+        pass
 
 
     if isinstance(part, ray.ObjectRef):        
@@ -508,13 +509,13 @@ def split_part(part, pivot, identifier):
 
     if len(part) == 0:
         id_print("returning empty list because length is 0: ", len(part))
-        return [], []
+        return np.array([]), np.array([])
     copy_of_part = part.copy()
     blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
 
-    idx_two = blocks[1]
-    part_one = part[0 : idx_two[0]]
-    part_two = part[idx_two[0]:]
+    split_idx, _ = blocks[1]
+    part_one = part[0 : split_idx]
+    part_two = part[split_idx:]
     id_print("size after splitting", len(part_one), len(part_two))
     id_print("size ratio after splitting", len(part_one) / len(part), len(part_two) / len(part))
 
