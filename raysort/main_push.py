@@ -1,7 +1,7 @@
 import csv
 import logging
 import time
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
 import ray
@@ -190,8 +190,6 @@ class MergeController:
                     self.cfg, self.worker_id, r, list(merge_out)
                 )
                 merge_results[r, :] = None
-                # tasks_in_flight.extend(ref)
-                # results.extend(ref)
                 if isinstance(ref, list):
                     tasks_in_flight.extend(ref)
                     results.extend(ref)
@@ -200,6 +198,24 @@ class MergeController:
                     results.append(ref)
             return [r for r in ray.get(results) if r is not None]
 
+def get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
+    part_0 = ray.get(parts[0])
+    counter = 1
+    while len(part_0) == 0 and counter < len(parts):
+        part_0 = ray.get(parts[counter])
+        counter += 1
+    return part_0
+
+def partition_parts(worker_id: PartId, reduce_idx: PartId, parts: list[ray.ObjectRef]) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
+    part = get_nonempty_part(parts)
+            
+    pivot = sort_utils.get_median_key(part)
+    separated_parts = [sort_utils.split_part.remote(part, pivot, (str(worker_id) + "_" + str(reduce_idx))) for part in parts]
+    
+    first_parts = [a for a,_ in separated_parts if a]
+    second_parts = [b for _,b in separated_parts if b]
+
+    return first_parts, second_parts
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
@@ -238,18 +254,8 @@ def final_merge(
         THRESHOLD_GB = 8
         if M > 1 and parts_memory_gb > THRESHOLD_GB:
             id_print("exceeded threshold, recursing")
-            # split parts
-            # the first part may be an empty list so it wouldn't have a pivot, so need to keep checking
-            part_0 = ray.get(parts[0])
-            counter = 1
-            while len(part_0) == 0:
-                part_0 = ray.get(parts[counter])
-                counter += 1
-            pivot = sort_utils.get_median_key(part_0)
-            separated_parts = [sort_utils.split_part.remote(part, pivot, (str(worker_id) + "_" + str(reduce_idx))) for part in parts]
             
-            first_parts = [a for a,_ in separated_parts if a]
-            second_parts = [b for _,b in separated_parts if b]
+            first_parts, second_parts = partition_parts(worker_id, reduce_idx, parts)
 
             first_half = final_merge.options(**ray_utils.current_node_aff()).remote(
                     cfg, worker_id, reduce_idx, first_parts, subpart_idx = subpart_idx * 2, level = level + 1
