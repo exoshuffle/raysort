@@ -228,7 +228,6 @@ def partition_parts(
     return first_parts, second_parts
 
 
-
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
 @ray.remote(num_cpus=0)
