@@ -1,6 +1,7 @@
 import csv
 import logging
 import time
+
 from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
@@ -225,6 +226,7 @@ def partition_parts(
     second_parts = [b for _, b in separated_parts if b]
 
     return first_parts, second_parts
+
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB

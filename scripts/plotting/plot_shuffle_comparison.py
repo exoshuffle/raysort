@@ -154,9 +154,9 @@ def plot_mb_all():
 def plot_hdd():
     df = pd.DataFrame(
         [
-            ["Spark", "2000", 1609],
-            ["Spark", "1000", 1701],
-            ["Spark", "500", 1558],
+            ["Magnet", "2000", 1458],
+            ["Magnet", "1000", 1599],
+            ["Magnet", "500", 1572],
             [f"{SYS}-simple", "2000", 2799],
             [f"{SYS}-simple", "1000", 1929],
             [f"{SYS}-simple", "500", 1297],
@@ -202,9 +202,9 @@ def plot_hdd():
 def plot_ssd():
     df = pd.DataFrame(
         [
-            ["Spark", "2000", 1498],
-            ["Spark", "1000", 1533],
-            ["Spark", "500", 1614],
+            ["Magnet", "2000", 1652],
+            ["Magnet", "1000", 1680],
+            ["Magnet", "500", 1607],
             [f"{SYS}-simple", "2000", 1085],
             [f"{SYS}-simple", "1000", 628],
             [f"{SYS}-simple", "500", 570],
@@ -250,7 +250,7 @@ def plot_large():
     df = pd.DataFrame(
         [
             [f"{SYS}-push*", "100TB", 10707 / SECS_PER_HR],
-            ["Spark-push", "100TB", 19293 / SECS_PER_HR],
+            ["Magnet", "100TB", 19293 / SECS_PER_HR],
             ["Spark", "100TB", 30240 / SECS_PER_HR],
         ],
         columns=["version", "data_size", "time"],
@@ -274,14 +274,14 @@ def plot_large():
 def plot_small():
     df = pd.DataFrame(
         [
-            ["80", "simple", 4.529596],
-            ["80", "push*", 7.783609],
-            ["200", "simple", 12.101356],
-            ["200", "push*", 7.709302],
-            ["80 ", "simple", 43.732640],
-            ["80 ", "push*", 54.506559],
-            ["200 ", "simple", 53.726337],
-            ["200 ", "push*", 42.215111],
+            ["100GB", f"{SYS}-simple", 39],
+            ["100GB", f"{SYS}-merge", 66],
+            ["100GB", f"{SYS}-push", 53],
+            ["100GB", f"{SYS}-push*", 50],
+            ["200GB", f"{SYS}-simple", 96],
+            ["200GB", f"{SYS}-merge", 160],
+            ["200GB", f"{SYS}-push", 143],
+            ["200GB", f"{SYS}-push*", 130],
         ],
         columns=["partitions", "shuffle", "time"],
     )
@@ -294,9 +294,15 @@ def plot_small():
         "time",
         "shuffle",
         "",
-        r"10GB \hspace*{4.5em} 100GB",
+        "Data Size (100 partitions)",
         "Job Time (s)",
-        palette=[set2[0], lighten(set2[2], 1.3)] * 4,
+        palette=[
+            lighten(set2[0], 0.5),
+            set2[1],
+            lighten(set2[2], 1.3),
+            lighten(set2[3], 2.8),
+        ]
+        * 2,
     )
 
 
