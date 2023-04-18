@@ -492,17 +492,18 @@ def get_boundaries_auto(
 def get_median_key(part: np.ndarray) -> float:
     records = part.reshape((-1, 100))
     key_bytes = records[:, :8]
-    keys = key_bytes.view(dtype=np.dtype('>u8'))
+    keys = key_bytes.view(dtype=np.dtype(">u8"))
     return np.median(keys)
+
 
 @ray.remote(num_returns=2)
 def split_part(part, pivot, identifier) -> Tuple[np.ndarray, np.ndarray]:
-    if isinstance(part, ray.ObjectRef):        
+    if isinstance(part, ray.ObjectRef):
         part = ray.get(part)
-    
+
     if len(part) == 0:
         return np.array([]), np.array([])
-    
+
     copy_of_part = part.copy()
     blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
 

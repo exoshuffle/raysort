@@ -198,6 +198,7 @@ class MergeController:
                     results.append(ref)
             return [r for r in ray.get(results) if r is not None]
 
+
 def get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
     part_0 = ray.get(parts[0])
     counter = 1
@@ -206,16 +207,25 @@ def get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
         counter += 1
     return part_0
 
-def partition_parts(worker_id: PartId, reduce_idx: PartId, parts: list[ray.ObjectRef]) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
+
+def partition_parts(
+    worker_id: PartId, reduce_idx: PartId, parts: list[ray.ObjectRef]
+) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
     part = get_nonempty_part(parts)
-            
+
     pivot = sort_utils.get_median_key(part)
-    separated_parts = [sort_utils.split_part.remote(part, pivot, (str(worker_id) + "_" + str(reduce_idx))) for part in parts]
-    
-    first_parts = [a for a,_ in separated_parts if a]
-    second_parts = [b for _,b in separated_parts if b]
+    separated_parts = [
+        sort_utils.split_part.remote(
+            part, pivot, (str(worker_id) + "_" + str(reduce_idx))
+        )
+        for part in parts
+    ]
+
+    first_parts = [a for a, _ in separated_parts if a]
+    second_parts = [b for _, b in separated_parts if b]
 
     return first_parts, second_parts
+
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
 # Plasma usage: input_part_size = 2GB
@@ -239,19 +249,28 @@ def final_merge(
 
         part_locs = ray.experimental.get_object_locations(parts)
         part_sizes = [loc["object_size"] for loc in part_locs.values()]
-        
+
         parts_memory_gb = sum(part_sizes) / 1_000_000_000
         if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-            
             first_parts, second_parts = partition_parts(worker_id, reduce_idx, parts)
 
             first_half = final_merge.options(**ray_utils.current_node_aff()).remote(
-                    cfg, worker_id, reduce_idx, first_parts, subpart_idx = subpart_idx * 2, level = level + 1
-                )
+                cfg,
+                worker_id,
+                reduce_idx,
+                first_parts,
+                subpart_idx=subpart_idx * 2,
+                level=level + 1,
+            )
             second_half = final_merge.options(**ray_utils.current_node_aff()).remote(
-                    cfg, worker_id, reduce_idx, second_parts, subpart_idx = subpart_idx * 2 + 1, level = level + 1
-                )
-            
+                cfg,
+                worker_id,
+                reduce_idx,
+                second_parts,
+                subpart_idx=subpart_idx * 2 + 1,
+                level=level + 1,
+            )
+
             grouped = [first_half, second_half]
             ray_get = ray.get(grouped)
 
@@ -273,6 +292,7 @@ def final_merge(
         merger = sortlib.merge_partitions(M, get_block)
         output = sort_utils.save_partition(cfg, pinfo, merger)
         return output
+
 
 class NodeScheduler:
     def __init__(self, cfg: AppConfig) -> None:
