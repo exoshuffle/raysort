@@ -230,12 +230,6 @@ def final_merge(
 ) -> list[PartInfo]:
     logging_utils.init()
 
-    def id_print(*output):
-        # print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
-        pass
-
-    id_print("| level =", level)
-
     with tracing_utils.timeit("reduce"):
         M = len(parts)
         if M == 0:
@@ -246,14 +240,8 @@ def final_merge(
         part_locs = ray.experimental.get_object_locations(parts)
         part_sizes = [loc["object_size"] for loc in part_locs.values()]
         
-        id_print("all part_sizes:", part_sizes)
-
         parts_memory_gb = sum(part_sizes) / 1_000_000_000
-        id_print("parts_memory_gb:", parts_memory_gb)
-        # if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-        THRESHOLD_GB = 8
-        if M > 1 and parts_memory_gb > THRESHOLD_GB:
-            id_print("exceeded threshold, recursing")
+        if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
             
             first_parts, second_parts = partition_parts(worker_id, reduce_idx, parts)
 
@@ -269,7 +257,6 @@ def final_merge(
 
             return flatten(ray_get)
 
-        id_print("within threshold, processing")
         # filter out empty lists?
         parts = [p for p in ray.get(parts) if len(p) > 0]
 
@@ -284,9 +271,7 @@ def final_merge(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
         merger = sortlib.merge_partitions(M, get_block)
-        id_print("merger:", type(merger), merger)
         output = sort_utils.save_partition(cfg, pinfo, merger)
-        id_print("successful save_partition")
         return output
 
 class NodeScheduler:
