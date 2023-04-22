@@ -302,7 +302,7 @@ def calculate_boundaries(samples, n, bytes_for_bounds=8):
 def _run_valsort(argstr: str) -> str:
     proc = subprocess.run(
         f"{constants.VALSORT_PATH} {argstr}",
-        check=False,
+        check=False,  # set check to False so that we can manually check process returncode and raise our own error.
         shell=True,
         capture_output=True,
         text=True,
@@ -497,7 +497,7 @@ def get_median_key(part: np.ndarray) -> float:
 
 
 @ray.remote(num_returns=2)
-def split_part(part, pivot, identifier) -> Tuple[np.ndarray, np.ndarray]:
+def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
     if isinstance(part, ray.ObjectRef):
         part = ray.get(part)
 

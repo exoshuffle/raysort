@@ -200,7 +200,7 @@ class MergeController:
             return [r for r in ray.get(results) if r is not None]
 
 
-def get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
+def _get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
     part_0 = ray.get(parts[0])
     counter = 1
     while len(part_0) == 0 and counter < len(parts):
@@ -209,23 +209,25 @@ def get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
     return part_0
 
 
-def partition_parts(
-    worker_id: PartId, reduce_idx: PartId, parts: list[ray.ObjectRef]
+def _partition_parts(
+    parts: list[ray.ObjectRef],
 ) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
-    part = get_nonempty_part(parts)
-
+    # Partitions a list of parts into two lists of parts with approximately equal memory
+    part = _get_nonempty_part(parts)
     pivot = sort_utils.get_median_key(part)
-    separated_parts = [
-        sort_utils.split_part.remote(
-            part, pivot, (str(worker_id) + "_" + str(reduce_idx))
-        )
-        for part in parts
-    ]
-
+    separated_parts = [sort_utils.split_part.remote(part, pivot) for part in parts]
     first_parts = [a for a, _ in separated_parts if a]
     second_parts = [b for _, b in separated_parts if b]
+    return [first_parts, second_parts]
 
-    return first_parts, second_parts
+
+def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
+    # returns total size of objects in parts array in GB
+    ray.wait(parts, num_returns=len(parts))
+    part_locs = ray.experimental.get_object_locations(parts)
+    part_sizes = [loc["object_size"] for loc in part_locs.values()]
+    parts_memory_gb = sum(part_sizes) / 1_000_000_000
+    return parts_memory_gb
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -237,7 +239,6 @@ def final_merge(
     reduce_idx: PartId,
     parts: list[np.ndarray],
     subpart_idx: PartId = 1,
-    level: int = 1,
 ) -> list[PartInfo]:
     logging_utils.init()
 
@@ -246,38 +247,24 @@ def final_merge(
         if M == 0:
             return []
 
-        ray.wait(parts, num_returns=len(parts))
+        parts_memory_gb = _get_total_partition_sizes(parts)
 
-        part_locs = ray.experimental.get_object_locations(parts)
-        part_sizes = [loc["object_size"] for loc in part_locs.values()]
-
-        parts_memory_gb = sum(part_sizes) / 1_000_000_000
         if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-            first_parts, second_parts = partition_parts(worker_id, reduce_idx, parts)
+            partitioned_parts = _partition_parts(parts)
 
-            first_half = final_merge.options(**ray_utils.current_node_aff()).remote(
-                cfg,
-                worker_id,
-                reduce_idx,
-                first_parts,
-                subpart_idx=subpart_idx * 2,
-                level=level + 1,
-            )
-            second_half = final_merge.options(**ray_utils.current_node_aff()).remote(
-                cfg,
-                worker_id,
-                reduce_idx,
-                second_parts,
-                subpart_idx=subpart_idx * 2 + 1,
-                level=level + 1,
-            )
+            halves = [
+                final_merge.options(**ray_utils.current_node_aff()).remote(
+                    cfg,
+                    worker_id,
+                    reduce_idx,
+                    partitioned_parts[i],
+                    subpart_idx=subpart_idx * 2 + i,
+                )
+                for i in range(2)
+            ]
 
-            grouped = [first_half, second_half]
-            ray_get = ray.get(grouped)
+            return flatten(ray.get(halves))
 
-            return flatten(ray_get)
-
-        # filter out empty lists?
         parts = [p for p in ray.get(parts) if len(p) > 0]
 
         # need to check length again after filtering
