@@ -219,8 +219,7 @@ def get_data_disks() -> list[str]:
         ]
 
     return [
-        f"/dev/nvme{i + offset}n1"
-        for i in range(cfg.cluster.instance_type.disk_count)
+        f"/dev/nvme{i + offset}n1" for i in range(cfg.cluster.instance_type.disk_count)
     ]
 
 
