@@ -33,7 +33,7 @@
         path: "{{ mnt_prefix }}{{ item }}"
         state: directory
         mode: "0777"
-      loop: "{{ range(data_disks|length)|list }}"
+      loop: "{{ range(data_disks | length) | list }}"
 
     - name: Mount the data disks
       become: true
@@ -53,7 +53,7 @@
         path: "{{ mnt_prefix }}{{ item }}"
         state: directory
         mode: "0777"
-      loop: "{{ range(data_disks|length)|list }}"
+      loop: "{{ range(data_disks | length) | list }}"
 
     - name: Create tmpfs mount point
       become: true

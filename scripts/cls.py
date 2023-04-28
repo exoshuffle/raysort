@@ -377,7 +377,9 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
     if cfg.cluster.instance_type.cloud == config.Cloud.AWS and not cluster_exists:
         shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
-    playbook = "setup_gcp" if cfg.cluster.instance_type.cloud == config.Cloud.GCP else "setup"
+    playbook = (
+        "setup_gcp" if cfg.cluster.instance_type.cloud == config.Cloud.GCP else "setup"
+    )
     run_ansible_playbook(inventory_path, playbook, ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
     setup_grafana()
