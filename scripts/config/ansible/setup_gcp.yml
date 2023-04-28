@@ -4,7 +4,7 @@
   strategy: free
   vars:
     data_disks:
-      - /dev/nvme0n1   
+      - /dev/nvme0n1
       - /dev/nvme0n2
       - /dev/nvme0n3
       - /dev/nvme0n4

@@ -73,19 +73,21 @@ def get_instances(filters: dict) -> list[dict]:
 
 def check_cluster_existence(cluster_name: str, raise_if_exists: bool = False) -> bool:
     # TODO(@lsf): check azure and gcp
-    instances = get_instances(
-        {
-            "tag:ClusterName": [cluster_name],
-            # Excluding "shutting-down" (0x20) and "terminated" (0x30).
-            # https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html
-            "instance-state-code": [str(code) for code in [0x00, 0x10, 0x40, 0x50]],
-        }
-    )
-    cnt = len(instances)
-    ret = cnt > 0
-    if raise_if_exists and ret:
-        shell_utils.error(f"{cluster_name} must not exist (found {cnt} instances)")
-    return ret
+    # instances = get_instances(
+    #     {
+    #         "tag:ClusterName": [cluster_name],
+    #         # Excluding "shutting-down" (0x20) and "terminated" (0x30).
+    #         # https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-instances.html
+    #         "instance-state-code": [str(code) for code in [0x00, 0x10, 0x40, 0x50]],
+    #     }
+    # )
+    # cnt = len(instances)
+    # ret = cnt > 0
+    # if raise_if_exists and ret:
+    #     shell_utils.error(f"{cluster_name} must not exist (found {cnt} instances)")
+    # return ret
+
+    return False
 
 
 def get_terraform_vars(**kwargs) -> str:
@@ -215,11 +217,11 @@ def get_data_disks() -> list[str]:
             f"/dev/nvme0n{i + offset}"
             for i in range(cfg.cluster.instance_type.disk_count)
         ]
-    else:
-        return [
-            f"/dev/nvme{i + offset}n1"
-            for i in range(cfg.cluster.instance_type.disk_count)
-        ]
+
+    return [
+        f"/dev/nvme{i + offset}n1"
+        for i in range(cfg.cluster.instance_type.disk_count)
+    ]
 
 
 def get_mnt_paths() -> list[str]:
@@ -375,10 +377,8 @@ def common_setup(cluster_name: str, cluster_exists: bool) -> pathlib.Path:
     if cfg.cluster.instance_type.cloud == config.Cloud.AWS and not cluster_exists:
         shell_utils.sleep(60, "worker nodes starting up")
     ev = get_ansible_vars()
-    if cfg.cluster.instance_type.cloud == config.Cloud.GCP:
-        run_ansible_playbook(inventory_path, "setup_gcp", ev=ev, retries=10)
-    else:
-        run_ansible_playbook(inventory_path, "setup", ev=ev, retries=10)
+    playbook = "setup_gcp" if cfg.cluster.instance_type.cloud == config.Cloud.GCP else "setup"
+    run_ansible_playbook(inventory_path, playbook, ev=ev, retries=10)
     setup_prometheus(head_ip, ips)
     setup_grafana()
     return inventory_path
@@ -453,6 +453,7 @@ def get_ray_start_cmd() -> tuple[str, dict, dict]:
     cmd += f" --object-manager-port={RAY_OBJECT_MANAGER_PORT}"
     cmd += f" --system-config='{system_config_str}'"
     cmd += f" --resources='{resources}'"
+    # We don't need ray storage for GCP yet and it currently errors when we try to set it to None
     if cfg.cluster.instance_type.cloud == config.Cloud.GCP:
         env = {}
     else:
