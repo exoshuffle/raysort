@@ -6,7 +6,7 @@ import os
 import subprocess
 import tempfile
 import time
-from typing import Callable, Iterable, Optional
+from typing import Callable, Iterable, Optional, Tuple
 
 import botocore
 import numpy as np
@@ -302,13 +302,13 @@ def calculate_boundaries(samples, n, bytes_for_bounds=8):
 def _run_valsort(argstr: str) -> str:
     proc = subprocess.run(
         f"{constants.VALSORT_PATH} {argstr}",
-        check=True,
+        check=False,  # set check to False so that we can manually check process returncode and raise our own error.
         shell=True,
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
-        logging.critical("\n%s", proc.stderr.decode("ascii"))
+        logging.critical("\n%s", proc.stderr)
         raise RuntimeError(f"Validation failed: {argstr}")
     return proc.stderr
 
@@ -478,7 +478,7 @@ def get_boundaries_auto(
     cfg: AppConfig, parts: list[PartInfo]
 ) -> tuple[list[int], list[list[int]]]:
     get_boundaries_impl = sortlib.get_boundaries
-    if cfg.data_skew:
+    if cfg.use_sampling:
         with tracing_utils.timeit("sample_all"):
             sample = _get_key_sample(cfg, parts)
             get_boundaries_impl = functools.partial(_get_boundaries_with_sample, sample)
@@ -487,3 +487,28 @@ def get_boundaries_auto(
         cfg.num_reducers_per_worker,
         get_boundaries_impl=get_boundaries_impl,
     )
+
+
+def get_median_key(part: np.ndarray) -> float:
+    records = part.reshape((-1, 100))
+    key_bytes = records[:, :8]
+    keys = key_bytes.view(dtype=np.dtype(">u8"))
+    return np.median(keys)
+
+
+@ray.remote(num_returns=2)
+def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
+    if isinstance(part, ray.ObjectRef):
+        part = ray.get(part)
+
+    if len(part) == 0:
+        return np.array([]), np.array([])
+
+    copy_of_part = part.copy()
+    blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
+
+    split_idx, _ = blocks[1]
+    part_one = part[0:split_idx]
+    part_two = part[split_idx:]
+
+    return part_one, part_two

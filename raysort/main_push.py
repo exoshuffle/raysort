@@ -1,7 +1,8 @@
 import csv
 import logging
 import time
-from typing import Iterable, Optional, Union
+
+from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
 import ray
@@ -185,13 +186,48 @@ class MergeController:
             for r, merge_out in enumerate(merge_results):
                 if len(tasks_in_flight) >= self.cfg.reduce_parallelism:
                     _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
+
                 ref = final_merge.options(**ray_utils.current_node_aff()).remote(
-                    self.cfg, self.worker_id, r, *merge_out
+                    self.cfg, self.worker_id, r, list(merge_out)
                 )
                 merge_results[r, :] = None
-                tasks_in_flight.append(ref)
-                results.append(ref)
+                if isinstance(ref, list):
+                    tasks_in_flight.extend(ref)
+                    results.extend(ref)
+                else:
+                    tasks_in_flight.append(ref)
+                    results.append(ref)
             return [r for r in ray.get(results) if r is not None]
+
+
+def _get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
+    part_0 = ray.get(parts[0])
+    counter = 1
+    while len(part_0) == 0 and counter < len(parts):
+        part_0 = ray.get(parts[counter])
+        counter += 1
+    return part_0
+
+
+def _partition_parts(
+    parts: list[ray.ObjectRef],
+) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
+    # Partitions a list of parts into two lists of parts with approximately equal memory
+    part = _get_nonempty_part(parts)
+    pivot = sort_utils.get_median_key(part)
+    separated_parts = [sort_utils.split_part.remote(part, pivot) for part in parts]
+    first_parts = [a for a, _ in separated_parts if a]
+    second_parts = [b for _, b in separated_parts if b]
+    return [first_parts, second_parts]
+
+
+def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
+    # returns total size of objects in parts array in GB
+    ray.wait(parts, num_returns=len(parts))
+    part_locs = ray.experimental.get_object_locations(parts)
+    part_sizes = [loc["object_size"] for loc in part_locs.values()]
+    parts_memory_gb = sum(part_sizes) / 1_000_000_000
+    return parts_memory_gb
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -201,18 +237,49 @@ def final_merge(
     cfg: AppConfig,
     worker_id: PartId,
     reduce_idx: PartId,
-    *parts: list[np.ndarray],
-) -> Optional[PartInfo]:
+    parts: list[np.ndarray],
+    subpart_idx: PartId = 1,
+) -> list[PartInfo]:
     logging_utils.init()
+
     with tracing_utils.timeit("reduce"):
         M = len(parts)
+        if M == 0:
+            return []
+
+        parts_memory_gb = _get_total_partition_sizes(parts)
+
+        if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
+            partitioned_parts = _partition_parts(parts)
+
+            halves = [
+                final_merge.options(**ray_utils.current_node_aff()).remote(
+                    cfg,
+                    worker_id,
+                    reduce_idx,
+                    partitioned_parts[i],
+                    subpart_idx=subpart_idx * 2 + i,
+                )
+                for i in range(2)
+            ]
+
+            return flatten(ray.get(halves))
+
+        parts = [p for p in ray.get(parts) if len(p) > 0]
+
+        # need to check length again after filtering
+        M = len(parts)
+        if M == 0:
+            return []
+
         get_block = lambda i, d: parts[i] if d == 0 else None
-        part_id = constants.merge_part_ids(worker_id, reduce_idx)
+        part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
         merger = sortlib.merge_partitions(M, get_block)
-        return sort_utils.save_partition(cfg, pinfo, merger)[0]
+        output = sort_utils.save_partition(cfg, pinfo, merger)
+        return output
 
 
 class NodeScheduler:
@@ -287,8 +354,9 @@ def sort_main(cfg: AppConfig):
 
     with open(sort_utils.get_manifest_file(cfg, kind="output"), "w") as fout:
         writer = csv.writer(fout)
-        for pinfo in results:
-            writer.writerow(pinfo.to_csv_row())
+        for pinfo_lst in results:
+            for pinfo in pinfo_lst:
+                writer.writerow(pinfo.to_csv_row())
 
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
