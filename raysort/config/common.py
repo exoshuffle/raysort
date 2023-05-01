@@ -5,6 +5,7 @@ import os
 from dataclasses import InitVar, dataclass, field
 from typing import Optional
 
+import boto3
 import ray
 
 from raysort.typing import AppStep, InstanceLifetime, SpillingMode
@@ -25,7 +26,30 @@ GB = MB * 1000
 
 def get_s3_buckets(count: int = 10) -> list[str]:
     assert S3_BUCKET
-    return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
+    buckets = [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
+    enable_s3_access_logs(buckets)
+    return buckets
+
+
+def enable_s3_access_logs(buckets: List[str]) -> None:
+    s3 = boto3.resource("s3")
+    output_bucket = os.getenv("LOG_BUCKET")
+    for bucket in buckets:
+        try:
+            logging = s3.BucketLogging(bucket)
+            if not logging.logging_enabled:
+                logging.put(
+                    BucketLoggingStatus={
+                        "LoggingEnabled": {
+                            "TargetBucket": f"{output_bucket}",
+                            "TargetPrefix": f"{S3_BUCKET}/",
+                        }
+                    }
+                )
+        except Exception as e:
+            print(
+                f"Got an error while enabling access logs for {bucket}, {output_bucket}: {e}"
+            )
 
 
 class Cloud(enum.Enum):
