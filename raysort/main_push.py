@@ -108,6 +108,8 @@ class MergeController:
         self._merge_tasks = {}
         self._current_merger = self._get_merger()
         self._current_num_blocks = 0
+        self._current_blocks_size_gb = 0
+        self.merge_threshold_gb = cfg.merge_threshold_gb
         self._merge_results = []
         self._mapper_received = np.zeros(self.cfg.num_mappers, dtype=np.int_)
         self._merged_bytes = 0
@@ -143,7 +145,8 @@ class MergeController:
         self._mapper_received[mapper_id] = size
         self._current_merger.add_block.remote(block_ref[0])
         self._current_num_blocks += 1
-        if self._current_num_blocks >= self.merge_limit:
+        self._current_blocks_size_gb += size / 1_000_000_000.0
+        if self._current_num_blocks >= self.merge_limit or self._current_blocks_size_gb >= self.merge_threshold_gb:
             self._close_current_merger()
 
     def _close_current_merger(self):
@@ -154,6 +157,7 @@ class MergeController:
         self._merge_results.append(refs[:-1])
         self._current_merger = self._get_merger()
         self._current_num_blocks = 0
+        self._current_blocks_size_gb = 0
 
     def _finish_merge_results(self) -> list[list[ray.ObjectRef]]:
         if self._current_num_blocks > 0:
@@ -200,20 +204,20 @@ class MergeController:
             return [r for r in ray.get(results) if r is not None]
 
 
-def _get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
-    part_0 = ray.get(parts[0])
+def _get_nonempty_part(parts: list[ray.ObjectRef], idx_ordered_by_size: list[int]) -> Optional[np.ndarray]:
+    part_0 = ray.get(parts[idx_ordered_by_size[0]])
     counter = 1
     while len(part_0) == 0 and counter < len(parts):
-        part_0 = ray.get(parts[counter])
+        part_0 = ray.get(parts[idx_ordered_by_size[counter]])
         counter += 1
     return part_0
 
 
 def _partition_parts(
-    parts: list[ray.ObjectRef],
+    parts: list[ray.ObjectRef], idx_ordered_by_size: list[int]
 ) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
     # Partitions a list of parts into two lists of parts with approximately equal memory
-    part = _get_nonempty_part(parts)
+    part = _get_nonempty_part(parts, idx_ordered_by_size)
     pivot = sort_utils.get_median_key(part)
     separated_parts = [sort_utils.split_part.remote(part, pivot) for part in parts]
     first_parts = [a for a, _ in separated_parts if a]
@@ -222,12 +226,15 @@ def _partition_parts(
 
 
 def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
-    # returns total size of objects in parts array in GB
+    # returns total size of objects in parts array in GB and indices ordered by decreasing size
     ray.wait(parts, num_returns=len(parts))
     part_locs = ray.experimental.get_object_locations(parts)
     part_sizes = [loc["object_size"] for loc in part_locs.values()]
     parts_memory_gb = sum(part_sizes) / 1_000_000_000
-    return parts_memory_gb
+
+    idx_ordered_by_size = [x for _, x in sorted(zip(part_sizes, range(0, len(part_sizes))))][::-1]
+
+    return parts_memory_gb, idx_ordered_by_size
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -239,32 +246,77 @@ def final_merge(
     reduce_idx: PartId,
     parts: list[np.ndarray],
     subpart_idx: PartId = 1,
+    level: int = 1
 ) -> list[PartInfo]:
     logging_utils.init()
+
+    def id_print(*output):
+        print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
 
     with tracing_utils.timeit("reduce"):
         M = len(parts)
         if M == 0:
             return []
 
-        parts_memory_gb = _get_total_partition_sizes(parts)
+        parts_memory_gb, idx_ordered_by_size = _get_total_partition_sizes(parts)
+        # logging the ratio of part sizes
+        ray.wait(parts, num_returns=len(parts))
+        part_locs = ray.experimental.get_object_locations(parts)
+        part_sizes = [loc["object_size"] / (parts_memory_gb * 1_000_000_000) for loc in part_locs.values()]
+
+        
+        id_print("level:", level, "parts_memory_gb:", parts_memory_gb, part_sizes)
 
         if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-            partitioned_parts = _partition_parts(parts)
+            partitioned_parts = _partition_parts(parts, idx_ordered_by_size)
 
-            halves = [
-                final_merge.options(**ray_utils.current_node_aff()).remote(
+            # size_one, _ = _get_total_partition_sizes(partitioned_parts[0])
+            # size_two, _ = _get_total_partition_sizes(partitioned_parts[1])
+
+            # id_print("split into two:", size_one/(1.0 * (size_one + size_two)), size_two/(1.0 * (size_one + size_two)), (size_one, size_two))
+
+            # child_memory = 6 * 1024 * 1024 * 1024
+            # memory=child_memory
+
+            # halves = [
+            #     final_merge.options(**ray_utils.current_node_aff()).remote(
+            #     # final_merge.remote(
+            #         cfg,
+            #         worker_id,
+            #         reduce_idx,
+            #         partitioned_parts[i],
+            #         subpart_idx=subpart_idx * 2 + i,
+            #         level=level + 1
+            #     )
+            #     for i in range(2)
+            # ]
+            
+
+            first_half = final_merge.options().remote(
                     cfg,
                     worker_id,
                     reduce_idx,
-                    partitioned_parts[i],
-                    subpart_idx=subpart_idx * 2 + i,
+                    partitioned_parts[0],
+                    subpart_idx=subpart_idx * 2,
+                    level=level + 1
                 )
-                for i in range(2)
-            ]
+            
+            ray.wait([first_half])
+            
+            second_half = final_merge.options().remote(
+                    cfg,
+                    worker_id,
+                    reduce_idx,
+                    partitioned_parts[1],
+                    subpart_idx=subpart_idx * 2 + 1,
+                    level=level + 1
+                )
+            ray.wait([second_half])
 
-            return flatten(ray.get(halves))
+            # return flatten(ray.get(halves))
+            return flatten(ray.get([first_half, second_half]))
 
+        id_print("within threshold, no more splits")
         parts = [p for p in ray.get(parts) if len(p) > 0]
 
         # need to check length again after filtering
