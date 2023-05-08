@@ -74,5 +74,5 @@
         --metrics-export-port={{ ray_merics_export_port }}
         --object-manager-port={{ ray_object_manager_port }}
         --object-store-memory={{ ray_object_store_memory }}
-        --resources='{"worker":1}'
+        --resources='{"worker":1,"obj_store_gb": 50}'
       changed_when: true
