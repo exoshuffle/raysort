@@ -100,7 +100,8 @@ class AppConfig:
     total_data_size: int = field(init=False)
     input_part_size: int = field(init=False)
     output_part_size: int = field(init=False)
-    dynamic_repartition_threshold_gb: int = 8
+    merge_threshold_gb: int = 1
+    dynamic_repartition_threshold_gb: int = field(init=True, default=8)
 
     num_workers: int = field(init=False)
     num_mappers: int = field(init=False)

@@ -498,6 +498,12 @@ def get_median_key(part: np.ndarray) -> float:
 
 @ray.remote(num_returns=2)
 def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
+    def id_print(*output):
+        # print(":)) split_part", "| output:", output)
+        pass
+
+    id_print("entered split_part", pivot, part)
+
     if isinstance(part, ray.ObjectRef):
         part = ray.get(part)
 
@@ -510,5 +516,8 @@ def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
     split_idx, _ = blocks[1]
     part_one = part[0:split_idx]
     part_two = part[split_idx:]
+
+    id_print("size after splitting", len(part_one), len(part_two))
+    id_print("size ratio after splitting", len(part_one) / len(part), len(part_two) / len(part))
 
     return part_one, part_two
