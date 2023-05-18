@@ -201,9 +201,8 @@ class MergeController:
                 # if len(tasks_in_flight) >= 1:
                     _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
 
-                parts = list(merge_out)
-                ref = final_merge.options(**ray_utils.current_node_aff(), **_generate_custom_res_arg(self.cfg, parts)).remote(
-                    self.cfg, self.worker_id, r, parts
+                ref = final_merge.options(**ray_utils.current_node_aff()).remote(
+                    self.cfg, self.worker_id, r, list(merge_out)
                 )
                 merge_results[r, :] = None
                 if isinstance(ref, list):
@@ -296,68 +295,36 @@ def final_merge(
         id_print("level:", level, "parts_memory_gb:", parts_memory_gb, part_sizes)
 
         if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-            # partitioned_parts = ray.get(_partition_parts.options(**_format_custom_res_arg(part_sizes[largest_idx])).remote(parts, largest_idx, part_sizes))
-            partitioned_parts = _partition_parts(parts, largest_idx, part_sizes)
+            id_print("making chunks")
+            part_chunks = ray.get([sort_utils.make_chunks.options(**ray_utils.current_node_aff()).remote(p) for p in parts])
+            # part_chunks = ray.get([sort_utils.make_chunks.remote(p) for p in parts])
+            
+            id_print("d:", [len(pc) for pc in part_chunks])
 
-            # size_one, _ = _get_total_partition_sizes(partitioned_parts[0])
-            # size_two, _ = _get_total_partition_sizes(partitioned_parts[1])
-
-            # id_print("split into two:", size_one/(1.0 * (size_one + size_two)), size_two/(1.0 * (size_one + size_two)), (size_one, size_two))
-
-            # id_print("res_arg0:", _generate_custom_res_arg(cfg, partitioned_parts[0]))
-            # id_print("res_arg1:", _generate_custom_res_arg(cfg, partitioned_parts[1]))
-
-            halves = [
-                final_merge.options(**ray_utils.current_node_aff(), **_generate_custom_res_arg(cfg, partitioned_parts[i])).remote(
-                    cfg,
-                    worker_id,
-                    reduce_idx,
-                    partitioned_parts[i],
-                    subpart_idx=subpart_idx * 2 + i,
-                    level=level + 1
-                )
-                for i in range(2)
-            ]
-
-            # first_half = final_merge.options().remote(
-            #         cfg,
-            #         worker_id,
-            #         reduce_idx,
-            #         partitioned_parts[0],
-            #         subpart_idx=subpart_idx * 2,
-            #         level=level + 1
-            #     )
-                        
-            # second_half = final_merge.options().remote(
-            #         cfg,
-            #         worker_id,
-            #         reduce_idx,
-            #         partitioned_parts[1],
-            #         subpart_idx=subpart_idx * 2 + 1,
-            #         level=level + 1
-            #     )
-            # ray.wait([second_half])
-
-            return flatten(ray.get(halves))
-            # return flatten(ray.get([first_half, second_half]))
-
-        id_print("within threshold, no more splits")
-        parts_get = [p for p in ray.get(parts) if len(p) > 0]
+            id_print("part_chunks:", part_chunks)
+            def get_block(i, d):
+                print(":) get_block ref:", (i,d))
+                if i >= len(part_chunks):
+                    return None
+                if d >= len(part_chunks[i]):
+                    return None
+                output = ray.get(part_chunks[i][d])
+                print(":) get_block ref:", (i,d), part_chunks[i][d], len(output), output)
+                return output
+            id_print("testing get_block:", get_block(1, 2))
+            # get_block = lambda i, d: ray.get(part_chunks[i][d])
+            ask_for_refills = True
+        else:
+            parts = [p for p in ray.get(parts) if len(p) > 0]
+            get_block = lambda i, d: parts[i] if d == 0 else None
+            ask_for_refills = False
         
-        # TODO delete parts
-        del parts
-
-        # need to check length again after filtering
-        M = len(parts_get)
-        if M == 0:
-            return []
-
-        get_block = lambda i, d: parts_get[i] if d == 0 else None
-        part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
+        # part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
+        part_id = constants.merge_part_ids(worker_id, reduce_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
-        merger = sortlib.merge_partitions(M, get_block)
+        merger = sortlib.merge_partitions(M, get_block, ask_for_refills = ask_for_refills)
         output = sort_utils.save_partition(cfg, pinfo, merger)
         return output
 

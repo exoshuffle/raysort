@@ -521,3 +521,26 @@ def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
     id_print("size ratio after splitting", len(part_one) / len(part), len(part_two) / len(part))
 
     return part_one, part_two
+
+@ray.remote(num_cpus=1)
+def make_chunks(part: np.ndarray) -> list[np.ndarray]:
+    '''converts a part array into chunks of 100 MB '''
+    CHUNK_SIZE = 100 * 1000000 # number of bytes (100 MB)
+    print("part length:", len(part))
+    chunks = []
+    for i in range(0, len(part), CHUNK_SIZE):
+        print("interval:", i, min(i + CHUNK_SIZE, len(part)), "value at interval range:", part[i], part[min(i+CHUNK_SIZE, len(part)) - 1])
+        chunks.append(part[i: min(i+CHUNK_SIZE, len(part))])
+    # chunks = [part[i:min(i+CHUNK_SIZE, len(part))] for i in range(0, len(part), CHUNK_SIZE)]
+
+    print(":) make_chunks")
+    chunk_sum = 0
+    for i, c in enumerate(chunks):
+        print("chunk ", i, "len:", len(c), c)
+        chunk_sum += len(c)
+    
+    print("comparing lengths:", chunk_sum, len(part))
+
+    # return chunks
+    chunk_refs = [ray.put(chunk) for chunk in chunks]
+    return chunk_refs
