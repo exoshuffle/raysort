@@ -214,31 +214,6 @@ class MergeController:
             return [r for r in ray.get(results) if r is not None]
 
 
-# def _get_nonempty_part(parts: list[ray.ObjectRef], idx_ordered_by_size: list[int]) -> Optional[np.ndarray]:
-#     part_0 = ray.get(parts[idx_ordered_by_size[0]])
-#     counter = 1
-#     while len(part_0) == 0 and counter < len(parts):
-#         part_0 = ray.get(parts[idx_ordered_by_size[counter]])
-#         counter += 1
-#     return part_0
-
-def _partition_parts(
-    parts: list[ray.ObjectRef], largest_idx: int, part_sizes: list[float]
-) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
-    # Partitions a list of parts into two lists of parts with approximately equal memory
-    # part = _get_nonempty_part(parts, largest_idx)
-    part = ray.get(parts[largest_idx])
-    pivot = sort_utils.get_median_key(part)
-    separated_parts = [sort_utils.split_part.options(**ray_utils.current_node_aff(), **_format_custom_res_arg(part_sizes[i])).remote(parts[i], pivot) for i in range(len(parts))]
-    first_parts = [a for a, _ in separated_parts if a]
-    second_parts = [b for _, b in separated_parts if b]
-
-    # TODO: delete parts
-    del parts
-
-    return [first_parts, second_parts]
-
-
 def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
     # returns total size of objects in parts array in GB and index of largest part
     ray.wait(parts, num_returns=len(parts))
@@ -246,21 +221,7 @@ def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
     part_sizes = [loc["object_size"] / 1_000_000_000 for loc in part_locs.values()]
     parts_memory_gb = sum(part_sizes)
 
-    largest_idx = argmax(part_sizes)
-    largest_size = part_sizes[largest_idx]
-    return parts_memory_gb, largest_idx, largest_size
-
-
-def _generate_custom_res_arg(cfg: AppConfig, parts: list[ray.ObjectRef]):
-    total_size, _, largest_size = _get_total_partition_sizes(parts)
-    if total_size <= cfg.dynamic_repartition_threshold_gb:
-        return _format_custom_res_arg(total_size)
-    # return _format_custom_res_arg(largest_size) # TODO: if i use this it will fail 100gb run
-    return {}
-
-
-def _format_custom_res_arg(memory_requested):
-    return {"resources": {"obj_store_gb": int(math.ceil(memory_requested))}}
+    return parts_memory_gb
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -284,7 +245,7 @@ def final_merge(
         if M == 0:
             return []
 
-        parts_memory_gb, largest_idx, _ = _get_total_partition_sizes(parts)
+        parts_memory_gb = _get_total_partition_sizes(parts)
         # logging the ratio of part sizes
         ray.wait(parts, num_returns=len(parts))
         part_locs = ray.experimental.get_object_locations(parts)
@@ -302,17 +263,17 @@ def final_merge(
             id_print("d:", [len(pc) for pc in part_chunks])
 
             id_print("part_chunks:", part_chunks)
+            # check # of times get_block is called, should equal the total number of chunks
             def get_block(i, d):
-                print(":) get_block ref:", (i,d))
                 if i >= len(part_chunks):
                     return None
                 if d >= len(part_chunks[i]):
                     return None
+                print(":) get_block ref:", (i,d))
+                # this ray.get call could be stuck
                 output = ray.get(part_chunks[i][d])
-                print(":) get_block ref:", (i,d), part_chunks[i][d], len(output), output)
+                print(":) get_block ref output:", (i,d), part_chunks[i][d], len(output), output)
                 return output
-            id_print("testing get_block:", get_block(1, 2))
-            # get_block = lambda i, d: ray.get(part_chunks[i][d])
             ask_for_refills = True
         else:
             parts = [p for p in ray.get(parts) if len(p) > 0]
