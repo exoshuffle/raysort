@@ -163,6 +163,8 @@ class MergeController:
             )
             return
         self._mapper_received[mapper_id] = size
+        # block until all merges are done before starting reduce.
+        # ray.get(self._current_merger.add_block.remote(block_ref[0]))
         self._current_merger.add_block.remote(block_ref[0])
         self._current_num_blocks += 1
         self._current_blocks_size_gb += size / 1_000_000_000.0
@@ -222,6 +224,8 @@ class MergeController:
         part_sizes = np.transpose(size_mat)
         print(":) matrix comparison:", merge_results.shape, part_sizes.shape)
         print(":) starting reduce:", len(merge_results), len(part_sizes), part_sizes)
+        print(":) total size of matrix:", sum([sum(row) for row in part_sizes]))
+
         with tracing_utils.timeit("reduce_master"):
             results = []
             tasks_in_flight = []
@@ -278,7 +282,7 @@ def final_merge(
     level: int = 1
 ) -> list[PartInfo]:
     logging_utils.init()
-
+    print("parts_size_bytes:", parts_size_bytes)
     def id_print(*output):
         print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
 
@@ -323,7 +327,9 @@ def final_merge(
                 output = ray.get(part_chunks[i][d])
                 # id_print("get_block ref output:", (i,d), len(output))
                 # del part_chunks[i][d] # we can't delete here
-                part_chunks[i][d] = None
+                
+                # save memory
+                # part_chunks[i][d] = None
                 id_print("get_block ref output:", (i,d), len(output), output)
                 return output
             ask_for_refills = True
@@ -335,19 +341,19 @@ def final_merge(
             def get_block(i, d):
                 if i >= len(parts_get):
                     return None
-                if d >= 0:
+                if d > 0:
                     return None
                 output = parts_get[i]
-                parts[i] = None
-                parts_get[i] = None
+                # parts[i] = None
+                # parts_get[i] = None
                 return output
             ask_for_refills = False
         
         # save memory
-        if ask_for_refills:
-            for i in range(len(parts)):
-                parts[i] = None
-        del parts
+        # if ask_for_refills:
+        #     for i in range(len(parts)):
+        #         parts[i] = None
+        # del parts
 
         # part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
         part_id = constants.merge_part_ids(worker_id, reduce_idx)
@@ -358,13 +364,14 @@ def final_merge(
         merger = sortlib.merge_partitions(M, get_block, ask_for_refills = ask_for_refills)
         id_print("merge_partitions finished, starting save_partition")
         output = sort_utils.save_partition(cfg, pinfo, merger)
+        id_print("output pinfo_size", pinfo.size)
         id_print("save_partitions finished, returning from final_merge")
        
         # save memory
-        if ask_for_refills:
-            del part_chunks
-        else:
-            del parts_get
+        # if ask_for_refills:
+        #     del part_chunks
+        # else:
+        #     del parts_get
         return output
 
 
@@ -445,6 +452,10 @@ def sort_main(cfg: AppConfig):
         for pinfo_lst in results:
             for pinfo in pinfo_lst:
                 writer.writerow(pinfo.to_csv_row())
+                # if pinfo:
+                #     writer.writerow(pinfo.to_csv_row())
+                # else:
+                #     print(":) found empty pinfo")
 
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
@@ -456,7 +467,6 @@ def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:
 
 
 def main():
-    print(":) starting main", time.time())
     job_cfg = config.get()
     tracker = init(job_cfg)
     cfg = job_cfg.app
