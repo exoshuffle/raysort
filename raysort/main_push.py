@@ -1,9 +1,8 @@
 import csv
 import logging
-import math
 import time
 
-from typing import Iterable, Optional, Tuple, Union
+from typing import Iterable, Tuple, Union
 
 import numpy as np
 import ray
@@ -24,6 +23,7 @@ from raysort.typing import PartId, PartInfo
 def flatten(xss: list[list]) -> list:
     return [x for xs in xss for x in xs]
 
+
 def argmax(lst: list[int]) -> int:
     largest_idx = 0
     largest_val = lst[0]
@@ -32,6 +32,7 @@ def argmax(lst: list[int]) -> int:
             largest_val = lst[i]
             largest_idx = i
     return largest_idx
+
 
 def mapper_sort_blocks(
     cfg: AppConfig, bounds: list[int], pinfolist: list[PartInfo]
@@ -63,13 +64,12 @@ def mapper(
                 mapper_id, size, [ray.put(block, _owner=merger)]
             )
             tasks.append(task)
-        # ray.get(tasks)
         ray.wait(tasks)
 
 
 def _merge_blocks(
     blocks: list[np.ndarray], bounds: list[int]
-) -> Iterable[Union[np.ndarray, int]]:
+) -> Iterable[Union[np.ndarray, Tuple, int]]:
     total_bytes = sum(b.size for b in blocks)
     num_records = max(1, constants.bytes_to_records(total_bytes))
     get_block = lambda i, d: blocks[i] if d == 0 else None
@@ -78,14 +78,10 @@ def _merge_blocks(
     )
 
     datachunk_sizes = []
-
     for datachunk in merger:
         yield datachunk
         datachunk_sizes.append(datachunk.size)
-    
-    print(":) merge_blocks size:", sum(datachunk_sizes), total_bytes, datachunk_sizes)
-    # for datachunk_size in datachunk_sizes:
-    #     yield datachunk_size
+
     yield tuple(datachunk_sizes)
     yield total_bytes
 
@@ -163,34 +159,26 @@ class MergeController:
             )
             return
         self._mapper_received[mapper_id] = size
-        # block until all merges are done before starting reduce.
-        # ray.get(self._current_merger.add_block.remote(block_ref[0]))
         self._current_merger.add_block.remote(block_ref[0])
         self._current_num_blocks += 1
         self._current_blocks_size_gb += size / 1_000_000_000.0
-        if self._current_num_blocks >= self.merge_limit or self._current_blocks_size_gb >= self.merge_threshold_gb:
+        if (
+            self._current_num_blocks >= self.merge_limit
+            or self._current_blocks_size_gb >= self.merge_threshold_gb
+        ):
             self._close_current_merger()
 
     def _close_current_merger(self):
         refs = self._current_merger.merge.options(
-            # num_returns=self.cfg.num_reducers_per_worker + 1
-            # num_returns=self.cfg.num_reducers_per_worker * 2 + 1
             num_returns=self.cfg.num_reducers_per_worker + 2
         ).remote()
+        # From _merge_blocks, refs[-1] is the total size and refs[-2] is the list of individual sizes
         self._merge_tasks[refs[-1]] = self._current_merger
-        # split the refs into datachunks and sizes
-        # num_chunks = (len(refs) - 1) // 2
-        # self._merge_results.append(refs[:num_chunks])
         self._merge_results.append(refs[:-2])
-        print(":) refs from close_current_merger")
-        # self._merge_datachunk_sizes.append(refs[num_chunks:-1])
-        current_row = ray.get(refs[-2]) # total bytes is the last value
-        print(":) appending current row", current_row)
-        self._merge_datachunk_sizes.append(current_row)
+        self._merge_datachunk_sizes.append(ray.get(refs[-2]))
         self._current_merger = self._get_merger()
         self._current_num_blocks = 0
         self._current_blocks_size_gb = 0
-        print(":) returning from close_current_merger")
 
     def _finish_merge_results(self) -> list[list[ray.ObjectRef]]:
         if self._current_num_blocks > 0:
@@ -218,54 +206,22 @@ class MergeController:
     def reduce(self) -> list[PartInfo]:
         # merge_results: (num_reducers_per_worker, num_merge_tasks)
         data_mat, size_mat = self._finish_merge_results()
-        # size_mat = [ray.get(row) for row in size_mat]
-        print(":) transposing matrices")
         merge_results = np.transpose(data_mat)
         part_sizes = np.transpose(size_mat)
-        print(":) matrix comparison:", merge_results.shape, part_sizes.shape)
-        print(":) starting reduce:", len(merge_results), len(part_sizes), part_sizes)
-        print(":) total size of matrix:", sum([sum(row) for row in part_sizes]))
 
         with tracing_utils.timeit("reduce_master"):
             results = []
             tasks_in_flight = []
             for r, merge_out in enumerate(merge_results):
                 if len(tasks_in_flight) >= self.cfg.reduce_parallelism:
-                # if len(tasks_in_flight) >= 1:
-                    print(":) tasks_in_flight filled, waiting...", len(tasks_in_flight))
                     _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
-                print(":) starting final_merge", r)
-                # merge_out_bytes = sum(ray.get(part_sizes[r]))
                 ref = final_merge.options(**ray_utils.current_node_aff()).remote(
-                    # self.cfg, self.worker_id, r, list(merge_out), list(part_sizes[r])
                     self.cfg, self.worker_id, r, list(merge_out), sum(part_sizes[r])
                 )
                 merge_results[r, :] = None
-                # part_sizes[r, :] = None
-
                 tasks_in_flight.append(ref)
                 results.append(ref)
-
-                # if isinstance(ref, list):
-                #     tasks_in_flight.extend(ref)
-                #     results.extend(ref)
-                # else:
-                #     tasks_in_flight.append(ref)
-                #     results.append(ref)
-            print(":) getting final_outputs", len(results))
-            final_output = [r for r in ray.get(results) if r is not None]
-            print(":) got final output")
-            return final_output 
-
-
-def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
-    # returns total size of objects in parts array in GB and index of largest part
-    ray.wait(parts, num_returns=len(parts))
-    part_locs = ray.experimental.get_object_locations(parts)
-    part_sizes = [loc["object_size"] / 1_000_000_000 for loc in part_locs.values()]
-    parts_memory_gb = sum(part_sizes)
-
-    return parts_memory_gb
+            return [r for r in ray.get(results) if r is not None]
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
@@ -276,102 +232,45 @@ def final_merge(
     worker_id: PartId,
     reduce_idx: PartId,
     parts: list[np.ndarray],
-    # parts_sizes_bytes: list[int],
     parts_size_bytes: int,
-    subpart_idx: PartId = 1,
-    level: int = 1
 ) -> list[PartInfo]:
     logging_utils.init()
-    print("parts_size_bytes:", parts_size_bytes)
-    def id_print(*output):
-        print(":) final_merge identifier:", str(worker_id) + "_" + str(reduce_idx), "(" + str(subpart_idx) + ")", *output)
 
     with tracing_utils.timeit("reduce"):
         M = len(parts)
         if M == 0:
             return []
-        id_print("start get_total_partition_sizes")
-        # parts_memory_gb = _get_total_partition_sizes(parts)
-        # parts_memory_gb_1 = _get_total_partition_sizes(parts)
         parts_memory_gb = parts_size_bytes * 1.0 / 1_000_000_000
-        # parts_memory_gb = sum(ray.get(parts_sizes_bytes)) * 1.0 / 1_000_000_000
-
-        # print(":) parts size comparison:", parts_memory_gb_1, parts_memory_gb)
-        # parts_memory_gb = 30 # TODO: dummy value
-
-        # logging the ratio of part sizes
-        # ray.wait(parts, num_returns=len(parts))
-        # part_locs = ray.experimental.get_object_locations(parts)
-        # part_sizes_ratio = [loc["object_size"] / (parts_memory_gb * 1_000_000_000) for loc in part_locs.values()]
-        # part_sizes = [loc["object_size"] / (1_000_000_000) for loc in part_locs.values()]
-
-        
-        # id_print("level:", level, "parts_memory_gb:", parts_memory_gb, part_sizes)
-        id_print("get_total_partition_sizes completed; level:", level, "parts_memory_gb:", parts_memory_gb)
 
         if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
-            id_print("making chunks")
-            part_chunks = ray.get([sort_utils.make_chunks.options(**ray_utils.current_node_aff()).remote(p) for p in parts])
-            
-            id_print("d:", [len(pc) for pc in part_chunks])
+            part_chunks = ray.get(
+                [
+                    sort_utils.make_chunks.options(
+                        **ray_utils.current_node_aff()
+                    ).remote(p)
+                    for p in parts
+                ]
+            )
 
-            id_print("part_chunks:", part_chunks)
-            # check # of times get_block is called, should equal the total number of chunks
             def get_block(i, d):
                 if i >= len(part_chunks):
                     return None
                 if d >= len(part_chunks[i]):
                     return None
-                id_print("get_block ref:", (i,d))
-                # this ray.get call could be stuck
-                output = ray.get(part_chunks[i][d])
-                # id_print("get_block ref output:", (i,d), len(output))
-                # del part_chunks[i][d] # we can't delete here
-                
-                # save memory
-                # part_chunks[i][d] = None
-                id_print("get_block ref output:", (i,d), len(output), output)
-                return output
+                return ray.get(part_chunks[i][d])
+
             ask_for_refills = True
         else:
-            id_print("waiting for parts_get")
             parts_get = [p for p in ray.get(parts) if len(p) > 0]
-            print("finished waiting for parts_get")
-            # get_block = lambda i, d: parts_get[i] if d == 0 else None
-            def get_block(i, d):
-                if i >= len(parts_get):
-                    return None
-                if d > 0:
-                    return None
-                output = parts_get[i]
-                # parts[i] = None
-                # parts_get[i] = None
-                return output
+            get_block = lambda i, d: parts_get[i] if d == 0 else None
             ask_for_refills = False
-        
-        # save memory
-        # if ask_for_refills:
-        #     for i in range(len(parts)):
-        #         parts[i] = None
-        # del parts
 
-        # part_id = constants.merge_part_ids(worker_id, reduce_idx, subpart_idx)
         part_id = constants.merge_part_ids(worker_id, reduce_idx)
         pinfo = sort_utils.part_info(
             cfg, part_id, kind="output", cloud=cfg.cloud_storage
         )
-        id_print("starting merge_partitions")
-        merger = sortlib.merge_partitions(M, get_block, ask_for_refills = ask_for_refills)
-        id_print("merge_partitions finished, starting save_partition")
+        merger = sortlib.merge_partitions(M, get_block, ask_for_refills=ask_for_refills)
         output = sort_utils.save_partition(cfg, pinfo, merger)
-        id_print("output pinfo_size", pinfo.size)
-        id_print("save_partitions finished, returning from final_merge")
-       
-        # save memory
-        # if ask_for_refills:
-        #     del part_chunks
-        # else:
-        #     del parts_get
         return output
 
 
@@ -403,7 +302,6 @@ class NodeScheduler:
 
 
 def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
-    # print(":) timestamp starting sort_optimized", time.time())
     map_bounds, merge_bounds = sort_utils.get_boundaries_auto(cfg, parts)
     num_shards = cfg.num_shards_per_mapper
     map_scheduler = NodeScheduler(cfg)
@@ -413,7 +311,6 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         )
         for w in range(cfg.num_workers)
     ]
-    # print(":) timestamp created merge_controllers", time.time())
 
     def _submit_map(map_id: int) -> ray.ObjectRef:
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
@@ -452,10 +349,6 @@ def sort_main(cfg: AppConfig):
         for pinfo_lst in results:
             for pinfo in pinfo_lst:
                 writer.writerow(pinfo.to_csv_row())
-                # if pinfo:
-                #     writer.writerow(pinfo.to_csv_row())
-                # else:
-                #     print(":) found empty pinfo")
 
 
 def init(job_cfg: JobConfig) -> ray.actor.ActorHandle:

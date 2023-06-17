@@ -159,10 +159,7 @@ def multipart_upload(
         if datachunk.size >= constants.S3_MIN_CHUNK_SIZE:
             # There should never be large chunks once we start seeing
             # small chunks towards the end.
-            # TODO derek: uncomment the bottom line
-            # assert tail.getbuffer().nbytes == 0
             if tail.getbuffer().nbytes > 0:
-                print(":) doing an extra flush to clean buffer")
                 tail.write(datachunk)
                 _upload_part(tail.getvalue())
                 tail = io.BytesIO()

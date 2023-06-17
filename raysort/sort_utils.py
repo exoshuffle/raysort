@@ -265,6 +265,10 @@ def generate_input(cfg: AppConfig):
         writer = csv.writer(fout)
         for pinfo in parts:
             writer.writerow(pinfo.to_csv_row())
+
+    del tasks
+    del parts
+
     if not cfg.cloud_storage:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
 
@@ -498,12 +502,6 @@ def get_median_key(part: np.ndarray) -> float:
 
 @ray.remote(num_returns=2)
 def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
-    def id_print(*output):
-        # print(":)) split_part", "| output:", output)
-        pass
-
-    id_print("entered split_part", pivot, part)
-
     if isinstance(part, ray.ObjectRef):
         part = ray.get(part)
 
@@ -514,33 +512,19 @@ def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
     blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
 
     split_idx, _ = blocks[1]
-    part_one = part[0:split_idx]
-    part_two = part[split_idx:]
+    return part[0:split_idx], part[split_idx:]
 
-    id_print("size after splitting", len(part_one), len(part_two))
-    id_print("size ratio after splitting", len(part_one) / len(part), len(part_two) / len(part))
-
-    return part_one, part_two
 
 @ray.remote(num_cpus=1)
 def make_chunks(part: np.ndarray) -> list[np.ndarray]:
-    '''converts a part array into chunks of 100 MB '''
-    CHUNK_SIZE = 100 * 1000000 # number of bytes (100 MB)
-    print("part length:", len(part))
-    chunks = []
-    for i in range(0, len(part), CHUNK_SIZE):
-        print("interval:", i, min(i + CHUNK_SIZE, len(part)), "value at interval range:", part[i], part[min(i+CHUNK_SIZE, len(part)) - 1])
-        chunks.append(part[i: min(i+CHUNK_SIZE, len(part))])
-    # chunks = [part[i:min(i+CHUNK_SIZE, len(part))] for i in range(0, len(part), CHUNK_SIZE)]
+    """converts a part array into chunks of 100 MB"""
+    CHUNK_SIZE = 100 * 1000000  # number of bytes (100 MB)
+    chunks = [
+        part[i : min(i + CHUNK_SIZE, len(part))]
+        for i in range(0, len(part), CHUNK_SIZE)
+    ]
+    chunk_sum = sum([len(c) for c in chunks])
+    assert chunk_sum == len(part)
 
-    print(":) make_chunks")
-    chunk_sum = 0
-    for i, c in enumerate(chunks):
-        print("chunk ", i, "len:", len(c), c)
-        chunk_sum += len(c)
-    
-    print("comparing lengths:", chunk_sum, len(part))
-
-    # return chunks
     chunk_refs = [ray.put(chunk) for chunk in chunks]
     return chunk_refs
