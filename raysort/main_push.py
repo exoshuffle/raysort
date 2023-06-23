@@ -215,13 +215,48 @@ class MergeController:
             for r, merge_out in enumerate(merge_results):
                 if len(tasks_in_flight) >= self.cfg.reduce_parallelism:
                     _, tasks_in_flight = ray.wait(tasks_in_flight, fetch_local=False)
+
                 ref = final_merge.options(**ray_utils.current_node_aff()).remote(
                     self.cfg, self.worker_id, r, list(merge_out), sum(part_sizes[r])
                 )
                 merge_results[r, :] = None
-                tasks_in_flight.append(ref)
-                results.append(ref)
+                if isinstance(ref, list):
+                    tasks_in_flight.extend(ref)
+                    results.extend(ref)
+                else:
+                    tasks_in_flight.append(ref)
+                    results.append(ref)
             return [r for r in ray.get(results) if r is not None]
+
+
+def _get_nonempty_part(parts: list[ray.ObjectRef]) -> Optional[np.ndarray]:
+    part_0 = ray.get(parts[0])
+    counter = 1
+    while len(part_0) == 0 and counter < len(parts):
+        part_0 = ray.get(parts[counter])
+        counter += 1
+    return part_0
+
+
+def _partition_parts(
+    parts: list[ray.ObjectRef],
+) -> Tuple[list[ray.ObjectRef], list[ray.ObjectRef]]:
+    # Partitions a list of parts into two lists of parts with approximately equal memory
+    part = _get_nonempty_part(parts)
+    pivot = sort_utils.get_median_key(part)
+    separated_parts = [sort_utils.split_part.remote(part, pivot) for part in parts]
+    first_parts = [a for a, _ in separated_parts if a]
+    second_parts = [b for _, b in separated_parts if b]
+    return [first_parts, second_parts]
+
+
+def _get_total_partition_sizes(parts: list[ray.ObjectRef]):
+    # returns total size of objects in parts array in GB
+    ray.wait(parts, num_returns=len(parts))
+    part_locs = ray.experimental.get_object_locations(parts)
+    part_sizes = [loc["object_size"] for loc in part_locs.values()]
+    parts_memory_gb = sum(part_sizes) / 1_000_000_000
+    return parts_memory_gb
 
 
 # Memory usage: merge_partitions.batch_num_records * RECORD_SIZE = 100MB
