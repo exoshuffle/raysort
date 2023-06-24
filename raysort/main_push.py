@@ -2,7 +2,7 @@ import csv
 import logging
 import time
 
-from typing import Iterable, Tuple, Union
+from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
 import ray
@@ -22,16 +22,6 @@ from raysort.typing import PartId, PartInfo
 
 def flatten(xss: list[list]) -> list:
     return [x for xs in xss for x in xs]
-
-
-def argmax(lst: list[int]) -> int:
-    largest_idx = 0
-    largest_val = lst[0]
-    for i in range(len(lst)):
-        if lst[i] > largest_val:
-            largest_val = lst[i]
-            largest_idx = i
-    return largest_idx
 
 
 def mapper_sort_blocks(
@@ -64,7 +54,7 @@ def mapper(
                 mapper_id, size, [ray.put(block, _owner=merger)]
             )
             tasks.append(task)
-        ray.wait(tasks)
+        ray.get(tasks)
 
 
 def _merge_blocks(
@@ -161,7 +151,7 @@ class MergeController:
         self._mapper_received[mapper_id] = size
         self._current_merger.add_block.remote(block_ref[0])
         self._current_num_blocks += 1
-        self._current_blocks_size_gb += size / 1_000_000_000.0
+        self._current_blocks_size_gb += size / 1e9
         if (
             self._current_num_blocks >= self.merge_limit
             or self._current_blocks_size_gb >= self.merge_threshold_gb
@@ -275,9 +265,9 @@ def final_merge(
         M = len(parts)
         if M == 0:
             return []
-        parts_memory_gb = parts_size_bytes * 1.0 / 1_000_000_000
+        parts_memory_gb = parts_size_bytes / 1e9
 
-        if M > 1 and parts_memory_gb > cfg.dynamic_repartition_threshold_gb:
+        if M > 1 and parts_memory_gb > cfg.streaming_reducer_threshold_gb:
             part_chunks = ray.get(
                 [
                     sort_utils.make_chunks.options(

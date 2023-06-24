@@ -266,8 +266,8 @@ def generate_input(cfg: AppConfig):
         for pinfo in parts:
             writer.writerow(pinfo.to_csv_row())
 
-    del tasks
-    del parts
+    # del tasks
+    # del parts
 
     if not cfg.cloud_storage:
         ray.get(ray_utils.run_on_all_workers(cfg, drop_fs_cache))
@@ -512,13 +512,13 @@ def split_part(part, pivot) -> Tuple[np.ndarray, np.ndarray]:
     blocks = sortlib.sort_and_partition(copy_of_part, [0, pivot])
 
     split_idx, _ = blocks[1]
-    return part[0:split_idx], part[split_idx:]
+    return part[:split_idx], part[split_idx:]
 
 
 @ray.remote(num_cpus=1)
 def make_chunks(part: np.ndarray) -> list[np.ndarray]:
     """converts a part array into chunks of 100 MB"""
-    CHUNK_SIZE = 100 * 1000000  # number of bytes (100 MB)
+    CHUNK_SIZE = 100_000_000  # number of bytes (100 MB)
     chunks = [
         part[i : min(i + CHUNK_SIZE, len(part))]
         for i in range(0, len(part), CHUNK_SIZE)
