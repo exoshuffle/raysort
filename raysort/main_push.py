@@ -260,7 +260,7 @@ def final_merge(
             ask_for_refills = True
         else:
             parts_get = [p for p in ray.get(parts) if len(p) > 0]
-            get_block = lambda i, d: parts_get[i] if d == 0 else None
+            get_block = lambda i, d: parts_get[i] if (d == 0 and i < len(parts_get)) else None
             ask_for_refills = False
 
         part_id = constants.merge_part_ids(worker_id, reduce_idx)
