@@ -26,7 +26,7 @@ FILENAME_FMT = {
     "temp": "temp-{part_id:010x}",
 }
 SHARD_FMT = "{shard:04x}"
-TMPFS_PATH = "/mnt/data0/tmp"  # use data0 for larger disk
+TMPFS_PATH = "/mnt/data0/tmp"
 
 # S3
 S3_MIN_CHUNK_SIZE = 5 * 1024 * 1024

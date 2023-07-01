@@ -2,7 +2,6 @@ import csv
 import logging
 import time
 
-from collections import namedtuple
 from typing import Iterable, Tuple, Union
 
 import numpy as np
@@ -18,10 +17,7 @@ from raysort import (
     tracing_utils,
 )
 from raysort.config import AppConfig, JobConfig
-from raysort.typing import PartId, PartInfo
-
-
-MergeStats = namedtuple("MergeStats", "datachunk_sizes total_bytes")
+from raysort.typing import MergeStats, PartId, PartInfo
 
 
 def flatten(xss: list[list]) -> list:
@@ -191,10 +187,9 @@ class MergeController:
         self._idle_mergers = []
         self._merge_tasks = {}
         self._current_merger = None
-        ret = self._merge_results
-        ret2 = self._merge_datachunk_sizes
+        ret = (self._merge_results, self._merge_datachunk_sizes)
         self._merge_results = []
-        return ret, ret2
+        return ret
 
     def reduce(self) -> list[PartInfo]:
         # merge_results: (num_reducers_per_worker, num_merge_tasks)
@@ -230,7 +225,7 @@ def final_merge(
     worker_id: PartId,
     reduce_idx: PartId,
     parts: list[np.ndarray],
-    parts_size_bytes: int,
+    parts_total_size: int,
 ) -> list[PartInfo]:
     logging_utils.init()
 
@@ -238,7 +233,7 @@ def final_merge(
         M = len(parts)
         if M == 0:
             return []
-        parts_memory_gb = parts_size_bytes / 1e9
+        parts_memory_gb = parts_total_size / 1e9
 
         if M > 1 and parts_memory_gb > cfg.streaming_reducer_threshold_gb:
             part_chunks = ray.get(
@@ -260,7 +255,9 @@ def final_merge(
             ask_for_refills = True
         else:
             parts_get = [p for p in ray.get(parts) if len(p) > 0]
-            get_block = lambda i, d: parts_get[i] if (d == 0 and i < len(parts_get)) else None
+            get_block = (
+                lambda i, d: parts_get[i] if (d == 0 and i < len(parts_get)) else None
+            )
             ask_for_refills = False
 
         part_id = constants.merge_part_ids(worker_id, reduce_idx)

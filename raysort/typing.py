@@ -1,5 +1,6 @@
 import dataclasses
 import enum
+from collections import namedtuple
 from typing import Optional  # pylint: disable=import-self
 
 ByteCount = int
@@ -8,6 +9,7 @@ Path = str
 RecordCount = int
 
 BlockInfo = tuple[int, int]
+MergeStats = namedtuple("MergeStats", ["datachunk_sizes", "total_bytes"])
 
 
 class AppStep(enum.Enum):
