@@ -72,7 +72,7 @@ def _merge_blocks(
         yield datachunk
         datachunk_sizes.append(datachunk.size)
 
-    yield MergeStats(ray.put(tuple(datachunk_sizes)), ray.put(total_bytes))
+    yield MergeStats(tuple(datachunk_sizes), ray.put(total_bytes))
 
 
 @ray.remote(num_cpus=0)
@@ -164,7 +164,7 @@ class MergeController:
         merge_stats = ray.get(refs[-1])
         self._merge_tasks[merge_stats.total_bytes] = self._current_merger
         self._merge_results.append(refs[:-1])
-        self._merge_datachunk_sizes.append(ray.get(merge_stats.datachunk_sizes))
+        self._merge_datachunk_sizes.append(merge_stats.datachunk_sizes)
         self._current_merger = self._get_merger()
         self._current_num_blocks = 0
         self._current_blocks_size_gb = 0
