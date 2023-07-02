@@ -189,6 +189,7 @@ class MergeController:
         self._current_merger = None
         ret = (self._merge_results, self._merge_datachunk_sizes)
         self._merge_results = []
+        self._merge_datachunk_sizes = []
         return ret
 
     def reduce(self) -> list[PartInfo]:
