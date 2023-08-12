@@ -1,7 +1,6 @@
 import csv
 import logging
 import time
-
 from typing import Iterable, Optional, Tuple, Union
 
 import numpy as np
