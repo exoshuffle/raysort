@@ -1,4 +1,4 @@
-# RaySort Test CI
+# RaySort
 
 ## Development Setup
 
