@@ -51,6 +51,7 @@ def load_partition(cfg: AppConfig, part_id: int) -> pd.DataFrame:
         sep=" ",
         names=["language", "title", "requests", "size"],
         quoting=csv.QUOTE_NONE,
+        iterator=False
     )
     return df
 
