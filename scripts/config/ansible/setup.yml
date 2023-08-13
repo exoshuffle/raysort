@@ -1,7 +1,6 @@
 ---
 - hosts: all
   gather_facts: false
-  strategy: free
   vars:
     data_disks:
       - /dev/nvme1n1
@@ -88,6 +87,7 @@
 
     - name: Install Python dependencies
       ansible.builtin.shell: |
+        {{ pythondir }}/pip uninstall -y ray
         {{ pythondir }}/pip install -Ur {{ workdir }}/requirements/worker.txt
       changed_when: true
 
