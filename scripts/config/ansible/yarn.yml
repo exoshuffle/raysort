@@ -1,4 +1,5 @@
 ---
+- name: Remove HDFS datta directories
 - hosts: all
   vars:
     mnt_paths:
