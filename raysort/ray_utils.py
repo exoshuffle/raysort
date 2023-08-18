@@ -162,10 +162,11 @@ def fail_and_restart_node(cfg: AppConfig):
 def fail_one_node():
     resources = ray.cluster_resources()
     head_node_str = "node:" + ray.util.get_node_ip_address()
+    internal_head_str = "node:__internal_head__"
     worker_ips = [
         r.split(":")[1]
         for r in resources
-        if r.startswith("node:") and r != head_node_str
+        if r.startswith("node:") and r != head_node_str and r != internal_head_str
     ]
     _fail_and_restart_remote_node(worker_ips[0])
 
@@ -289,10 +290,11 @@ def _init_runtime_context(cfg: AppConfig):
     ), "Ray cluster is not set up correctly: no worker resources. Did you forget `--local`?"
     cfg.num_workers = int(resources[constants.WORKER_RESOURCE])
     head_node_str = "node:" + ray.util.get_node_ip_address()
+    internal_head_str = "node:__internal_head__"
     cfg.worker_ips = [
         r.split(":")[1]
         for r in resources
-        if r.startswith("node:") and r != head_node_str
+        if r.startswith("node:") and r != head_node_str and r != internal_head_str
     ]
     assert cfg.num_workers == len(cfg.worker_ips), cfg
     cfg.worker_ids = ray.get(
