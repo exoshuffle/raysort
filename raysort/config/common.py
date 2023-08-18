@@ -25,8 +25,6 @@ GB = MB * 1000
 
 def get_s3_buckets(count: int = 10) -> list[str]:
     assert S3_BUCKET
-    if count == 1:
-        return [f"{S3_BUCKET}" for i in range(count)]
     return [f"{S3_BUCKET}-{i:03d}" for i in range(count)]
 
 
