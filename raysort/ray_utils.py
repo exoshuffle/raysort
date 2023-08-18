@@ -162,10 +162,11 @@ def fail_and_restart_node(cfg: AppConfig):
 def fail_one_node():
     resources = ray.cluster_resources()
     head_node_str = "node:" + ray.util.get_node_ip_address()
+    internal_head_str = "node:__internal_head__"
     worker_ips = [
         r.split(":")[1]
         for r in resources
-        if r.startswith("node:") and r != head_node_str
+        if r.startswith("node:") and r != head_node_str and r != internal_head_str
     ]
     _fail_and_restart_remote_node(worker_ips[0])
 
