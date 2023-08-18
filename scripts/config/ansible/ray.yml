@@ -1,7 +1,7 @@
 ---
+- name: Start Ray workers
 - hosts: all
   gather_facts: false
-  strategy: free
   vars:
     head_ip: 0.0.0.0
     mnt_paths:

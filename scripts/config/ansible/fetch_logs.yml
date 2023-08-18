@@ -1,7 +1,7 @@
 ---
+- name: Fetch Ray logs
 - hosts: all
   gather_facts: false
-  strategy: free
   tasks:
     - name: Fetch Ray logs
       ansible.posix.synchronize:

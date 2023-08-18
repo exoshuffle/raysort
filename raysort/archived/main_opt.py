@@ -234,7 +234,7 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
         map_results = np.empty((num_map_tasks, cfg.num_workers + 1), dtype=object)
         for _ in range(num_map_tasks):
             pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
-            opt = dict(**mapper_opt, **ray_utils.node_i(cfg, map_id))
+            opt = {**mapper_opt, **ray_utils.node_i(cfg, map_id)}
             m = map_id % num_map_tasks_per_round
             refs = mapper_yield.options(**opt).remote(
                 cfg, map_id, map_bounds, pinfolist
@@ -374,7 +374,7 @@ def sort_optimized_2(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     def _submit_map(map_id: int):
         pinfolist = parts[map_id * num_shards : (map_id + 1) * num_shards]
         node_id = map_scheduler.get_node()
-        opt = dict(**mapper_opt, **ray_utils.node_i(cfg, node_id))
+        opt = {**mapper_opt, **ray_utils.node_i(cfg, node_id)}
         refs = mapper_yield.options(**opt).remote(cfg, map_id, map_bounds, pinfolist)
         task = refs[cfg.num_workers]
         map_scheduler.register_task(task, node_id)

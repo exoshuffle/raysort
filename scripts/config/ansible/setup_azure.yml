@@ -1,6 +1,6 @@
 ---
+- namee: Setup Azure
 - hosts: all
-  strategy: free
   vars:
     data_disk: /dev/disk/azure/scsi1/lun0
     ssd_device: /dev/disk/azure/scsi1/lun0-part1
@@ -29,7 +29,7 @@
       ansible.builtin.file:
         path: "{{ mnt_path }}"
         state: directory
-        mode: 0777
+        mode: "0777"
 
     - name: Mount nvme
       become: true
@@ -43,7 +43,7 @@
       ansible.builtin.file:
         path: "{{ mnt_path }}/tmp"
         state: "{{ item }}"
-        mode: 0777
+        mode: "0777"
       loop:
         - absent
         - directory
