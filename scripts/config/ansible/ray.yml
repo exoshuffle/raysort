@@ -1,5 +1,5 @@
 ---
-- name: ray
+- name: Start Ray workers
 - hosts: all
   gather_facts: false
   vars:

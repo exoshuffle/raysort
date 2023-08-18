@@ -1,5 +1,5 @@
 ---
-- name: Remove HDFS datta directories
+- name: Remove HDFS data directories
 - hosts: all
   vars:
     mnt_paths:
