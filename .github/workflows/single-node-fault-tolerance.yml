@@ -15,6 +15,7 @@ jobs:
       RAY_memory_usage_threshold: 1.0
       S3_BUCKET: raysort-github-ci
       STEPS: sort
+      TMPFS_PATH: /mnt/tmpfs/raysort
       WANDB_MODE: offline
     steps:
       - name: Mount tmpfs
