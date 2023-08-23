@@ -86,6 +86,10 @@
           - --exclude=ray
           - --exclude=wandb
 
+    - name: Install binary dependencies
+      ansible.builtin.shell: |
+        {{ workdir }}/scripts/installers/install_binaries.sh node_exporter
+
     - name: Install Python dependencies
       ansible.builtin.shell: |
         {{ pythondir }}/pip uninstall -y ray
