@@ -2,7 +2,7 @@
 
 ## Development Setup
 
-If you created your VM using the `raysort` AMI, you should already have a Conda environment ready. Otherwise, install [Miniconda3](https://docs.conda.io/en/latest/miniconda.html) and run `conda create -n raysort python=3.9.7`. Then run:
+If you created your VM using the `raysort` AMI, you should already have a Conda environment ready. Otherwise, install [Miniconda3](https://docs.conda.io/en/latest/miniconda.html) and run `conda create -n raysort python=3.9.13`. Then run:
 
 ```
 conda activate raysort
@@ -14,7 +14,9 @@ scripts/installers/install_binaries.sh
 ```
 
 ### Create an S3 Bucket (Optional)
+
 You can use an existing S3 bucket or create one using the provided terraform script as follows.
+
 1. Install Terraform: `scripts/installers/install_terraform.sh`
 2. Navigate to `scripts/config/terraform/aws-s3-template`
 3. Run `terraform init`
