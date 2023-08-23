@@ -1,6 +1,6 @@
 ---
 - name: Grep
-- hosts: all
+  hosts: all
   gather_facts: false
   vars:
     pattern: b6e3749adc4f7e7cffffffffffffffffffffffff0100000005000000-multi-3

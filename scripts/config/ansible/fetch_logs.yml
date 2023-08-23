@@ -1,6 +1,6 @@
 ---
 - name: Fetch Ray logs
-- hosts: all
+  hosts: all
   gather_facts: false
   tasks:
     - name: Fetch Ray logs

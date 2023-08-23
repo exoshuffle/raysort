@@ -1,6 +1,6 @@
 ---
 - namee: Setup Azure
-- hosts: all
+  hosts: all
   vars:
     data_disk: /dev/disk/azure/scsi1/lun0
     ssd_device: /dev/disk/azure/scsi1/lun0-part1

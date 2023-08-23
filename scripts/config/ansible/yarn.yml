@@ -1,6 +1,6 @@
 ---
 - name: Remove HDFS data directories
-- hosts: all
+  hosts: all
   vars:
     mnt_paths:
       - /mnt/data0

@@ -1,7 +1,7 @@
 ---
-- name: Start Ray workers
-  hosts: all
+- hosts: all
   gather_facts: false
+  strategy: free
   vars:
     head_ip: 0.0.0.0
     mnt_paths:
@@ -32,10 +32,10 @@
         opts: "size={{ shared_memory_bytes }}"
       when: tmpfs_path
 
-    - name: Sync Ray patches
-      ansible.posix.synchronize:
-        src: "{{ workdir }}/ray-patch/"
-        dest: "{{ pythondir }}/../lib/python3.9/site-packages/ray/"
+    # - name: Sync Ray patches
+    #   ansible.posix.synchronize:
+    #     src: "{{ workdir }}/ray-patch/"
+    #     dest: "{{ pythondir }}/../lib/python3.9/site-packages/ray/"
 
     - name: Clear tmpfs
       ansible.builtin.file:
@@ -50,19 +50,19 @@
       loop: "{{ mnt_paths }}"
       when: clear_data_dir
 
-    # - name: Start node_exporter
-    #   ansible.builtin.shell: >
-    #     nohup
-    #     {{ workdir }}/raysort/bin/node_exporter/node_exporter
-    #     --web.listen-address 0.0.0.0:8091 &
-    #   changed_when: true
+    - name: Start node_exporter
+      ansible.builtin.shell: >
+        nohup
+        {{ workdir }}/ray-sql/node_exporter
+        --web.listen-address 0.0.0.0:8091 &
+      changed_when: true
 
-    # - name: Start node_exporter (not sure why I have to do this twice)
-    #   ansible.builtin.shell: >
-    #     nohup
-    #     {{ workdir }}/raysort/bin/node_exporter/node_exporter
-    #     --web.listen-address 0.0.0.0:8091 &
-    #   changed_when: true
+    - name: Start node_exporter (not sure why I have to do this twice)
+      ansible.builtin.shell: >
+        nohup
+        {{ workdir }}/ray-sql/node_exporter
+        --web.listen-address 0.0.0.0:8091 &
+      changed_when: true
 
     - name: Restart Ray
       ansible.builtin.shell: >

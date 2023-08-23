@@ -1,7 +1,7 @@
 ---
-- name: Setup Environment
-  hosts: all
+- hosts: all
   gather_facts: false
+  strategy: free
   vars:
     data_disks:
       - /dev/nvme1n1
@@ -9,7 +9,7 @@
     mnt_prefix: /mnt/data
     tmpfs_path: /mnt/tmpfs
     awsdir: ~/.aws
-    workdir: ~/raysort
+    workdir: ~/raysort/ray-sql
     pythondir: ~/miniconda3/envs/raysort/bin
     hosts_path: /etc/hosts
     hadoop_config_dir: /opt/hadoop/etc/hadoop
@@ -85,18 +85,22 @@
           - --exclude=data
           - --exclude=ray
           - --exclude=wandb
+          - --exclude=tpctools
 
     - name: Install Python dependencies
       ansible.builtin.shell: |
-        {{ pythondir }}/pip uninstall -y ray
-        {{ pythondir }}/pip install -Ur {{ workdir }}/requirements/worker.txt
+        {{ pythondir }}/pip install -Ur {{ workdir }}/requirements-in.txt
       changed_when: true
 
     - name: Install project packages
       ansible.builtin.shell: |
-        cd {{ workdir }} && {{ pythondir }}/pip install -e .
-        rm -rf {{ workdir }}/raysort/sortlib/build
-        cd {{ workdir }}/raysort/sortlib && {{ pythondir }}/python setup.py build_ext --inplace
+        {{ pythondir }}/pip install --force-reinstall {{ workdir }}/target/wheels/raysql-0.5.0-cp37-abi3-linux_x86_64.whl
+      changed_when: true
+
+    - name: Download dataset from S3
+      ansible.builtin.shell: |
+        {{ pythondir }}/pip install awscli &&
+        {{ pythondir }}/aws s3 sync s3://tpch-parquet/ /mnt/data0/tpch/
       changed_when: true
 
     - name: Set soft and hard ulimit
