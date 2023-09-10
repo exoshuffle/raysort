@@ -35,6 +35,17 @@ CONFIG=LocalNative python raysort/main.py
 
 It should complete without errors with an `All OK!` message. The detailed configuration is in [config.py](https://github.com/franklsf95/raysort/blob/master/raysort/config.py).
 
+## Running on GCP
+
+Worker Images: 
+  - https://console.cloud.google.com/compute/imagesDetail/projects/exoshuffle/global/images/ray-worker-1?authuser=0&orgonly=true&project=exoshuffle&supportedpurview=organizationId,folder,project 
+
+VPCs: 
+  - https://console.cloud.google.com/networking/networks/details/exoshuffle-vpc?project=exoshuffle&authuser=0&orgonly=true&supportedpurview=organizationId,folder,project&pageTab=SUBNETS 
+
+Prerequisites:
+  - To launch a GCP cluster you must first create a service account and attach the gcp-terraform-credentials.json file in the gcp-template directory. After doing so, terraform will be able to start GCP VMs on your account and you will be able to then follow the steps on "Starting up a Cluster" below.
+
 ## Starting up a Cluster
 
 1. Install Terraform: `scripts/installers/install_terraform.sh`
