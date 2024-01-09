@@ -329,6 +329,9 @@ def sort_optimized(cfg: AppConfig, parts: list[PartInfo]) -> list[PartInfo]:
     ray.get(all_map_out)
     logging.info("All map tasks finished; start reduce stage")
 
+    if cfg.skip_final_reduce:
+        return []
+
     # Reduce stage.
     ret = ray.get([controller.reduce.remote() for controller in merge_controllers])
     return flatten(ret)
@@ -366,7 +369,7 @@ def main():
             with tracing_utils.timeit("sort", log_to_wandb=True):
                 sort_main(cfg)
 
-        if cfg.validate_output:
+        if cfg.validate_output and not cfg.skip_final_reduce:
             sort_utils.validate_output(cfg)
     finally:
         ray.get(tracker.performance_report.remote())
